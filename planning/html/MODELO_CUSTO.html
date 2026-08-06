@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modelo de custo de inspeção — como a conta é feita</title>
+<style>
+  :root {
+    --ivory:#FAF9F5; --slate:#141413; --clay:#D97757; --oat:#E3DACC;
+    --olive:#788C5D; --gray-150:#F0EEE6; --gray-300:#D1CFC5;
+    --gray-500:#87867F; --gray-700:#3D3D3A;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--ivory); color:var(--gray-700); font-family:var(--sans);
+         font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased;
+         padding:56px 24px 120px; }
+  .page { max-width:1120px; margin:0 auto; display:grid;
+          grid-template-columns:210px minmax(0,1fr); gap:48px; }
+  @media (max-width:960px){ .page{grid-template-columns:1fr;} nav{display:none;} }
+
+  nav { position:sticky; top:32px; align-self:start; font-size:13px; }
+  nav .label { font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+               text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+  nav a { display:block; padding:5px 0 5px 12px; border-left:2px solid var(--gray-300);
+          color:var(--gray-700); text-decoration:none; }
+  nav a:hover { color:var(--slate); border-color:var(--clay); }
+  nav .files { margin-top:28px; border-top:1px solid var(--gray-300); padding-top:14px; }
+  nav .files code { display:block; font-family:var(--mono); font-size:10.5px;
+                    color:var(--gray-500); padding:3px 0; word-break:break-all; }
+
+  .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.08em;
+             text-transform:uppercase; color:var(--gray-500); margin-bottom:10px; }
+  h1 { font-family:var(--serif); font-weight:500; font-size:33px; color:var(--slate);
+       letter-spacing:-.01em; margin-bottom:16px; line-height:1.2; }
+  h2 { font-family:var(--serif); font-weight:500; font-size:23px; color:var(--slate);
+       margin:46px 0 14px; scroll-margin-top:24px; }
+  h3 { font-family:var(--sans); font-weight:600; font-size:14px; color:var(--slate);
+       margin:26px 0 8px; letter-spacing:.01em; }
+  p { margin-bottom:12px; max-width:720px; }
+  code { font-family:var(--mono); font-size:12.5px; background:var(--gray-150);
+         padding:1px 5px; border-radius:4px; }
+  strong { color:var(--slate); }
+  .lead { font-size:16.5px; }
+
+  .tldr { border:1.5px solid var(--gray-300); border-left:3px solid var(--clay);
+          border-radius:10px; background:#fff; padding:18px 20px; margin-bottom:10px; }
+  .tldr ol { margin:0; padding-left:20px; }
+  .tldr li { margin-bottom:7px; }
+  .tldr li:last-child { margin-bottom:0; }
+
+  /* diagrama da fórmula */
+  .flow { background:#fff; border:1.5px solid var(--gray-300); border-radius:12px;
+          padding:26px 22px; margin:20px 0; overflow-x:auto; }
+  .layer { display:grid; grid-template-columns:34px minmax(0,1fr); gap:14px;
+           align-items:start; padding:14px 0; }
+  .layer + .layer { border-top:1px dashed var(--gray-300); }
+  .num { width:34px; height:34px; border-radius:50%; display:grid; place-items:center;
+         font-family:var(--mono); font-size:13px; font-weight:600;
+         background:var(--gray-150); color:var(--slate); border:1.5px solid var(--gray-300); }
+  .layer.solid .num { background:var(--olive); color:#fff; border-color:var(--olive); }
+  .layer.guess .num { background:var(--clay); color:#fff; border-color:var(--clay); }
+  .layer h4 { font-family:var(--sans); font-size:14px; font-weight:600;
+              color:var(--slate); margin-bottom:4px; }
+  .layer .sub { font-size:12.5px; color:var(--gray-500); margin-bottom:9px; }
+  .eq { font-family:var(--mono); font-size:12.5px; background:var(--gray-150);
+        border-radius:8px; padding:11px 13px; white-space:pre; overflow-x:auto;
+        line-height:1.75; color:var(--gray-700); }
+  .eq b { color:var(--clay); font-weight:600; }
+  .eq i { color:var(--olive); font-style:normal; font-weight:600; }
+  .arrow { text-align:center; color:var(--gray-300); font-size:15px; line-height:1; }
+
+  table { border-collapse:collapse; width:100%; margin:14px 0 18px; font-size:13.5px;
+          background:#fff; }
+  th { text-align:left; font-family:var(--mono); font-size:10.5px; letter-spacing:.06em;
+       text-transform:uppercase; color:var(--gray-500); font-weight:500;
+       padding:9px 10px; border-bottom:1.5px solid var(--gray-300); }
+  td { padding:9px 10px; border-bottom:1px solid var(--gray-150); vertical-align:top; }
+  tr:last-child td { border-bottom:1.5px solid var(--gray-300); }
+  td.num-c, th.num-c { text-align:right; font-family:var(--mono); font-size:12.5px; }
+
+  .pill { display:inline-block; font-family:var(--mono); font-size:10px;
+          letter-spacing:.05em; text-transform:uppercase; padding:2px 7px;
+          border-radius:20px; white-space:nowrap; font-weight:600; }
+  .p-alta  { background:#E7EDE0; color:#46603C; }
+  .p-media { background:var(--oat); color:#7A5A3A; }
+  .p-chute { background:#FBE6DE; color:#A8462A; }
+
+  .callout { border:1.5px solid var(--gray-300); border-radius:10px; background:#fff;
+             padding:15px 17px; margin:18px 0; }
+  .callout .tag { font-family:var(--mono); font-size:10px; letter-spacing:.08em;
+                  text-transform:uppercase; color:var(--clay); margin-bottom:6px; }
+  .callout.neg { border-left:3px solid var(--gray-500); }
+  .callout.neg .tag { color:var(--gray-500); }
+  .callout.key { border-left:3px solid var(--olive); }
+  .callout.key .tag { color:var(--olive); }
+
+  /* perguntas */
+  .q { background:#fff; border:1.5px solid var(--gray-300); border-radius:10px;
+       padding:14px 16px; margin-bottom:11px; display:grid;
+       grid-template-columns:44px minmax(0,1fr); gap:13px; align-items:start; }
+  .q.hot { border-left:3px solid var(--clay); }
+  .q .id { font-family:var(--mono); font-size:12px; font-weight:600; color:var(--slate);
+           background:var(--gray-150); border-radius:6px; text-align:center;
+           padding:4px 0; }
+  .q.hot .id { background:#FBE6DE; color:#A8462A; }
+  .q h4 { font-size:14px; font-weight:600; color:var(--slate); margin-bottom:3px; }
+  .q p { font-size:13.5px; margin:0; color:var(--gray-700); }
+
+  .bars { margin:14px 0 20px; }
+  .bar-row { display:grid; grid-template-columns:150px minmax(0,1fr) 66px;
+             gap:10px; align-items:center; font-size:12.5px; margin-bottom:5px; }
+  .bar-row .lbl { color:var(--gray-700); }
+  .bar-track { background:var(--gray-150); border-radius:3px; height:15px; position:relative; }
+  .bar-fill { background:var(--olive); height:15px; border-radius:3px; }
+  .bar-fill.alt { background:var(--clay); }
+  .bar-row .val { font-family:var(--mono); font-size:11.5px; color:var(--gray-500);
+                  text-align:right; }
+
+  .foot { margin-top:52px; padding-top:18px; border-top:1px solid var(--gray-300);
+          font-size:12.5px; color:var(--gray-500); }
+  .legend { font-size:12px; color:var(--gray-500); margin:-6px 0 16px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<nav>
+  <div class="label">Neste documento</div>
+  <a href="#achado">O achado central</a>
+  <a href="#refs">O que as referências dizem</a>
+  <a href="#negativo">O achado negativo</a>
+  <a href="#formula">A fórmula, em camadas</a>
+  <a href="#params">Parâmetros e confiança</a>
+  <a href="#calib">Calibração e erro</a>
+  <a href="#descartadas">Alternativas descartadas</a>
+  <a href="#perguntas">Perguntas para o humano</a>
+  <div class="files">
+    <div class="label">Fontes lidas</div>
+    <code>Formulário de OS Equatorial-PA 4ª Tranche.xlsx</code>
+    <code>CalculoDistancias.xlsx</code>
+    <code>20260224_Tabela_Resumo_Estratos_Amostra.xlsx</code>
+    <code>Coordenadas_UCs_7ªTR_PA.xlsx</code>
+    <code>Apresentação amostra… .pptx (slides 2–6)</code>
+  </div>
+</nav>
+
+<main>
+<header>
+  <div class="eyebrow">Fase F1 · Proposta · Aguarda aprovação humana</div>
+  <h1>Quanto custa inspecionar uma amostra —<br>e por que ninguém sabia calcular</h1>
+</header>
+
+<div class="tldr">
+  <ol>
+    <li><strong>A fórmula de preço do órgão já existe e foi decifrada:</strong>
+        <code>Custo = 12.960 + 4.800 × (equipe-dias de campo)</code>.
+        Ela reproduz <strong>ao centavo</strong> 7 das 11 estimativas já apresentadas
+        à Diretoria, em duas distribuidoras diferentes.</li>
+    <li><strong>O que ninguém sabia calcular é o "equipe-dias".</strong> A própria
+        apresentação admite que sai "das condições logísticas dos municípios" —
+        isto é, do julgamento de quem planeja.</li>
+    <li><strong>É esse buraco que este projeto preenche:</strong> trocar o julgamento
+        por geometria, mantendo a fórmula contratual intacta.</li>
+    <li><strong>Constante empírica mais robusta:</strong> ≈ <strong>20 UCs por equipe
+        por dia</strong> (mediana 20,2 em 11 amostras). É a âncora de calibração.</li>
+  </ol>
+</div>
+
+<h2 id="achado">O achado central</h2>
+
+<p class="lead">Testamos <code>(Custo − 12.960) ÷ 4.800</code> em todas as estimativas
+publicadas. Se a hipótese estivesse errada, sairiam números quebrados aleatórios.
+Saíram inteiros exatos.</p>
+
+<table>
+  <thead><tr>
+    <th>Amostra publicada</th><th class="num-c">Custo (R$)</th>
+    <th class="num-c">(Custo−12.960)/4.800</th><th>Resultado</th>
+  </tr></thead>
+  <tbody>
+    <tr><td>COELBA 11ª · 6 estratos</td><td class="num-c">200.160</td><td class="num-c">39,0000</td><td><span class="pill p-alta">exato</span></td></tr>
+    <tr><td>COELBA 11ª · 5 estratos</td><td class="num-c">204.960</td><td class="num-c">40,0000</td><td><span class="pill p-alta">exato</span></td></tr>
+    <tr><td>COELBA 11ª · 4 estratos</td><td class="num-c">267.360</td><td class="num-c">53,0000</td><td><span class="pill p-alta">exato</span></td></tr>
+    <tr><td>PA 7ª · 1ª amostra · 6 estratos</td><td class="num-c">396.960</td><td class="num-c">80,0000</td><td><span class="pill p-alta">exato</span></td></tr>
+    <tr><td>PA 7ª · 1ª amostra · 5 estratos</td><td class="num-c">502.560</td><td class="num-c">102,0000</td><td><span class="pill p-alta">exato</span></td></tr>
+    <tr><td>PA 7ª · 1ª amostra · 4 estratos</td><td class="num-c">612.960</td><td class="num-c">125,0000</td><td><span class="pill p-alta">exato</span></td></tr>
+    <tr><td>PA 7ª · 1ª amostra · 3 estratos</td><td class="num-c">684.960</td><td class="num-c">140,0000</td><td><span class="pill p-alta">exato</span></td></tr>
+    <tr><td>PA 7ª · 2ª amostra · 6 estratos</td><td class="num-c">348.176</td><td class="num-c">69,8367</td><td><span class="pill p-media">resíduo R$ 4.016</span></td></tr>
+    <tr><td>PA 7ª · 2ª amostra · 5 estratos</td><td class="num-c">410.576</td><td class="num-c">82,8367</td><td><span class="pill p-media">resíduo R$ 4.016</span></td></tr>
+    <tr><td>PA 7ª · 2ª amostra · 4 estratos</td><td class="num-c">472.920</td><td class="num-c">95,8250</td><td><span class="pill p-media">resíduo R$ 3.960</span></td></tr>
+    <tr><td>PA 7ª · 2ª amostra · 3 estratos</td><td class="num-c">520.864</td><td class="num-c">105,8133</td><td><span class="pill p-media">resíduo R$ 3.904</span></td></tr>
+  </tbody>
+</table>
+
+<p>Os dois números da fórmula não são mágicos — saem direto da tabela de tarifas do Edital:
+<code>12.960 = 36 h × R$ 360</code> (planejamento 8 h + relatório 24 h + apresentação 4 h,
+etapas de escritório, uma vez por Ordem de Serviço) e
+<code>4.800 = 8 h × R$ 600</code> (um dia de campo de um engenheiro, tarifa "com deslocamento").</p>
+
+<div class="callout key">
+  <div class="tag">Por que isso importa</div>
+  A camada de <strong>preço</strong> está resolvida e é auditável. Não precisamos inventar
+  nada nela — e não devemos. O trabalho de engenharia está todo na camada de
+  <strong>esforço</strong>: quantas horas de campo aquela amostra específica exige.
+</div>
+
+<h2 id="refs">O que as referências dizem</h2>
+
+<h3>Tarifas do Edital — aba <code>Custos Inspeções</code></h3>
+<table>
+  <thead><tr><th>Área</th><th>Perfil</th><th class="num-c">R$/h sem deslocamento</th><th class="num-c">R$/h com deslocamento</th></tr></thead>
+  <tbody>
+    <tr><td>Extensão de Redes</td><td>Eng. Eletricista</td><td class="num-c">360,00</td><td class="num-c"><strong>600,00</strong></td></tr>
+    <tr><td>Extensão de Redes</td><td>Eletrotécnico</td><td class="num-c">250,00</td><td class="num-c">593,00</td></tr>
+    <tr><td>Geração Descentralizada</td><td>Eng. Generalista</td><td class="num-c">360,00</td><td class="num-c"><strong>600,00</strong></td></tr>
+    <tr><td>Geração Descentralizada</td><td>Técnico</td><td class="num-c">273,22</td><td class="num-c">513,22</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <div class="tag">Consequência direta — diárias</div>
+  Só a etapa de campo usa a tarifa "com deslocamento", e a planilha inteira
+  <strong>não tem uma única linha de diária, hotel, combustível ou veículo</strong>.
+  Logo, os R$ 240/h de diferença (600 − 360) <strong>são</strong> a remuneração da logística.
+  Somar diárias por fora contaria duas vezes.
+</div>
+
+<h3>A Ordem de Serviço real da 4ª tranche PA — a conta fechada</h3>
+<table>
+  <thead><tr><th>Etapa</th><th class="num-c">Nº prof.</th><th class="num-c">Horas</th><th class="num-c">R$/h</th><th class="num-c">Total</th></tr></thead>
+  <tbody>
+    <tr><td>Planejamento</td><td class="num-c">1</td><td class="num-c">4</td><td class="num-c">360</td><td class="num-c">1.440</td></tr>
+    <tr><td><strong>Desenvolvimento (campo)</strong></td><td class="num-c">6</td><td class="num-c"><strong>240</strong></td><td class="num-c"><strong>600</strong></td><td class="num-c"><strong>144.000</strong></td></tr>
+    <tr><td>Relatório</td><td class="num-c">1</td><td class="num-c">16</td><td class="num-c">360</td><td class="num-c">5.760</td></tr>
+    <tr><td>Apresentação</td><td class="num-c">1</td><td class="num-c">4</td><td class="num-c">360</td><td class="num-c">1.440</td></tr>
+    <tr><td colspan="4"><strong>Total geral estimado</strong></td><td class="num-c"><strong>152.640</strong></td></tr>
+  </tbody>
+</table>
+<p class="legend">6 equipes, 1 engenheiro cada, 0 técnicos. Horas por equipe =
+<code>(data_fim − data_início + 1) × 8</code>. Sobre o total incide o IMR (glosa de
+qualidade, até 35%) — que numa estimativa <em>ex ante</em> é 0%.</p>
+
+<div class="callout key">
+  <div class="tag">Descoberta silenciosa</div>
+  Como o contrato paga <strong>hora-profissional</strong> e cada equipe é um profissional,
+  <strong>o número de equipes não muda o custo total</strong> — muda só quantos dias de
+  calendário a campanha dura. O modelo deve estimar <em>horas</em> (que definem o preço)
+  e derivar <em>dias</em> como resultado secundário.
+</div>
+
+<h2 id="negativo">O achado negativo: <code>CalculoDistancias.xlsx</code> não é um modelo de custo</h2>
+
+<p>O nome promete exatamente o que precisamos. Abrimos as 10 abas e lemos todas as fórmulas.
+Não é isso.</p>
+
+<div class="callout neg">
+  <div class="tag">O que a planilha realmente faz</div>
+  <p style="margin-bottom:8px">A coluna <code>KM</code> é uma haversine pura (raio 6.371 km)
+  entre o centroide do município e a UC — e <strong>nunca é multiplicada por nada</strong>.
+  Fica como coluna descritiva.</p>
+  <p style="margin:0">A coluna <code>Custo</code> é
+  <code>XLOOKUP(SIGFI; Grupo!F:F; Grupo!G:G)</code> — uma tabela de três linhas:
+  SIGFI 45 → R$ 39.252,62 · SIGFI 80 → R$ 46.440,22 · SIGFI 160 → R$ 79.888,47.
+  Isso é o <strong>valor da obra construída</strong>, insumo do Valor de Referência que
+  estratifica a amostra. Usar como custo de inspeção seria dizer que inspecionar custa
+  mais que construir.</p>
+</div>
+
+<p><strong>Conclusão prática:</strong> não existe, em nenhuma referência do órgão, uma
+tarifa <code>R$/km</code>. Qualquer R$/km no nosso modelo seria invenção nossa e quebraria
+a rastreabilidade contratual. O que aproveitamos dali é a <em>fórmula de distância da casa</em>
+(haversine, R = 6.371) e a prática de usar o <em>centroide do município como polo logístico</em>.</p>
+
+<h2 id="formula">A fórmula proposta, em três camadas</h2>
+
+<p class="legend">Verde = ancorado em documento contratual. Laranja = parâmetro a calibrar
+com o humano. Cinza = geometria pura, sem escolha arbitrária.</p>
+
+<div class="flow">
+
+  <div class="layer">
+    <div class="num">1</div>
+    <div>
+      <h4>Geometria — quantos quilômetros de estrada</h4>
+      <div class="sub">Agrupado por <strong>município dentro da regional</strong>, não por ODI
+      solto: a equipe não volta à base entre obras.</div>
+<div class="eq">para cada MUNICÍPIO da amostra:
+    km_mobilizacao = 2 × haversine(base_regional, centroide_mun) × <b>FATOR_RODOVIARIO</b>
+    km_entre_odis  = rota_vizinho_mais_proximo(centroides dos ODIs) × <b>FATOR_RODOVIARIO</b>
+
+para cada ODI:
+    centroide_odi  = média das lat/long das suas UCs
+    km_internos    = rota_vizinho_mais_proximo(UCs do ODI) × <b>FATOR_RODOVIARIO</b>
+
+KM_TOTAIS = Σ (km_mobilizacao + km_entre_odis) + Σ km_internos</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼</div>
+
+  <div class="layer guess">
+    <div class="num">2</div>
+    <div>
+      <h4>Esforço — quilômetros e UCs viram horas</h4>
+      <div class="sub">Os dois parâmetros que mais mexem no resultado moram aqui — e
+      nenhum deles existe em documento do órgão.</div>
+<div class="eq">horas_deslocamento = KM_TOTAIS / <b>VELOCIDADE_KMH</b>
+horas_inspecao     = n_ucs × <b>HORAS_POR_UC</b>
+
+HORAS_CAMPO        = horas_deslocamento + horas_inspecao</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼</div>
+
+  <div class="layer solid">
+    <div class="num">3</div>
+    <div>
+      <h4>Preço — horas viram reais (fórmula contratual, intocada)</h4>
+      <div class="sub">Tudo aqui é tabelado no Edital e confirmado ao centavo contra
+      7 estimativas já aprovadas.</div>
+<div class="eq">CUSTO_CAMPO   = HORAS_CAMPO × <i>600,00</i>          (tarifa com deslocamento)
+CUSTO_FIXO    = 36 h × <i>360,00</i> = <i>R$ 12.960</i>    (uma vez por amostra)
+
+CUSTO_AMOSTRA = CUSTO_FIXO + CUSTO_CAMPO
+
+DIAS = teto( HORAS_CAMPO / (8 h × N_EQUIPES) )   ← não altera o custo</div>
+    </div>
+  </div>
+
+</div>
+
+<h3>Exemplo completo — PA 7ª tranche, 6 estratos (19 ODIs, 11 municípios, 1.341 UCs)</h3>
+<div class="eq" style="max-width:720px">km geodésicos: mobilização 4.327 + entre ODIs 110 + internos 491 = 4.928
+× FATOR_RODOVIARIO 1,40 ............................... 6.898 km de estrada
+
+horas de deslocamento = 6.898 / 45 .................... 153,3 h
+horas de inspeção     = 1.341 × 0,30 .................. 402,3 h
+HORAS_CAMPO ........................................... 555,6 h
+
+CUSTO_CAMPO = 555,6 × 600 ............................. R$ 333.356
+CUSTO_FIXO ............................................ R$  12.960
+CUSTO_AMOSTRA ......................................... R$ 346.316
+DIAS = teto(555,6 / 48) ...............................  12 dias
+
+Gabarito publicado .................................... R$ 348.176 · 16 dias
+Diferença de custo .................................... -0,5 %</div>
+
+<h2 id="params">Parâmetros: valor, fonte e confiança</h2>
+
+<table>
+  <thead><tr><th>Parâmetro</th><th class="num-c">Sugerido</th><th>Fonte</th><th>Confiança</th></tr></thead>
+  <tbody>
+    <tr><td><code>TARIFA_HORA_COM_DESLOCAMENTO</code></td><td class="num-c">R$ 600,00</td><td>Edital · aba <code>Custos Inspeções</code> D17</td><td><span class="pill p-alta">alta</span></td></tr>
+    <tr><td><code>TARIFA_HORA_SEM_DESLOCAMENTO</code></td><td class="num-c">R$ 360,00</td><td>Edital · aba <code>Custos Inspeções</code> D19</td><td><span class="pill p-alta">alta</span></td></tr>
+    <tr><td><code>HORAS_ETAPAS_ESCRITORIO</code></td><td class="num-c">36 h</td><td>8 planej. + 24 relat. + 4 apres. (Extensão de Redes)</td><td><span class="pill p-alta">alta</span></td></tr>
+    <tr><td><code>CUSTO_FIXO_POR_AMOSTRA</code></td><td class="num-c">R$ 12.960</td><td>derivado: 36 × 360 — confirmado em 7 estimativas</td><td><span class="pill p-alta">alta</span></td></tr>
+    <tr><td><code>HORAS_POR_DIA</code></td><td class="num-c">8 h</td><td>fórmula <code>(fim−início+1)×8</code> da aba Composição Equipes</td><td><span class="pill p-alta">alta</span></td></tr>
+    <tr><td><code>RAIO_TERRA_KM</code></td><td class="num-c">6.371</td><td>fórmula da coluna <code>KM</code> de <code>CALCULO_VR</code></td><td><span class="pill p-alta">alta</span></td></tr>
+    <tr><td><code>N_EQUIPES</code></td><td class="num-c">6</td><td>OS real 4ª tranche e todas as amostras da 7ª</td><td><span class="pill p-media">média</span></td></tr>
+    <tr><td><code>BASE_REGIONAL</code> (4 pontos)</td><td class="num-c">sedes</td><td>Belém, Castanhal, Marabá, Santarém — sedes dos municípios que nomeiam as regionais</td><td><span class="pill p-media">média</span></td></tr>
+    <tr><td><code>HORAS_POR_UC</code></td><td class="num-c">0,30 h</td><td>calibrado contra a geometria real dos ODIs sorteados (faixa 0,17–0,31)</td><td><span class="pill p-media">média</span></td></tr>
+    <tr><td><code>VELOCIDADE_KMH</code></td><td class="num-c">45 km/h</td><td><strong>não existe em nenhuma referência</strong> — mistura de asfalto (~70) e vicinal (~25)</td><td><span class="pill p-chute">chute</span></td></tr>
+    <tr><td><code>FATOR_RODOVIARIO</code></td><td class="num-c">1,40</td><td><strong>não existe em nenhuma referência</strong> — literatura usa 1,2–1,5</td><td><span class="pill p-chute">chute</span></td></tr>
+  </tbody>
+</table>
+
+<h2 id="calib">Calibração e margem de erro honesta</h2>
+
+<p>Calculamos a geometria real dos ODIs efetivamente sorteados no gabarito e descontamos
+as horas de deslocamento previstas. O que sobra, dividido pelas UCs, é o tempo por UC
+que o planejador implicitamente assumiu:</p>
+
+<div class="bars">
+  <div class="bar-row"><span class="lbl">6 estratos · 1.341 UC</span>
+    <span class="bar-track"><span class="bar-fill" style="width:100%"></span></span>
+    <span class="val">0,309 h</span></div>
+  <div class="bar-row"><span class="lbl">5 estratos · 1.543 UC</span>
+    <span class="bar-track"><span class="bar-fill" style="width:85%"></span></span>
+    <span class="val">0,263 h</span></div>
+  <div class="bar-row"><span class="lbl">4 estratos · 2.163 UC</span>
+    <span class="bar-track"><span class="bar-fill" style="width:55%"></span></span>
+    <span class="val">0,169 h</span></div>
+  <div class="bar-row"><span class="lbl"><strong>sugerido</strong></span>
+    <span class="bar-track"><span class="bar-fill alt" style="width:97%"></span></span>
+    <span class="val">0,300 h</span></div>
+</div>
+
+<p>A dispersão (0,17 – 0,31) é o ponto: <strong>o gabarito não obedece a nenhuma regra
+geométrica consistente</strong>. Não há como um modelo reprodutível reproduzir um número
+que não veio de regra alguma.</p>
+
+<div class="callout">
+  <div class="tag">O que prometemos e o que não prometemos</div>
+  <p style="margin:0"><strong>Não prometemos</strong> reproduzir o gabarito — o erro
+  esperado é de até ±20% por estrato. <strong>Prometemos</strong> um número reprodutível,
+  rastreável até cada parâmetro e sensível à geografia real da amostra sorteada:
+  1.000 UCs concentradas em Belém e 1.000 UCs espalhadas por Novo Progresso deixam de
+  custar a mesma coisa.</p>
+</div>
+
+<h3>Verificação de sanidade: UCs por equipe por dia</h3>
+<p>Nas 11 estimativas históricas, essa razão é notavelmente estável —
+<strong>mediana 20,2 · média 20,3 · desvio 4,2</strong> (faixa 11,6 a 28,6), atravessando
+duas distribuidoras. O relatório de saída trará essa coluna calculada: se der muito longe
+de 20, ou o parâmetro está errado ou aquela amostra é geograficamente atípica.</p>
+
+<h3>Geometria real da 7ª tranche PA (580 ODIs · 22.585 UCs · 69 municípios)</h3>
+<table>
+  <thead><tr><th>Regional</th><th class="num-c">ODIs</th><th class="num-c">UCs</th><th class="num-c">Municípios</th><th class="num-c">Base→ODI, mediana</th><th class="num-c">máx</th></tr></thead>
+  <tbody>
+    <tr><td>MARABA (SUMAR)</td><td class="num-c">273</td><td class="num-c">6.615</td><td class="num-c">20</td><td class="num-c">264,8 km</td><td class="num-c">529 km</td></tr>
+    <tr><td>SANTAREM (SUSAN)</td><td class="num-c">98</td><td class="num-c">6.568</td><td class="num-c">18</td><td class="num-c">151,0 km</td><td class="num-c">620 km</td></tr>
+    <tr><td>CASTANHAL (SUCAS)</td><td class="num-c">125</td><td class="num-c">5.113</td><td class="num-c">18</td><td class="num-c">96,2 km</td><td class="num-c">300 km</td></tr>
+    <tr><td>METROPOLITANA (SUMET)</td><td class="num-c">84</td><td class="num-c">4.289</td><td class="num-c">13</td><td class="num-c">160,9 km</td><td class="num-c">263 km</td></tr>
+  </tbody>
+</table>
+<p class="legend">UCs por ODI: mediana 20,5 · máx 682. Rota interna vizinho-mais-próximo:
+mediana 16,8 km · média 30,0 km.</p>
+
+<h2 id="descartadas">Alternativas descartadas</h2>
+<table>
+  <thead><tr><th style="width:34%">Alternativa</th><th>Por que não</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Custo por quilômetro rodado</strong></td><td>Não existe tarifa R$/km em nenhuma referência. O Edital paga hora-profissional. Inventar um R$/km criaria número não auditável.</td></tr>
+    <tr><td><strong>Usar a coluna <code>Custo</code> de CalculoDistancias</strong></td><td>É o valor da obra (SIGFI), não da inspeção. Erro conceitual grosseiro.</td></tr>
+    <tr><td><strong>2 × haversine(base, ODI) para cada ODI</strong><br><span style="color:var(--gray-500);font-size:12.5px">(o modelo v0 do briefing)</span></td><td>Superestima brutalmente: dá 636 h de estrada numa campanha de 1.056 h. Ignora que a equipe faz circuito e que vários ODIs partilham município. <strong>Corrigido para mobilização por município.</strong></td></tr>
+    <tr><td><strong>Ratear as 36 h de escritório por ODI</strong></td><td>São por Ordem de Serviço, não por obra. Ratear inflaria amostras com muitos ODIs pequenos.</td></tr>
+    <tr><td><strong>Somar diárias e pernoite à parte</strong></td><td>Os R$ 240/h de diferença já remuneram a logística. Contaria duas vezes.</td></tr>
+    <tr><td><strong>TSP exato para a rota interna</strong></td><td>Há ODIs com 682 UCs. A precisão extra vira ruído perto da incerteza do FATOR_RODOVIARIO. Vizinho-mais-próximo fica ~25% acima do ótimo — conservador, e isso é desejável.</td></tr>
+    <tr><td><strong>Roteamento por API (OSRM/Google)</strong></td><td>Exige internet e chave; o <code>.bat</code> de duplo-clique precisa rodar offline. Fica para a v1, como calibrador do FATOR_RODOVIARIO.</td></tr>
+    <tr><td><strong>Modelo empírico puro <code>UC ÷ 20</code></strong></td><td>Reproduz bem o histórico, mas é <strong>cego à geografia</strong>. Rejeitado como modelo principal; <strong>mantido como coluna de verificação</strong>.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="perguntas">Perguntas que precisam da sua resposta</h2>
+<p class="legend">As marcadas em laranja mudam o resultado em mais de 10%.</p>
+
+<div class="q hot"><div class="id">P1</div><div>
+  <h4>Perfil da equipe</h4>
+  <p>Confirmamos 1 Engenheiro Eletricista por equipe a R$ 600/h (foi o que a OS real fez:
+  6 equipes, 6 engenheiros, 0 técnicos)? Ou haverá equipes mistas com técnico a R$ 513,22/h?</p>
+</div></div>
+
+<div class="q hot"><div class="id">P2</div><div>
+  <h4>Diárias e pernoite</h4>
+  <p>Concorda que a tarifa "com deslocamento" já remunera viagem, hospedagem e veículo —
+  e que portanto <em>não</em> somamos diárias em separado? Se o objetivo for custo econômico
+  e não desembolso contratual, isso muda.</p>
+</div></div>
+
+<div class="q hot"><div class="id">P3</div><div>
+  <h4>Base de partida</h4>
+  <p>Usamos a sede do município que nomeia cada regional (Belém, Castanhal, Marabá,
+  Santarém). Existe coordenada oficial das bases da Equatorial? Ou a equipe credenciada
+  parte sempre de Belém, independentemente da regional?</p>
+</div></div>
+
+<div class="q"><div class="id">P4</div><div>
+  <h4>Tipo de obra</h4>
+  <p>A 7ª tranche é LPT Rural / Extensão de Redes → 36 h de escritório (R$ 12.960).
+  Confirma? Se houver ODIs de Geração Descentralizada na mesma amostra, são 24 h
+  (R$ 8.640) e o modelo precisa distinguir.</p>
+</div></div>
+
+<div class="q"><div class="id">P5</div><div>
+  <h4>Dias de calendário</h4>
+  <p>Nosso "dias" é aritmético (horas ÷ 8 ÷ equipes, para cima). O gabarito reporta mais
+  dias que isso — 12 calculados contra 16 publicados. Devemos acrescentar dias de
+  mobilização inicial e/ou pular fins de semana? Quantos?</p>
+</div></div>
+
+<div class="q"><div class="id">P6</div><div>
+  <h4>O resíduo de R$ 4.016</h4>
+  <p>As quatro estimativas da "2ª amostra PA 7ª" carregam um adicional fixo de
+  R$ 3.904–4.016 que não fecha com nenhuma tarifa do Edital. Você sabe o que é?
+  (hora de apoio? deslocamento aéreo? ajuste manual?) Se for parcela legítima, vira parâmetro.</p>
+</div></div>
+
+<div class="q"><div class="id">P7</div><div>
+  <h4>Número de equipes</h4>
+  <p>Fixamos 6. Deve ser constante em <code>config.py</code>, pergunta interativa no
+  <code>.bat</code>, ou calculado a partir de um prazo-alvo? <em>Não afeta o custo, só os dias.</em></p>
+</div></div>
+
+<div class="q hot"><div class="id">P8</div><div>
+  <h4>Velocidade e fator rodoviário</h4>
+  <p>São os dois chutes que mais mexem no resultado. Você tem alguma referência operacional
+  — quilometragem média rodada por dia por uma equipe no Pará, ou quanto se leva de Marabá
+  a Novo Repartimento? Qualquer número real vale mais que nossos 45 km/h e 1,40.</p>
+</div></div>
+
+<div class="q"><div class="id">P9</div><div>
+  <h4>Acesso fluvial</h4>
+  <p>Marajó, Baixo Amazonas e as ilhas de Belém não têm estrada. Tratamos essas regionais
+  com velocidade e fator próprios já na v0, ou aceitamos a distorção e deixamos para a v1?</p>
+</div></div>
+
+<div class="q hot"><div class="id">P10</div><div>
+  <h4>Tempo por UC</h4>
+  <p>Nossa calibração indireta deu 0,17–0,31 h e sugerimos 0,30 h (18 min). Faz sentido
+  operacionalmente? Quanto tempo uma equipe realmente gasta conferindo uma unidade
+  consumidora — medidor, padrão, ramal, foto, formulário?</p>
+</div></div>
+
+<div class="foot">
+  Fase F1 · <code>planning/MODELO_CUSTO.md</code> é o documento-fonte deste companion.<br>
+  Após a aprovação, registrar a decisão em <code>planning/PLAN.md</code> (seção Decisões)
+  e só então iniciar a Task 5 (<code>src/config.py</code> + <code>src/custo.py</code>).
+</div>
+
+</main>
+</div>
+</body>
+</html>
