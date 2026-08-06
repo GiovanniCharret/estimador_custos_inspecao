@@ -20,7 +20,8 @@
 - Parâmetros de custo **somente** em `src/config.py`, cada um com comentário de valor e fonte; zero números mágicos nas fórmulas.
 - Entradas: `Entrada/Lote.xlsx` (abas `Amostra 1/2/3`, obras `STATUS = "Selecionado"`) e `Entrada/*Painel de Monitoramento*.xlsx` (D7).
 - Rodar testes: `.venv\Scripts\python.exe -m pytest testes -v` (na raiz do projeto).
-- Commits frequentes; mensagens `feat:`/`test:`/`docs:`/`chore:` em português.
+- Commits frequentes; mensagens `feat:`/`test:`/`docs:`/`chore:` em português. **NUNCA fazer `git push`** — o repositório permanece local; publicar no GitHub é decisão do humano.
+- **Memória de cálculo para humanos**: a explicação em linguagem simples de como o custo é calculado (e por que se decidiu assim) vive DUPLICADA no topo de `src/config.py` e de `src/custo.py`, derivada do `MODELO_CUSTO.md` aprovado na F1. Quem abrir qualquer um dos dois arquivos entende o cálculo sem ler mais nada.
 - Cada documento de planejamento novo ganha companion HTML em `planning/html/` (D4), autocontido, inspirado em `planning/html-effectiveness/`.
 
 ---
@@ -158,7 +159,10 @@ de equipe típica; como `CalculoDistancias.xlsx` transforma distância em custo 
 
 - [ ] **Step 2: Escrever `planning/MODELO_CUSTO.md`** com: (a) o que as referências fazem;
 (b) o modelo v0 proposto abaixo, com cada parâmetro, valor sugerido e fonte;
-(c) alternativas descartadas e por quê; (d) o que fica para v1 (ex.: diárias, pernoite).
+(c) alternativas descartadas e por quê; (d) o que fica para v1 (ex.: diárias, pernoite);
+(e) **a memória de cálculo**: um texto curto, em linguagem simples para humanos, explicando
+como o custo é calculado e por que se decidiu assim — este texto será embutido literalmente
+no topo de `src/config.py` e `src/custo.py` na Task 5.
 
 Modelo v0 (ponto de partida — a calibrar neste estudo):
 ```
@@ -757,6 +761,20 @@ def test_agregar_por_estrato():
 
 Cada constante tem valor e FONTE. Substituir os valores v0 pelos aprovados na F1
 (planning/MODELO_CUSTO.md) antes do uso em producao.
+
+=== MEMORIA DE CALCULO (para humanos) ===
+[Na Task 5, substituir este bloco pelo texto aprovado no MODELO_CUSTO.md. Estrutura v0:]
+O custo de inspecionar uma ODI soma duas parcelas:
+1) DESLOCAMENTO: a equipe parte da base regional, vai ate o centro da obra (ida e
+   volta; a distancia em linha reta e' convertida em distancia de estrada pelo
+   FATOR_RODOVIARIO) e percorre as UCs da obra. Km viram horas dividindo pela
+   VELOCIDADE_KMH; horas viram R$ pela TARIFA_HORA_DESLOC (Formulario de OS).
+2) INSPECAO: cada UC visitada consome HORAS_POR_UC; horas viram R$ pela
+   TARIFA_HORA_INSP (Formulario de OS).
+Por que assim: reproduz a logica das referencias (tarifa horaria com/sem
+deslocamento) usando a unica geometria disponivel (coordenadas das UCs), sem
+depender de malha rodoviaria externa. Detalhes e alternativas: planning/MODELO_CUSTO.md.
+=== FIM DA MEMORIA DE CALCULO ===
 """
 # Fator que converte distancia geodesica (linha reta) em distancia rodoviaria.
 # FONTE: calibrar contra minhas_notas/CalculoDistancias.xlsx na F1 (v0: literatura ~1.3).
@@ -785,7 +803,19 @@ BASE_PADRAO = "METROPOLITANA"
 `src/custo.py`:
 ```python
 # -*- coding: utf-8 -*-
-"""Motor de custo: transforma distancias em R$ conforme o modelo aprovado (F1)."""
+"""Motor de custo: transforma distancias em R$ conforme o modelo aprovado (F1).
+
+=== MEMORIA DE CALCULO (para humanos) ===
+[Mesmo bloco de src/config.py — duplicado de proposito: quem abrir qualquer um dos
+dois arquivos entende o calculo sem ler mais nada. Na Task 5, colar aqui o texto
+aprovado no MODELO_CUSTO.md.]
+custo_odi = horas_desloc x TARIFA_HORA_DESLOC + horas_inspecao x TARIFA_HORA_INSP
+  onde: horas_desloc   = (2 x dist(base, centro_da_obra) x FATOR_RODOVIARIO
+                          + percurso_entre_UCs) / VELOCIDADE_KMH
+        horas_inspecao = n_ucs x HORAS_POR_UC
+Estrato = soma das suas ODIs; Amostra = soma dos estratos.
+=== FIM DA MEMORIA DE CALCULO ===
+"""
 import pandas as pd
 from src import config
 from src.distancias import haversine_km

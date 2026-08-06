@@ -36,6 +36,8 @@ Sugestão de biblioteca para cálculos de geolocalização -> GeoPandas
 
 - Decisões D1–D8 registradas em `planning/DESIGN.md` §2 (modelo a propor; entrada = planilhas prontas; mapas folium; 1 HTML por doc de planejamento; arquitetura achatada em `src/`; `minhas_notas/` = pesquisa; nomes `Lote.xlsx` + "Painel de Monitoramento"; adversarial review depois do plano).
 - Sem GeoPandas na v1: haversine via numpy cobre centroides/distâncias; GeoPandas só se surgir necessidade geoespacial real (shapefiles, projeções).
+- Memória de cálculo para humanos: explicação simples do cálculo de custo (e do porquê) duplicada no topo de `src/config.py` e `src/custo.py`, derivada do `MODELO_CUSTO.md` aprovado.
+- Git: commits locais regulares; **sem push** para o GitHub (publicação é decisão do humano).
 - **Pendência (gate F1):** modelo de custo — proposta em `MODELO_CUSTO.md` aguardará aprovação humana; registrar aqui a decisão.
 - **Pendência (F2):** validar o formato real de `Lote.xlsx`/Painel quando o humano colocar os arquivos em `Entrada/`.
 - **Pendência (pós-plano):** escrever `planning/ADVERSARIAL_REVIEW.md` (D8).

@@ -93,7 +93,7 @@
 
 <div class="task"><div class="tnum">T5<small>F4</small></div>
   <div><h3>custo · motor parametrizado</h3>
-  <p><code>config.py</code> (todos os números, com fonte) + <code>custo_por_odi()</code> e <code>agregar_por_estrato()</code>. Usa os valores aprovados no gate T1 — não começa sem o registro no PLAN.md.</p>
+  <p><code>config.py</code> (todos os números, com fonte) + <code>custo_por_odi()</code> e <code>agregar_por_estrato()</code>. Usa os valores aprovados no gate T1 — não começa sem o registro no PLAN.md. <b>Memória de cálculo</b> em linguagem simples duplicada no topo de <code>config.py</code> e <code>custo.py</code>.</p>
   <div class="files">Cria: src/config.py · src/custo.py · testes/test_custo.py — 2 testes</div></div>
   <span class="badge b-gate">pós-gate</span></div>
 
@@ -127,9 +127,10 @@
     <li>Números só em <code>config.py</code>, com fonte</li>
     <li>Erros explícitos: <code>EntradaInvalida</code> → mensagem amigável, exit 1</li>
   </ul></div>
-  <div class="card"><h3>Testes</h3><ul>
+  <div class="card"><h3>Testes e git</h3><ul>
     <li>Fixtures sintéticas em <code>tmp_path</code>; nada depende de <code>minhas_notas/</code></li>
     <li>Teste real: humano coloca arquivos em <code>Entrada/</code> e dá duplo-clique</li>
+    <li>Commits locais regulares; <b>sem push</b> para o GitHub</li>
   </ul></div>
 </div>
 
