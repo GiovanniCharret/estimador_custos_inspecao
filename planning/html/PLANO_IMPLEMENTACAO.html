@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plano de Implementação — Estimador de custos</title>
+<style>
+  :root{
+    --bg:#f7f6f3; --card:#fff; --ink:#1e2430; --muted:#6b7280;
+    --accent:#0f6b5c; --accent-soft:#e3f2ee; --warn:#9a5b13; --warn-soft:#fdf1e0;
+    --line:#e3e1db; --code:#f1efe9;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.55;padding:2rem 1rem 4rem}
+  .wrap{max-width:960px;margin:0 auto}
+  .kicker{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-size:1.9rem;line-height:1.2;margin:.3rem 0 .5rem}
+  .sub{color:var(--muted);max-width:62ch}
+  h2{font-size:1.15rem;margin:2.2rem 0 .8rem;padding-bottom:.35rem;border-bottom:2px solid var(--line)}
+  code{font-family:Consolas,"Cascadia Mono",monospace;font-size:.85rem;background:var(--code);padding:.1rem .35rem;border-radius:4px}
+  .task{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1rem 1.2rem;margin:.7rem 0;display:grid;grid-template-columns:3.2rem 1fr auto;gap:.9rem;align-items:start}
+  .tnum{font-weight:800;color:var(--accent);font-size:1.05rem}
+  .tnum small{display:block;font-weight:600;color:var(--muted);font-size:.7rem}
+  .task h3{font-size:1rem;margin-bottom:.25rem}
+  .task p{font-size:.88rem;color:var(--muted)}
+  .task .files{font-size:.78rem;margin-top:.4rem;color:var(--ink)}
+  .badge{border-radius:99px;padding:.15rem .6rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+  .b-tdd{background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent)}
+  .b-gate{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn)}
+  .b-doc{background:var(--code);color:var(--muted);border:1px solid var(--line)}
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:.8rem}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1rem 1.2rem}
+  .card h3{font-size:.95rem;margin-bottom:.4rem}
+  .card ul{padding-left:1.1rem;font-size:.88rem}
+  .card li{margin:.25rem 0}
+  .cycle{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;font-size:.85rem;margin:.6rem 0}
+  .step{background:var(--card);border:1.5px solid var(--accent);border-radius:8px;padding:.35rem .7rem}
+  .step.red{border-color:#c0392b}
+  .arr{color:var(--accent);font-weight:700}
+  footer{margin-top:3rem;color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);padding-top:1rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Plano de implementação · 2026-08-06</div>
+  <h1>Estimador de custos — 9 tarefas, TDD, commits frequentes</h1>
+  <p class="sub">Companion visual de <code>planning/PLANO_IMPLEMENTACAO.md</code> (o documento executável, com código e testes completos).
+  Macrofases rastreadas em <code>planning/PLAN.md</code>; design em <code>planning/DESIGN.md</code>.</p>
+</header>
+
+<h2>O ciclo de cada tarefa</h2>
+<div class="cycle">
+  <span class="step red">1 · escrever teste que falha</span><span class="arr">→</span>
+  <span class="step red">2 · rodar e ver falhar</span><span class="arr">→</span>
+  <span class="step">3 · implementação mínima</span><span class="arr">→</span>
+  <span class="step">4 · rodar e ver passar</span><span class="arr">→</span>
+  <span class="step">5 · commit</span>
+</div>
+
+<h2>As tarefas</h2>
+
+<div class="task"><div class="tnum">T0<small>F0</small></div>
+  <div><h3>Infraestrutura</h3>
+  <p>git init, <code>.gitignore</code> (Entrada/ e saida/ fora do git), uv + Python 3.12, requirements, smoke test, ritual <code>executar.bat → _exec.ps1 → .venv</code>, <code>definition of done.md</code>.</p>
+  <div class="files">Cria: .gitignore · requirements.txt · instalar.ps1 · _exec.ps1 · executar.bat · testes/test_smoke.py</div></div>
+  <span class="badge b-doc">setup</span></div>
+
+<div class="task"><div class="tnum">T1<small>F1</small></div>
+  <div><h3>Modelo de custo — estudo e proposta</h3>
+  <p>Extrai tarifas e formas de cálculo das referências; escreve <code>MODELO_CUSTO.md</code> com o modelo v0 (fórmula por ODI: acesso + rota interna → horas → R$) e parâmetros com fonte. <b>Para e espera aprovação humana.</b></p>
+  <div class="files">Cria: planning/MODELO_CUSTO.md · planning/html/MODELO_CUSTO.html</div></div>
+  <span class="badge b-gate">gate humano</span></div>
+
+<div class="task"><div class="tnum">T2<small>F2</small></div>
+  <div><h3>io_amostras · localizar entradas</h3>
+  <p><code>achar_entradas()</code>: exige <code>Lote.xlsx</code> e exatamente 1 <code>*Painel de Monitoramento*.xlsx</code>; erros dizem o que colocar em <code>Entrada\</code>.</p>
+  <div class="files">Cria: src/io_amostras.py · testes/test_io_amostras.py — 4 testes</div></div>
+  <span class="badge b-tdd">tdd</span></div>
+
+<div class="task"><div class="tnum">T3<small>F2</small></div>
+  <div><h3>io_amostras · ler e juntar por ODI</h3>
+  <p><code>ler_amostras()</code> (abas Amostra K, STATUS=Selecionado), <code>ler_painel()</code> (detecção da aba pelas colunas, bbox do Brasil), <code>juntar_amostras_painel()</code> (órfãos listados; interseção zero = "tranche errada").</p>
+  <div class="files">Modifica: src/io_amostras.py · Cria: testes/fixtures.py — 6 testes novos</div></div>
+  <span class="badge b-tdd">tdd</span></div>
+
+<div class="task"><div class="tnum">T4<small>F3</small></div>
+  <div><h3>distancias · geometria</h3>
+  <p><code>haversine_km()</code> validada contra Belém→Castanhal (~62 km); <code>resumo_por_odi()</code>: centroide + rota interna vizinho-mais-próximo (determinística) por ODI.</p>
+  <div class="files">Cria: src/distancias.py · testes/test_distancias.py — 4 testes</div></div>
+  <span class="badge b-tdd">tdd</span></div>
+
+<div class="task"><div class="tnum">T5<small>F4</small></div>
+  <div><h3>custo · motor parametrizado</h3>
+  <p><code>config.py</code> (todos os números, com fonte) + <code>custo_por_odi()</code> e <code>agregar_por_estrato()</code>. Usa os valores aprovados no gate T1 — não começa sem o registro no PLAN.md.</p>
+  <div class="files">Cria: src/config.py · src/custo.py · testes/test_custo.py — 2 testes</div></div>
+  <span class="badge b-gate">pós-gate</span></div>
+
+<div class="task"><div class="tnum">T6<small>F5</small></div>
+  <div><h3>resumo · tabela Excel</h3>
+  <p><code>Resumo_Custos.xlsx</code>: Leia-me + por amostra uma aba agregada por estrato (com TOTAL) e uma de detalhe por ODI. Arquivo aberto no Excel → "feche o arquivo".</p>
+  <div class="files">Cria: src/resumo.py · testes/test_resumo.py — 2 testes</div></div>
+  <span class="badge b-tdd">tdd</span></div>
+
+<div class="task"><div class="tnum">T7<small>F6</small></div>
+  <div><h3>mapas · folium</h3>
+  <p>1 HTML por amostra: CircleMarker por UC, cor e camada por estrato, popup ODI/município/custo, LayerControl.</p>
+  <div class="files">Cria: src/mapas.py · testes/test_mapas.py — 1 teste</div></div>
+  <span class="badge b-tdd">tdd</span></div>
+
+<div class="task"><div class="tnum">T8<small>F7</small></div>
+  <div><h3>Orquestrador + e2e + docs finais</h3>
+  <p><code>estimar_custos.py</code> (executar() testável, exit 0/1); e2e feliz (totais batem entre agregado e detalhe) + bordas (tranche errada, entrada ausente); <code>TESTES.md</code>; status report HTML; validação do duplo-clique.</p>
+  <div class="files">Cria: src/estimar_custos.py · testes/test_e2e.py · planning/TESTES.md · planning/html/STATUS_F7.html</div></div>
+  <span class="badge b-tdd">tdd + e2e</span></div>
+
+<h2>Regras globais (valem para todas as tarefas)</h2>
+<div class="cols">
+  <div class="card"><h3>Ambiente</h3><ul>
+    <li>Python 3.12 via uv; deps: pandas, numpy, openpyxl, folium, pytest</li>
+    <li>Sem GeoPandas na v1 (haversine numpy basta)</li>
+    <li>Rodar: <code>.venv\Scripts\python.exe -m pytest testes -v</code></li>
+  </ul></div>
+  <div class="card"><h3>Código</h3><ul>
+    <li>Português sem acento; docstring por-quê → fases numeradas; toda linha comentada</li>
+    <li>Números só em <code>config.py</code>, com fonte</li>
+    <li>Erros explícitos: <code>EntradaInvalida</code> → mensagem amigável, exit 1</li>
+  </ul></div>
+  <div class="card"><h3>Testes</h3><ul>
+    <li>Fixtures sintéticas em <code>tmp_path</code>; nada depende de <code>minhas_notas/</code></li>
+    <li>Teste real: humano coloca arquivos em <code>Entrada/</code> e dá duplo-clique</li>
+  </ul></div>
+</div>
+
+<footer>Companion de <code>planning/PLANO_IMPLEMENTACAO.md</code> · macrofases em <code>planning/PLAN.md</code> · gerado em 2026-08-06</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DESIGN — Estimador de custos de inspeção</title>
+<style>
+  :root{
+    --bg:#f7f6f3; --card:#ffffff; --ink:#1e2430; --muted:#6b7280;
+    --accent:#0f6b5c; --accent-soft:#e3f2ee; --warn:#9a5b13; --warn-soft:#fdf1e0;
+    --line:#e3e1db; --code:#f1efe9;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.55;padding:2rem 1rem 4rem}
+  .wrap{max-width:960px;margin:0 auto}
+  header{margin-bottom:2rem}
+  .kicker{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-size:1.9rem;line-height:1.2;margin:.3rem 0 .5rem}
+  .sub{color:var(--muted);max-width:60ch}
+  h2{font-size:1.15rem;margin:2.2rem 0 .8rem;padding-bottom:.35rem;border-bottom:2px solid var(--line)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.3rem;margin:.8rem 0}
+  table{width:100%;border-collapse:collapse;font-size:.9rem;background:var(--card)}
+  th,td{text-align:left;padding:.55rem .7rem;border:1px solid var(--line);vertical-align:top}
+  th{background:var(--code);font-size:.8rem;text-transform:uppercase;letter-spacing:.05em}
+  .tablebox{overflow-x:auto;border-radius:10px;border:1px solid var(--line)}
+  .tablebox table{border:none}
+  code,pre{font-family:Consolas,"Cascadia Mono",monospace;font-size:.85rem}
+  code{background:var(--code);padding:.1rem .35rem;border-radius:4px}
+  pre{background:#20262e;color:#dfe6ee;padding:1rem 1.2rem;border-radius:10px;overflow-x:auto;line-height:1.5}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:.8rem}
+  .fact{border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;padding:.8rem 1rem;font-size:.92rem}
+  .fact b{display:block;margin-bottom:.15rem}
+  .risk{border-left:4px solid var(--warn);background:var(--warn-soft);border-radius:0 8px 8px 0;padding:.8rem 1rem;font-size:.92rem}
+  .flow{display:flex;flex-direction:column;gap:.45rem;margin:.6rem 0}
+  .frow{display:flex;align-items:stretch;gap:.45rem;flex-wrap:wrap}
+  .node{background:var(--card);border:1.5px solid var(--accent);border-radius:8px;padding:.5rem .8rem;font-size:.85rem;flex:1;min-width:170px}
+  .node.in{border-style:dashed;border-color:var(--muted)}
+  .node.out{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .node small{display:block;color:var(--muted);font-size:.75rem}
+  .node.out small{color:#cfe8e2}
+  .arrow{align-self:center;color:var(--accent);font-weight:700}
+  .phase{display:flex;gap:.9rem;padding:.55rem 0;border-bottom:1px dashed var(--line);font-size:.92rem}
+  .phase:last-child{border-bottom:none}
+  .pnum{flex:0 0 2.4rem;font-weight:700;color:var(--accent)}
+  .gate{display:inline-block;background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn);border-radius:99px;padding:0 .55rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+  footer{margin-top:3rem;color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);padding-top:1rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Documento de design · aprovado 2026-08-06</div>
+  <h1>Estimador de custos de inspeção das amostras</h1>
+  <p class="sub">Companion visual de <code>planning/DESIGN.md</code>. Precifica as amostras geradas pelo
+  <em>SistemaAmostralPython</em>: tabela-resumo por estrato + mapas interativos, executável por duplo-clique.</p>
+</header>
+
+<h2>1 · O problema em uma imagem</h2>
+<div class="flow card">
+  <div class="frow">
+    <div class="node in">Entrada/Lote.xlsx<small>amostras — abas Amostra 1/2/3, STATUS="Selecionado"</small></div>
+    <div class="node in">Entrada/*Painel de Monitoramento*.xlsx<small>geolocalização — ODI → UCs (lat/long)</small></div>
+  </div>
+  <div class="arrow" style="text-align:center">▼ &nbsp;join por <b>ODI</b> — validação ruidosa: ODI sem coordenada = erro listado</div>
+  <div class="frow">
+    <div class="node">io_amostras<small>lê + valida</small></div>
+    <div class="arrow">→</div>
+    <div class="node">distancias<small>clusters de UCs, haversine × fator rodoviário</small></div>
+    <div class="arrow">→</div>
+    <div class="node">custo<small>modelo da F1 (a aprovar)</small></div>
+  </div>
+  <div class="frow">
+    <div class="node out">saida/Resumo_Custos.xlsx<small>formato do gabarito 20260224</small></div>
+    <div class="node out">saida/Mapa_Amostra_K.html<small>folium: UCs por estrato, popup com custo</small></div>
+  </div>
+</div>
+
+<h2>2 · Fatos que moldaram o design</h2>
+<div class="grid">
+  <div class="fact"><b>Um ODI não é um ponto</b>Na 7ª TR PA: 580 ODIs ↔ ~22.585 UCs. Cada ODI é um <em>cluster</em>; custo = chegar ao cluster + percorrer as UCs.</div>
+  <div class="fact"><b>ODI é a chave</b>Amostras ↔ coordenadas se juntam por ODI. Tranches diferentes têm interseção zero — o leitor detecta e falha com mensagem específica.</div>
+  <div class="fact"><b>Referências de custo existem</b>R$/hora por perfil (com/sem deslocamento) no Formulário de OS; distâncias por município no CalculoDistancias.xlsx. Não canônicas: base para a proposta da F1.</div>
+  <div class="fact"><b>minhas_notas/ é só pesquisa</b>Testes reais usarão arquivos colocados pelo humano em <code>Entrada/</code>. Nenhum teste depende de minhas_notas/.</div>
+</div>
+
+<h2>3 · Decisões tomadas</h2>
+<div class="tablebox"><table>
+  <tr><th>#</th><th>Tema</th><th>Escolha</th></tr>
+  <tr><td>D1</td><td>Modelo de custo</td><td>Explorar e propor em <code>MODELO_CUSTO.md</code> — <span class="gate">gate humano</span> antes de codificar</td></tr>
+  <tr><td>D2</td><td>Entrada</td><td>Planilhas de amostras prontas (não roda o sistema amostral)</td></tr>
+  <tr><td>D3</td><td>Mapas</td><td>HTML interativo (folium), sem PNG</td></tr>
+  <tr><td>D4</td><td>HTMLs</td><td>1 companion por documento de planejamento</td></tr>
+  <tr><td>D5</td><td>Arquitetura</td><td>Pipeline achatado no padrão canônico, scripts em <code>src/</code></td></tr>
+  <tr><td>D6</td><td>Dados de teste</td><td>Arquivos reais em <code>Entrada/</code>; minhas_notas/ = pesquisa</td></tr>
+  <tr><td>D7</td><td>Nomes de entrada</td><td><code>Lote.xlsx</code> (amostras) + nome contendo "Painel de Monitoramento" (geo)</td></tr>
+  <tr><td>D8</td><td>Ordem dos docs</td><td>ADVERSARIAL_REVIEW.md só depois do plano</td></tr>
+</table></div>
+
+<h2>4 · Estrutura do repositório (a criar)</h2>
+<pre>Entrada/Lote.xlsx                          &lt;- amostras
+Entrada/*Painel de Monitoramento*.xlsx     &lt;- geolocalização
+saida/                                     &lt;- resumo .xlsx + mapas .html
+src/estimar_custos.py                      &lt;- ÚNICO executável
+src/{io_amostras,distancias,custo,resumo,mapas,config}.py
+executar.bat / _exec.ps1 / instalar.ps1    &lt;- raiz, duplo-clique (uv + Python 3.12)
+testes/                                    &lt;- pytest: unitários + e2e sintéticos
+planning/  + planning/html/                &lt;- docs + companions</pre>
+
+<h2>5 · Erros: explícitos, nunca silenciosos</h2>
+<div class="tablebox"><table>
+  <tr><th>Situação</th><th>Comportamento</th></tr>
+  <tr><td>Entrada ausente ou ambígua</td><td>Aborta dizendo o que colocar em <code>Entrada\</code> (ou listando os duplicados)</td></tr>
+  <tr><td>ODI sem coordenada</td><td>Lista os órfãos e aborta; interseção zero → mensagem "tranche errada"</td></tr>
+  <tr><td>Lat/long inválida</td><td>Reporta por UC; ODI sem UC válida = erro</td></tr>
+  <tr><td>Planilha de saída aberta</td><td>"Feche o arquivo" (como o canônico)</td></tr>
+  <tr><td>Parâmetros de custo</td><td>Todos em <code>config.py</code>, com fonte comentada; zero números mágicos</td></tr>
+</table></div>
+
+<h2>6 · Macrofases</h2>
+<div class="card">
+  <div class="phase"><div class="pnum">F0</div><div>Infra: <code>src/</code>, venv uv 3.12, requirements, .bat, esqueleto de testes</div></div>
+  <div class="phase"><div class="pnum">F1</div><div>Estudo das referências → <code>MODELO_CUSTO.md</code> + companion &nbsp;<span class="gate">aprovação humana</span></div></div>
+  <div class="phase"><div class="pnum">F2</div><div><code>io_amostras</code>: leitura + validações + testes (começa validando o formato real da Entrada/)</div></div>
+  <div class="phase"><div class="pnum">F3</div><div><code>distancias</code>: clusters de UCs, matriz + testes</div></div>
+  <div class="phase"><div class="pnum">F4</div><div><code>custo.py</code> conforme modelo aprovado + testes</div></div>
+  <div class="phase"><div class="pnum">F5</div><div><code>resumo</code> no formato do gabarito + testes</div></div>
+  <div class="phase"><div class="pnum">F6</div><div><code>mapas</code> folium + testes</div></div>
+  <div class="phase"><div class="pnum">F7</div><div>E2E completo + <code>TESTES.md</code> + status report final</div></div>
+</div>
+
+<h2>7 · Riscos e pendências</h2>
+<div class="grid">
+  <div class="risk"><b>Formato real da entrada</b> — assumido = output do sistema amostral. Verificado com arquivos reais na F2; leitor falha ruidosamente em divergência.</div>
+  <div class="risk"><b>Modelo de custo indefinido</b> — é a entrega da F1, com gate de aprovação.</div>
+  <div class="risk"><b>Fator geodésica→estrada</b> — precisa de calibração; referência inicial: CalculoDistancias.xlsx.</div>
+</div>
+
+<footer>Companion de <code>planning/DESIGN.md</code> · inspirado nos modelos de <code>planning/html-effectiveness/</code> · gerado em 2026-08-06</footer>
+</div>
+</body>
+</html>
