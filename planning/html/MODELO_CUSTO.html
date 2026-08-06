@@ -333,7 +333,10 @@ DIAS = teto( HORAS_CAMPO / (8 h × N_EQUIPES) )   ← não altera o custo</div>
 
 </div>
 
-<h3>Exemplo completo — PA 7ª tranche, 6 estratos (19 ODIs, 11 municípios, 1.341 UCs)</h3>
+<h3>Exemplo completo — PA 7ª tranche, 6 estratos</h3>
+<p class="legend">Sorteados no gabarito: 19 ODIs · 11 municípios · 1.341 UCs.
+Com coordenada no painel (base da geometria): <strong>18 ODIs · 10 municípios · 1.341 UCs</strong> —
+o ODI ausente tem <code>Cons. = 0</code>, ver nota abaixo.</p>
 <div class="eq" style="max-width:720px">km geodésicos: mobilização 4.327 + entre ODIs 110 + internos 491 = 4.928
 × FATOR_RODOVIARIO 1,40 ............................... 6.898 km de estrada
 
@@ -392,6 +395,20 @@ que o planejador implicitamente assumiu:</p>
 <p>A dispersão (0,17 – 0,31) é o ponto: <strong>o gabarito não obedece a nenhuma regra
 geométrica consistente</strong>. Não há como um modelo reprodutível reproduzir um número
 que não veio de regra alguma.</p>
+
+<div class="callout neg">
+  <div class="tag">Nota — ODIs sorteados × ODIs com coordenada</div>
+  <p style="margin-bottom:8px">A geometria acima foi calculada sobre <strong>18, 25 e 42</strong>
+  ODIs, enquanto o gabarito sorteou <strong>19, 28 e 44</strong>. Seis ODIs não constam do
+  painel de coordenadas, e <strong>todos os seis têm <code>Cons. = 0</code></strong>: são
+  obras de reforço de alimentador / rede de acesso — postes e rede, nenhuma unidade
+  consumidora. Um painel indexado por UC não pode conter um ODI sem UC.</p>
+  <p style="margin:0">A calibração de <code>HORAS_POR_UC</code> <strong>não é afetada</strong>
+  (o total de UCs bate exatamente: 1.341 / 1.543 / 2.163). Já os km de mobilização ficam
+  levemente <strong>subestimados</strong>, o que torna o parâmetro calibrado conservador
+  para cima. O tratamento desses ODIs — localizar pelo centroide do município e medir o
+  esforço por km de rede — está listado como item de v1.</p>
+</div>
 
 <div class="callout">
   <div class="tag">O que prometemos e o que não prometemos</div>

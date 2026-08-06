@@ -324,11 +324,32 @@ E `N_EQUIPES` **não altera o custo** — só os dias.
 Calculando a geometria real dos ODIs efetivamente sorteados nas três amostras do gabarito
 (PA 7ª, 2ª amostra) e descontando as horas de deslocamento previstas pelo modelo:
 
-| Estrato | ODIs | Mun | UC | km rodov. (FR 1,4) | h desloc. (V 50) | h alvo (do custo) | h sobra / UC |
-|---|---|---|---|---|---|---|---|
-| 6 | 18 | 10 | 1.341 | 6.898 | 138 | 552 | 0,309 |
-| 5 | 25 | 18 | 1.543 | 12.484 | 250 | 656 | 0,263 |
-| 4 | 42 | 28 | 2.163 | 19.732 | 395 | 760 | 0,169 |
+| Estrato | ODIs sorteados | ODIs **com coordenada** | Mun (geometria) | UC | km rodov. (FR 1,4) | h desloc. (V 50) | h alvo (do custo) | h sobra / UC |
+|---|---|---|---|---|---|---|---|---|
+| 6 | 19 | 18 | 10 | 1.341 | 6.898 | 138 | 552 | 0,309 |
+| 5 | 28 | 25 | 18 | 1.543 | 12.484 | 250 | 656 | 0,263 |
+| 4 | 44 | 42 | 28 | 2.163 | 19.732 | 395 | 760 | 0,169 |
+
+> **Nota — por que "ODIs sorteados" ≠ "ODIs com coordenada".**
+> Seis ODIs sorteados não aparecem em `Coordenadas_UCs_7ªTR_PA.xlsx`, e **todos os seis
+> têm `Cons. = 0`** (zero unidades consumidoras): `PA2200612LPT140005` (Novo Progresso,
+> 296 postes), `PA2200612LPT140009` (Rurópolis), `PA2200612LPT150002` (Anapu, 287 postes),
+> `PA2200612LPT140006` (Novo Progresso, 392 postes), `PA2100612LPT130113` (São Félix do Xingu)
+> e novamente `PA2200612LPT150002` no estrato 4. São obras de **reforço de alimentador /
+> rede de acesso**: têm postes e rede, mas nenhuma UC. Um painel indexado por UC não pode,
+> por construção, conter um ODI sem UC.
+>
+> Efeitos, todos verificados:
+> - **A calibração de `HORAS_POR_UC` não é afetada**: o total de UCs bate exatamente com o
+>   gabarito nos três estratos (1.341 / 1.543 / 2.163), justamente porque os ausentes têm 0 UC.
+> - **Os km de mobilização ficam subestimados**: 1, 3 e 2 municípios a menos entram no
+>   circuito. Ou seja, `HORAS_POR_UC` calibrado nesta tabela é, se algo, ligeiramente
+>   **conservador para cima**.
+> - **Isso é uma lacuna real do modelo**, não só da calibração: um ODI com 0 UC ainda precisa
+>   ser inspecionado (postes, rede) e ainda custa viagem. Tratamento previsto na
+>   implementação e listado em (d): usar o **centroide do município** como localização do ODI
+>   quando não houver nenhuma UC com coordenada, e contar seu tempo de inspeção por
+>   quilômetro de rede em vez de por UC.
 
 Média ponderada: **0,235 h/UC**. Com `V = 45` a média sobe para ~0,26.
 A dispersão (0,17–0,31) mostra que **o gabarito não obedece a nenhuma regra geométrica
@@ -343,14 +364,15 @@ leitor do relatório. O modelo não promete reproduzir o gabarito — promete se
 ### b.8 Exemplo numérico completo (PA 7ª, 6 estratos)
 
 ```
-19 ODIs · 11 municípios · 1.341 UCs · 4 regionais
+Sorteados no gabarito ..... 19 ODIs · 11 municípios · 1.341 UCs · 4 regionais
+Com coordenada no painel .. 18 ODIs · 10 municípios · 1.341 UCs  <- base da geometria
 
-  km mobilização (11 municípios, ida e volta) .... 4.327 km geodésicos
+  km mobilização (10 municípios, ida e volta) .... 4.327 km geodésicos
   km entre ODIs do mesmo município ................  110 km geodésicos
   km internos aos ODIs (vizinho + próximo) ........  491 km geodésicos
                                                     ─────────
   soma geodésica ..................................  4.928 km
-  × FATOR_RODOVIARIO 1,40 .........................  6.899 km de estrada
+  × FATOR_RODOVIARIO 1,40 .........................  6.898 km de estrada
 
   horas de deslocamento = 6.898 / 45 ..............  153,3 h
   horas de inspeção     = 1.341 × 0,30 ............  402,3 h
@@ -405,6 +427,17 @@ calendário — fins de semana, deslocamento inicial. Ver pergunta **P5**.)
 6. **Glosa IMR como cenário**: mostrar o custo com glosa 0% / 15% / 35%.
 7. **Tempo de inspeção variável por tipo de obra** (SIGFI/MIGDI vs. extensão de rede),
    já que o Edital separa "Geração" de "Extensão de Redes" com tempos diferentes.
+8. **ODIs sem nenhuma UC** (`Cons. = 0`). Existem de fato: seis dos sorteados no gabarito
+   são obras de reforço de alimentador / rede de acesso — têm postes e rede, zero UCs, e
+   por isso **não aparecem no painel de coordenadas** (ver nota em b.7). O modelo v0 os
+   ignora, subestimando a mobilização. Tratamento proposto para a v1: localizar o ODI pelo
+   **centroide do município** e medir seu esforço de inspeção por **km de rede (AT+BT)**
+   em vez de por UC — o `Lote.xlsx` já traz `Rede AT km` e `Rede BT km`.
+   > ⚠ **Isto corrige uma regra do `planning/DESIGN.md` §7**, que manda *abortar* quando um
+   > ODI não tem coordenada ("Lista os órfãos e aborta"). Um ODI com 0 UC é órfão
+   > **legítimo** e não pode derrubar a execução. A regra deve virar: aborta só se o ODI tem
+   > `Cons. > 0` e mesmo assim nenhuma coordenada; se `Cons. = 0`, avisa e usa o fallback
+   > do município. Registrar no gate junto com o modelo.
 
 ---
 
