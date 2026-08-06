@@ -120,3 +120,19 @@ def test_juntar_orfao_cons_zero_sem_uc_no_municipio_erro(tmp_path):
     ucs = ler_painel(tmp_path / "Painel.xlsx")
     with pytest.raises(EntradaInvalida, match="PALMAS"):
         juntar_amostras_painel(amostras, ucs)
+
+def test_juntar_orfao_misto_cons_maior_zero_aborta_sem_aviso_de_fallback(tmp_path, capsys):
+    # Amostra com DOIS tipos de orfao ao mesmo tempo: PA003 (Cons>0, sem UC no Painel -> erro)
+    # e PA006 (Cons=0, obra sem UC, municipio BARCARENA TEM UC no Painel -> fallback valido).
+    # Regra: o erro do Cons>0 deve abortar a amostra inteira SEM que o aviso de pseudo-UC do
+    # PA006 seja impresso antes (nada de progresso parcial anunciado num fluxo que aborta).
+    odis_lote = ODIS[:3] + ["PA006"]
+    escrever_lote(tmp_path / "Lote.xlsx", abas=(1,), odis=odis_lote, cons={"PA006": 0})
+    escrever_painel(tmp_path / "Painel.xlsx", odis=ODIS[:2])    # falta PA003 (Cons>0) no Painel
+    amostras = ler_amostras(tmp_path / "Lote.xlsx")
+    ucs = ler_painel(tmp_path / "Painel.xlsx")
+    with pytest.raises(EntradaInvalida, match="PA003"):
+        juntar_amostras_painel(amostras, ucs)
+    # Nenhum aviso de fallback (pseudo-UC do PA006) pode ter sido impresso antes do erro.
+    saida = capsys.readouterr()
+    assert "AVISO" not in saida.out

@@ -152,10 +152,14 @@ def juntar_amostras_painel(amostras, ucs):
     municipio quando a obra nao tem UC nenhuma (Cons == 0, ex.: reforco de rede).
 
     Logica: Entrada (amostras, ucs) -> Fase 1: intersecao global de ODIs (zero = tranche
-    errada) -> Fase 2: por amostra, separa ODIs orfaos em dois grupos (Cons>0 vira erro;
-    Cons==0 vira pseudo-UC no centroide municipal, ou erro se o municipio tambem nao tem
-    UC no painel) -> Fase 3: merge por ODI dos nao-orfaos + concatena as pseudo-UCs ->
-    Saida: dict {k: df} com uma linha por UC (real ou pseudo) de ODI sorteada.
+    errada) -> Fase 2: por amostra, classifica cada ODI orfao SEM efeitos colaterais
+    (Cons>0 vira candidato a erro; Cons==0 vira candidato a pseudo-UC, ou candidato a
+    erro se o municipio tambem nao tem UC no painel) -> Fase 3: se houver qualquer
+    candidato a erro, aborta listando TODOS de uma vez (nada de aviso parcial nem de
+    parar no primeiro) -> Fase 4: so entao aplica os fallbacks validos (imprime os
+    avisos e monta as pseudo-UCs) -> Fase 5: merge por ODI dos nao-orfaos + concatena
+    as pseudo-UCs -> Saida: dict {k: df} com uma linha por UC (real ou pseudo) de ODI
+    sorteada.
     """
     # Fase 1: intersecao zero indica arquivos de tranches diferentes - mensagem especifica.
     odis_painel = set(ucs["ODI"])
@@ -167,15 +171,17 @@ def juntar_amostras_painel(amostras, ucs):
         )
     juntas = {}
     for k, df in amostras.items():
-        # Fase 2: ODIs sorteadas sem nenhuma UC no painel = orfaos; separa pela regra do Cons.
+        # Fase 2: ODIs sorteadas sem nenhuma UC no painel = orfaos; classifica cada um SEM
+        # imprimir nem lancar nada ainda - so decide em qual das tres listas ele cai.
         orfaos = sorted(set(df["ODI"]) - odis_painel)
         orfaos_com_uc_esperada = []   # Cons > 0: erro (comportamento original)
-        pseudo_linhas = []            # Cons == 0: pseudo-UC no centroide do municipio
+        orfaos_sem_municipio = []     # Cons == 0 mas municipio tambem sem UC no painel: erro
+        fallbacks_validos = []        # Cons == 0 com municipio achado: candidato a pseudo-UC
         for odi in orfaos:
             # Localiza a linha da amostra para essa ODI (Estrato/Municipio/Cons ja conhecidos).
             linha = df.loc[df["ODI"] == odi].iloc[0]
             if int(linha["Cons"]) > 0:
-                # Obra com UC esperada mas sem nenhuma no painel: dado incompleto, aborta.
+                # Obra com UC esperada mas sem nenhuma no painel: dado incompleto, candidato a erro.
                 orfaos_com_uc_esperada.append(odi)
                 continue
             # Cons == 0 (obra sem UC, ex.: reforco de rede): busca UCs do mesmo municipio no
@@ -184,12 +190,31 @@ def juntar_amostras_painel(amostras, ucs):
             municipio = linha["Municipio"]
             candidatas = ucs[ucs["Municipio"].astype(str).str.upper().str.strip() == str(municipio).upper().strip()]
             if candidatas.empty:
-                # Nem o municipio tem UC no painel: nao ha centroide possivel - erro.
-                raise EntradaInvalida(
-                    f"Amostra {k}: ODI {odi} (Cons=0, obra sem UC) nao tem UC propria no Painel, "
-                    f"e o municipio '{municipio}' tambem nao tem nenhuma UC no Painel "
-                    "(impossivel estimar o centroide)."
-                )
+                # Nem o municipio tem UC no painel: nao ha centroide possivel - candidato a erro
+                # (coletado aqui, NAO lancado direto, para poder ser listado junto dos demais).
+                orfaos_sem_municipio.append((odi, municipio))
+            else:
+                # Guarda tudo que a Fase 4 precisa para montar a pseudo-UC, sem aplicar ainda.
+                fallbacks_validos.append((odi, linha, municipio, candidatas))
+        # Fase 3: qualquer candidato a erro aborta a amostra inteira, listando TODOS de uma vez -
+        # nunca so o primeiro, e nunca depois de avisos de fallback ja terem sido impressos.
+        mensagens_erro = []
+        if orfaos_com_uc_esperada:
+            mostra = ", ".join(orfaos_com_uc_esperada[:10]) + ("..." if len(orfaos_com_uc_esperada) > 10 else "")
+            mensagens_erro.append(f"{len(orfaos_com_uc_esperada)} ODI(s) sem coordenada no Painel: {mostra}")
+        if orfaos_sem_municipio:
+            itens = [f"{odi} (municipio {municipio})" for odi, municipio in orfaos_sem_municipio]
+            mostra = ", ".join(itens[:10]) + ("..." if len(itens) > 10 else "")
+            mensagens_erro.append(
+                f"{len(orfaos_sem_municipio)} ODI(s) com Cons=0 (obra sem UC) cujo municipio "
+                f"tambem nao tem nenhuma UC no Painel (impossivel estimar centroide): {mostra}"
+            )
+        if mensagens_erro:
+            raise EntradaInvalida(f"Amostra {k}: " + " | ".join(mensagens_erro))
+        # Fase 4: so chega aqui se a amostra passou em TODAS as validacoes - agora sim aplica
+        # os fallbacks (aviso + pseudo-UC), sem risco de anunciar progresso que seria abortado.
+        pseudo_linhas = []
+        for odi, linha, municipio, candidatas in fallbacks_validos:
             # Aviso (nunca silencioso): pseudo-UC criada a partir do centroide municipal.
             print(f"AVISO: Amostra {k}: ODI {odi} (Cons=0, obra sem UC) sem UC propria no Painel; "
                   f"usando pseudo-UC no centroide de {municipio} ({len(candidatas)} UC(s)).")
@@ -202,11 +227,7 @@ def juntar_amostras_painel(amostras, ucs):
                 "LATITUDE": float(candidatas["LATITUDE"].mean()),
                 "LONGITUDE": float(candidatas["LONGITUDE"].mean()),
             })
-        # Orfaos com UC esperada (Cons>0): aborta listando, como no comportamento original.
-        if orfaos_com_uc_esperada:
-            mostra = ", ".join(orfaos_com_uc_esperada[:10]) + ("..." if len(orfaos_com_uc_esperada) > 10 else "")
-            raise EntradaInvalida(f"Amostra {k}: {len(orfaos_com_uc_esperada)} ODI(s) sem coordenada no Painel: {mostra}")
-        # Fase 3: merge 1-para-N (cada ODI tem varias UCs) para os ODIs com UC real no painel;
+        # Fase 5: merge 1-para-N (cada ODI tem varias UCs) para os ODIs com UC real no painel;
         # remove Municipio de ucs antes do merge para nao duplicar a coluna ja vinda da amostra.
         juntas_k = df.merge(ucs.drop(columns=["Municipio"]), on="ODI", how="inner")
         # Concatena as pseudo-UCs dos orfaos Cons==0 (pode ser uma lista vazia).
