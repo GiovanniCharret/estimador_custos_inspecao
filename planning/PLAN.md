@@ -38,6 +38,12 @@ Sugestão de biblioteca para cálculos de geolocalização -> GeoPandas
 - Sem GeoPandas na v1: haversine via numpy cobre centroides/distâncias; GeoPandas só se surgir necessidade geoespacial real (shapefiles, projeções).
 - Memória de cálculo para humanos: explicação simples do cálculo de custo (e do porquê) duplicada no topo de `src/config.py` e `src/custo.py`, derivada do `MODELO_CUSTO.md` aprovado.
 - Git: commits locais regulares; **sem push** para o GitHub (publicação é decisão do humano).
-- **Pendência (gate F1):** modelo de custo — proposta em `MODELO_CUSTO.md` aguardará aprovação humana; registrar aqui a decisão.
+- **GATE F1 APROVADO (2026-08-06)** — modelo de `MODELO_CUSTO.md` aprovado com as decisões abaixo; **cada decisão vira parâmetro em `config.py`** (ajustes futuros sem rebuild):
+  - **G1 (equipe):** só engenheiro na estimativa (técnico raramente usado; não sobe em poste quem estima). Tarifas por perfil ficam parametrizadas, perfil ativo = ENGENHEIRO.
+  - **G2 (diárias):** não entram — a tarifa horária "com deslocamento" já embute. Parâmetro `CUSTO_DIARIA = 0` existe para testes futuros.
+  - **G3 (base de partida):** capital do estado (UF) do contrato. Multi-UF: `minhas_notas/base_contratos.json` (113 contratos, 23 UFs, tipo LPT/MLA, vigência) é a base; `config.py` carrega dicionário de capitais por UF.
+  - **G4 (velocidade/fator rodoviário):** mantidos como parâmetros a calibrar (`VELOCIDADE_KMH = 45`, `FATOR_RODOVIARIO = 1.40`); aprimoramento futuro.
+  - **G5 (produtividade):** substitui HORAS_POR_UC único por **`UCS_POR_DIA = {"LPT": 30, "MLA": 3}`** (LPT = obras com rede/transformador; MLA = fotovoltaico remoto) × `HORAS_DIA_CAMPO = 8`. O tipo do contrato vem do `base_contratos.json`.
+- **Regra do órfão (assumida, não contestada no gate):** ODI sem coordenada no painel aborta SÓ se tiver UCs (`Cons. > 0`); com `Cons. = 0` (obra sem UC, ex.: reforço de rede) → aviso + fallback centroide do município. Afeta T3.
 - **Pendência (F2):** validar o formato real de `Lote.xlsx`/Painel quando o humano colocar os arquivos em `Entrada/`.
 - **Pendência (pós-plano):** escrever `planning/ADVERSARIAL_REVIEW.md` (D8).

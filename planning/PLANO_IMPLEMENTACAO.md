@@ -309,10 +309,19 @@ git add src testes ; git commit -m "feat: F2 - achar_entradas com validacao de n
 **Interfaces:**
 - Consumes: `EntradaInvalida`, `achar_entradas` (Task 2).
 - Produces:
-  - `ler_amostras(caminho: Path) -> dict[int, pd.DataFrame]` — chave = nº da amostra (1/2/3); df com colunas `ODI` (str), `Estrato` (int), `Municipio` (str); apenas `STATUS == "Selecionado"`.
+  - `ler_amostras(caminho: Path) -> dict[int, pd.DataFrame]` — chave = nº da amostra (1/2/3); df com colunas `ODI` (str), `Estrato` (int), `Municipio` (str), `Cons` (int; nº de UCs da obra — 0 quando a coluna não existir no Lote); apenas `STATUS == "Selecionado"`.
   - `ler_painel(caminho: Path) -> pd.DataFrame` — colunas `ODI` (str), `UC` (str), `LATITUDE` (float), `LONGITUDE` (float); UCs com lat/long inválida removidas com aviso.
-  - `juntar_amostras_painel(amostras, ucs) -> dict[int, pd.DataFrame]` — df por amostra com as UCs de cada ODI sorteada; levanta `EntradaInvalida` para órfãos/interseção zero.
+  - `juntar_amostras_painel(amostras, ucs) -> dict[int, pd.DataFrame]` — df por amostra com as UCs de cada ODI sorteada; levanta `EntradaInvalida` para órfãos com `Cons > 0` e para interseção zero.
   - `BBOX_BRASIL` — dict com limites lat/long do Brasil.
+
+> **REGRA DO ÓRFÃO (decisão do gate F1, registrada no PLAN.md):** ODI sorteada sem
+> nenhuma UC no painel: (a) se `Cons > 0` → erro `EntradaInvalida` listando os órfãos
+> (comportamento original); (b) se `Cons == 0` (obra sem UC, ex.: reforço de rede) →
+> AVISO impresso e fallback: gera-se para a ODI uma pseudo-UC no **centroide do
+> município** (média de lat/long das UCs do mesmo município no painel; se o município
+> não tem UC nenhuma no painel, aí sim é erro). A pseudo-UC leva `UC = "<ODI>-MUNICIPIO"`.
+> Testes da Task 3 devem cobrir os dois ramos: órfão `Cons>0` aborta; órfão `Cons==0`
+> vira 1 linha no df com o centroide municipal e conta como `n_ucs = 1` a inspecionar.
 
 - [ ] **Step 1: Fixture sintética compartilhada**
 
@@ -689,18 +698,23 @@ git add src testes ; git commit -m "feat: F3 - haversine, centroides e rota inte
 
 ### Task 5: F4 — `config.py` + `custo.py` (modelo aprovado na F1)
 
-> **Pré-condição:** modelo aprovado e registrado no PLAN.md (gate da Task 1). Os valores
-> abaixo são o v0 proposto; substituir pelos aprovados/calibrados antes de codificar.
+> **GATE APROVADO (2026-08-06, ver PLAN.md):** modelo de `MODELO_CUSTO.md` com as decisões
+> G1–G5. Fórmula de preço decifrada do órgão: `custo = CUSTO_FIXO_OS + tarifa_campo × horas
+> de campo` (12.960 = 36h×360 de escritório por OS; 600/h de campo ⇔ 4.800/equipe-dia).
+> Geometria: mobilização POR MUNICÍPIO (capital → centroide do município, ida e volta, UMA
+> vez) + saltos entre ODIs do município + rota interna às UCs — NÃO ida-e-volta por ODI.
+> **Cada decisão do gate é um parâmetro em `config.py` — ajustes futuros sem rebuild.**
 
 **Files:**
 - Create: `src/config.py`, `src/custo.py`, `testes/test_custo.py`
 
 **Interfaces:**
-- Consumes: `resumo_por_odi` (Task 4), `haversine_km` (Task 4).
+- Consumes: `resumo_por_odi` (Task 4), `haversine_km`, `_rota_vizinho_mais_proximo` (Task 4).
 - Produces:
-  - `src/config.py` — constantes: `FATOR_RODOVIARIO`, `VELOCIDADE_KMH`, `HORAS_POR_UC`, `TARIFA_HORA_DESLOC`, `TARIFA_HORA_INSP`, `BASES_REGIONAIS: dict[str, tuple[float, float]]`, `BASE_PADRAO: str`.
-  - `custo_por_odi(df_odis: pd.DataFrame) -> pd.DataFrame` — acrescenta colunas `dist_acesso_km`, `horas_desloc`, `horas_inspecao`, `custo_desloc`, `custo_insp`, `custo_total`.
-  - `agregar_por_estrato(df_custos: pd.DataFrame) -> pd.DataFrame` — uma linha por estrato somando ODIs + linha `TOTAL`.
+  - `src/config.py` — parâmetros: `PERFIL_EQUIPE`, `TARIFAS_HORA` (por perfil, campo/escritório), `CUSTO_DIARIA`, `HORAS_DIA_CAMPO`, `HORAS_ESCRITORIO_POR_OS`, `UCS_POR_DIA` (LPT/MLA), `TIPO_CONTRATO_PADRAO`, `FATOR_RODOVIARIO`, `VELOCIDADE_KMH`, `CAPITAIS_UF` (23 UFs), `UF_PADRAO`, `ARQUIVO_BASE_CONTRATOS`.
+  - `tarifa_campo() -> float` / `tarifa_escritorio() -> float` — tarifas do perfil ativo (campo soma `CUSTO_DIARIA/HORAS_DIA_CAMPO`).
+  - `custo_por_odi(df_odis: pd.DataFrame, uf: str, tipo_contrato: str) -> pd.DataFrame` — acrescenta `dist_acesso_km` (rateio municipal: mobilização + saltos), `dist_interna_corrigida_km`, `horas_desloc`, `horas_inspecao`, `custo_desloc`, `custo_insp`, `custo_total` (só campo; o fixo entra por estrato).
+  - `agregar_por_estrato(df_custos: pd.DataFrame) -> pd.DataFrame` — uma linha por estrato somando ODIs + `equipe_dias` + `custo_fixo_os` (uma vez por estrato) + linha `TOTAL`.
 
 - [ ] **Step 1: Testes que falham**
 
@@ -711,10 +725,10 @@ git add src testes ; git commit -m "feat: F3 - haversine, centroides e rota inte
 import pandas as pd
 import pytest
 from src import config
-from src.custo import custo_por_odi, agregar_por_estrato
+from src.custo import custo_por_odi, agregar_por_estrato, tarifa_campo
 
 def _odis_teste():
-    # 2 ODIs no estrato 1, 1 no estrato 2; centroides e rotas conhecidos.
+    # 2 ODIs no estrato 1 (mesmo municipio X), 1 no estrato 2 (municipio Y).
     return pd.DataFrame({
         "ODI": ["A", "B", "C"], "Estrato": [1, 1, 2], "Municipio": ["X", "X", "Y"],
         "n_ucs": [2, 1, 3],
@@ -722,32 +736,65 @@ def _odis_teste():
         "dist_interna_km": [2.0, 0.0, 5.0],
     })
 
-def test_custo_por_odi_formula(monkeypatch):
+def _config_redonda(monkeypatch):
     # Fixa parametros redondos para conferencia manual da formula.
     monkeypatch.setattr(config, "FATOR_RODOVIARIO", 1.0)
     monkeypatch.setattr(config, "VELOCIDADE_KMH", 50.0)
-    monkeypatch.setattr(config, "HORAS_POR_UC", 1.0)
-    monkeypatch.setattr(config, "TARIFA_HORA_DESLOC", 100.0)
-    monkeypatch.setattr(config, "TARIFA_HORA_INSP", 200.0)
-    r = custo_por_odi(_odis_teste())
-    linha = r[r["ODI"] == "A"].iloc[0]
-    # dist_acesso = 2 * haversine(base, centroide) * 1.0 (> 0, conferida por faixa).
-    assert linha["dist_acesso_km"] > 0
-    # horas_desloc = (acesso + interna) / 50; custo_desloc = horas * 100.
-    assert linha["custo_desloc"] == pytest.approx(linha["horas_desloc"] * 100.0)
-    # horas_inspecao = n_ucs * 1h -> custo_insp = 2 * 200.
-    assert linha["custo_insp"] == pytest.approx(400.0)
-    # total = desloc + inspecao.
-    assert linha["custo_total"] == pytest.approx(linha["custo_desloc"] + 400.0)
+    monkeypatch.setattr(config, "HORAS_DIA_CAMPO", 8.0)
+    monkeypatch.setattr(config, "HORAS_ESCRITORIO_POR_OS", 10.0)
+    monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 4.0, "MLA": 1.0})
+    monkeypatch.setattr(config, "PERFIL_EQUIPE", "ENGENHEIRO")
+    monkeypatch.setattr(config, "TARIFAS_HORA",
+                        {"ENGENHEIRO": {"campo": 100.0, "escritorio": 50.0}})
+    monkeypatch.setattr(config, "CUSTO_DIARIA", 0.0)
 
-def test_agregar_por_estrato():
-    r = custo_por_odi(_odis_teste())
+def test_custo_por_odi_formula(monkeypatch):
+    _config_redonda(monkeypatch)
+    r = custo_por_odi(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    a = r[r["ODI"] == "A"].iloc[0]
+    # Mobilizacao municipal e' rateada: A e B (mesmo municipio X) tem o MESMO acesso.
+    b = r[r["ODI"] == "B"].iloc[0]
+    assert a["dist_acesso_km"] == pytest.approx(b["dist_acesso_km"])
+    assert a["dist_acesso_km"] > 0
+    # horas_inspecao = n_ucs * (8h / 4 UCs por dia) = 2 * 2h = 4h -> custo = 4 * 100.
+    assert a["horas_inspecao"] == pytest.approx(4.0)
+    assert a["custo_insp"] == pytest.approx(400.0)
+    # custo_desloc = horas_desloc * tarifa de campo (100).
+    assert a["custo_desloc"] == pytest.approx(a["horas_desloc"] * 100.0)
+    # total por ODI = so campo (desloc + inspecao); o fixo de OS entra por estrato.
+    assert a["custo_total"] == pytest.approx(a["custo_desloc"] + a["custo_insp"])
+
+def test_tipo_contrato_muda_produtividade(monkeypatch):
+    _config_redonda(monkeypatch)
+    lpt = custo_por_odi(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    mla = custo_por_odi(_odis_teste(), uf="PA", tipo_contrato="MLA")
+    # MLA (1 UC/dia) consome 4x as horas de inspecao de LPT (4 UCs/dia).
+    assert mla["horas_inspecao"].sum() == pytest.approx(4 * lpt["horas_inspecao"].sum())
+
+def test_agregar_por_estrato_soma_e_fixo(monkeypatch):
+    _config_redonda(monkeypatch)
+    r = custo_por_odi(_odis_teste(), uf="PA", tipo_contrato="LPT")
     agg = agregar_por_estrato(r)
     # 2 estratos + linha TOTAL.
     assert len(agg) == 3
+    e1 = agg[agg["Estrato"] == 1].iloc[0]
+    # custo_fixo_os = 10h de escritorio * 50 = 500, UMA vez por estrato.
+    assert e1["custo_fixo_os"] == pytest.approx(500.0)
+    # equipe_dias = horas de campo do estrato / 8.
+    assert e1["equipe_dias"] == pytest.approx((e1["horas_desloc"] + e1["horas_inspecao"]) / 8.0)
+    # custo_total do estrato = campo (soma dos ODIs) + fixo.
+    soma_campo = r[r["Estrato"] == 1]["custo_total"].sum()
+    assert e1["custo_total"] == pytest.approx(soma_campo + 500.0)
+    # TOTAL soma os estratos (fixo incluido 2x: uma vez por estrato).
     total = agg[agg["Estrato"] == "TOTAL"].iloc[0]
-    assert total["n_odis"] == 3 and total["n_ucs"] == 6
-    assert total["custo_total"] == pytest.approx(r["custo_total"].sum())
+    assert total["custo_fixo_os"] == pytest.approx(1000.0)
+    assert total["custo_total"] == pytest.approx(agg[agg["Estrato"] != "TOTAL"]["custo_total"].sum())
+
+def test_tarifa_campo_inclui_diaria(monkeypatch):
+    _config_redonda(monkeypatch)
+    # CUSTO_DIARIA = 80 por dia de campo -> 80/8h = +10/h sobre a tarifa 100.
+    monkeypatch.setattr(config, "CUSTO_DIARIA", 80.0)
+    assert tarifa_campo() == pytest.approx(110.0)
 ```
 
 - [ ] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.config`.
@@ -759,45 +806,89 @@ def test_agregar_por_estrato():
 # -*- coding: utf-8 -*-
 """Parametros do modelo de custo — TODOS os numeros do estimador vivem aqui.
 
-Cada constante tem valor e FONTE. Substituir os valores v0 pelos aprovados na F1
-(planning/MODELO_CUSTO.md) antes do uso em producao.
+Cada parametro nasce de uma decisao do gate F1 (G1-G5, ver PLAN.md) e pode ser
+ajustado sem rebuild. Cada constante tem valor e FONTE.
 
 === MEMORIA DE CALCULO (para humanos) ===
-[Na Task 5, substituir este bloco pelo texto aprovado no MODELO_CUSTO.md. Estrutura v0:]
-O custo de inspecionar uma ODI soma duas parcelas:
-1) DESLOCAMENTO: a equipe parte da base regional, vai ate o centro da obra (ida e
-   volta; a distancia em linha reta e' convertida em distancia de estrada pelo
-   FATOR_RODOVIARIO) e percorre as UCs da obra. Km viram horas dividindo pela
-   VELOCIDADE_KMH; horas viram R$ pela TARIFA_HORA_DESLOC (Formulario de OS).
-2) INSPECAO: cada UC visitada consome HORAS_POR_UC; horas viram R$ pela
-   TARIFA_HORA_INSP (Formulario de OS).
-Por que assim: reproduz a logica das referencias (tarifa horaria com/sem
-deslocamento) usando a unica geometria disponivel (coordenadas das UCs), sem
+O custo de um estrato soma duas parcelas (formula decifrada das estimativas reais
+do orgao, MODELO_CUSTO.md a.5 — reproduz 7 de 11 estimativas ao centavo):
+1) ESCRITORIO (fixo por estrato): planejamento + relatorio + apresentacao =
+   HORAS_ESCRITORIO_POR_OS x tarifa de escritorio (36h x R$360 = R$12.960).
+2) CAMPO: horas de campo x tarifa de campo (R$600/h = R$4.800/equipe-dia).
+   As horas de campo somam:
+   - DESLOCAMENTO: a equipe parte da CAPITAL do estado do contrato, vai ao municipio
+     (ida e volta, UMA vez por municipio), salta entre as obras do municipio e
+     percorre as UCs de cada obra. Km em linha reta viram km de estrada pelo
+     FATOR_RODOVIARIO; km viram horas pela VELOCIDADE_KMH.
+   - INSPECAO: cada UC consome HORAS_DIA_CAMPO / UCS_POR_DIA[tipo] horas.
+     LPT (rede/postes): 30 UCs/dia. MLA (fotovoltaico remoto): 3 UCs/dia.
+Por que assim: mantem a camada de preco que o orgao ja usa e troca o julgamento
+"condicoes logisticas" por geometria reprodutivel (coordenadas das UCs), sem
 depender de malha rodoviaria externa. Detalhes e alternativas: planning/MODELO_CUSTO.md.
 === FIM DA MEMORIA DE CALCULO ===
 """
-# Fator que converte distancia geodesica (linha reta) em distancia rodoviaria.
-# FONTE: calibrar contra minhas_notas/CalculoDistancias.xlsx na F1 (v0: literatura ~1.3).
-FATOR_RODOVIARIO = 1.3
-# Velocidade media de deslocamento em km/h (estradas regionais do PA).
-# FONTE: proposta F1 (v0: 60 km/h).
-VELOCIDADE_KMH = 60.0
-# Horas de inspecao por UC visitada.
-# FONTE: proposta F1 (v0: 0.5 h/UC).
-HORAS_POR_UC = 0.5
-# Tarifa R$/hora COM deslocamento (Formulario de OS, aba 'Custos Inspecoes': Eng. 600).
-TARIFA_HORA_DESLOC = 600.0
-# Tarifa R$/hora SEM deslocamento (Formulario de OS: Eng. 360).
-TARIFA_HORA_INSP = 360.0
-# Sede de partida da equipe por REGIONAL (lat, long) — v0: sedes das 4 regionais do PA.
-BASES_REGIONAIS = {
-    "METROPOLITANA": (-1.4558, -48.4902),   # Belem
-    "CASTANHAL": (-1.2939, -47.9264),       # Castanhal
-    "MARABA": (-5.3687, -49.1178),          # Maraba
-    "SANTAREM": (-2.4431, -54.7083),        # Santarem
+# --- Equipe (decisao G1 do gate) ---
+# Perfil usado na estimativa. Tecnico raramente e' usado (nao sobe em poste quem estima).
+PERFIL_EQUIPE = "ENGENHEIRO"
+# Tarifas R$/hora por perfil (Formulario de OS, aba 'Custos Inspecoes').
+# 'campo' = COM deslocamento; 'escritorio' = SEM deslocamento.
+TARIFAS_HORA = {
+    "ENGENHEIRO": {"campo": 600.0, "escritorio": 360.0},
+    "TECNICO": {"campo": 513.22, "escritorio": 273.22},
 }
-# Base usada quando a regional da ODI nao e' conhecida (v0: Belem).
-BASE_PADRAO = "METROPOLITANA"
+# Diaria/pernoite em R$ por equipe-dia de campo (decisao G2: tarifa ja embute -> 0).
+CUSTO_DIARIA = 0.0
+
+# --- Jornada e produtividade (decisao G5 do gate) ---
+# Horas de um dia de campo (8h x 600 = 4.800/equipe-dia, formula decifrada do orgao).
+HORAS_DIA_CAMPO = 8.0
+# Horas de escritorio por OS: planejamento + relatorio + apresentacao, UMA vez por estrato
+# (36h x 360 = 12.960, o termo fixo da formula decifrada em MODELO_CUSTO.md a.5).
+HORAS_ESCRITORIO_POR_OS = 36.0
+# UCs inspecionadas por equipe por dia, por tipo de contrato (decisao G5):
+# LPT = obras com rede/postes/transformador; MLA = fotovoltaico em regioes remotas.
+UCS_POR_DIA = {"LPT": 30.0, "MLA": 3.0}
+# Tipo usado quando o contrato nao e' informado/encontrado.
+TIPO_CONTRATO_PADRAO = "LPT"
+
+# --- Deslocamento (decisao G4: parametros a calibrar, ajustaveis sem rebuild) ---
+# Converte distancia geodesica (linha reta) em distancia rodoviaria. FONTE: chute F1.
+FATOR_RODOVIARIO = 1.40
+# Velocidade media em km/h no interior. FONTE: chute F1.
+VELOCIDADE_KMH = 45.0
+
+# --- Base de partida (decisao G3: capital do estado do contrato) ---
+# Coordenadas (lat, long) das capitais das 23 UFs presentes em base_contratos.json.
+CAPITAIS_UF = {
+    "AC": (-9.9754, -67.8249),   # Rio Branco
+    "AL": (-9.6660, -35.7350),   # Maceio
+    "AM": (-3.1190, -60.0217),   # Manaus
+    "AP": (0.0349, -51.0694),    # Macapa
+    "BA": (-12.9718, -38.5011),  # Salvador
+    "CE": (-3.7172, -38.5433),   # Fortaleza
+    "GO": (-16.6869, -49.2648),  # Goiania
+    "MA": (-2.5307, -44.3068),   # Sao Luis
+    "MS": (-20.4697, -54.6201),  # Campo Grande
+    "MT": (-15.6014, -56.0979),  # Cuiaba
+    "PA": (-1.4558, -48.4902),   # Belem
+    "PB": (-7.1195, -34.8450),   # Joao Pessoa
+    "PE": (-8.0476, -34.8770),   # Recife
+    "PI": (-5.0892, -42.8019),   # Teresina
+    "PR": (-25.4284, -49.2733),  # Curitiba
+    "RJ": (-22.9068, -43.1729),  # Rio de Janeiro
+    "RN": (-5.7945, -35.2110),   # Natal
+    "RO": (-8.7612, -63.9004),   # Porto Velho
+    "RR": (2.8235, -60.6758),    # Boa Vista
+    "RS": (-30.0346, -51.2177),  # Porto Alegre
+    "SE": (-10.9472, -37.0731),  # Aracaju
+    "SP": (-23.5505, -46.6333),  # Sao Paulo
+    "TO": (-10.2400, -48.3558),  # Palmas
+}
+# UF usada quando o contrato nao e' informado.
+UF_PADRAO = "PA"
+# Caminho (relativo a raiz do projeto) da base de contratos: chave = contrato,
+# campos uf / tipo_contrato / vigente. Fonte: minhas_notas/base_contratos.json.
+ARQUIVO_BASE_CONTRATOS = "minhas_notas/base_contratos.json"
 ```
 
 `src/custo.py`:
@@ -806,74 +897,126 @@ BASE_PADRAO = "METROPOLITANA"
 """Motor de custo: transforma distancias em R$ conforme o modelo aprovado (F1).
 
 === MEMORIA DE CALCULO (para humanos) ===
-[Mesmo bloco de src/config.py — duplicado de proposito: quem abrir qualquer um dos
-dois arquivos entende o calculo sem ler mais nada. Na Task 5, colar aqui o texto
-aprovado no MODELO_CUSTO.md.]
-custo_odi = horas_desloc x TARIFA_HORA_DESLOC + horas_inspecao x TARIFA_HORA_INSP
-  onde: horas_desloc   = (2 x dist(base, centro_da_obra) x FATOR_RODOVIARIO
-                          + percurso_entre_UCs) / VELOCIDADE_KMH
-        horas_inspecao = n_ucs x HORAS_POR_UC
-Estrato = soma das suas ODIs; Amostra = soma dos estratos.
+[Mesmo bloco de src/config.py -- duplicado de proposito: quem abrir qualquer um dos
+dois arquivos entende o calculo sem ler mais nada.]
+custo_estrato = CUSTO_FIXO + custo_campo, onde:
+  CUSTO_FIXO  = HORAS_ESCRITORIO_POR_OS x tarifa_escritorio  (36h x 360 = 12.960, 1x por estrato)
+  custo_campo = (horas_desloc + horas_inspecao) x tarifa_campo (600/h = 4.800/equipe-dia)
+  horas_desloc = km_estrada / VELOCIDADE_KMH, com km_estrada = FATOR_RODOVIARIO x
+    (mobilizacao: capital da UF -> centro do municipio, ida e volta, UMA vez por municipio
+     + saltos entre as obras do municipio + percurso entre as UCs de cada obra)
+  horas_inspecao = n_ucs x (HORAS_DIA_CAMPO / UCS_POR_DIA[tipo])  (LPT: 30/dia; MLA: 3/dia)
+Amostra = soma dos estratos. A mobilizacao municipal e' rateada igualmente entre as
+obras do municipio so para exibir custo por obra; o total do estrato nao depende do rateio.
 === FIM DA MEMORIA DE CALCULO ===
 """
 import pandas as pd
 from src import config
-from src.distancias import haversine_km
+from src.distancias import haversine_km, _rota_vizinho_mais_proximo
 
-def custo_por_odi(df_odis):
-    """Calcula o custo de inspecao de cada ODI a partir do resumo geometrico.
+def tarifa_campo():
+    """Tarifa horaria de campo do perfil ativo, com diaria diluida por hora.
+
+    Por que existe: G1/G2 do gate viram parametros; le config NA CHAMADA (nao no
+    import) para monkeypatch e ajustes sem rebuild funcionarem.
+
+    Logica: Entrada (config) -> Fase 1: tarifa 'campo' do perfil ativo -> Fase 2:
+    soma CUSTO_DIARIA diluida pela jornada -> Saida: R$/hora.
+    """
+    # Fase 1: tarifa de campo do perfil ativo (G1: ENGENHEIRO).
+    base = config.TARIFAS_HORA[config.PERFIL_EQUIPE]["campo"]
+    # Fase 2: diaria (G2: 0 por padrao) diluida pelas horas do dia de campo.
+    return base + config.CUSTO_DIARIA / config.HORAS_DIA_CAMPO
+
+def tarifa_escritorio():
+    """Tarifa horaria de escritorio (sem deslocamento) do perfil ativo.
+
+    Por que existe: par do tarifa_campo() para o termo fixo por OS; le config na
+    chamada pelo mesmo motivo.
+
+    Logica: Entrada (config) -> Fase 1: tarifa 'escritorio' do perfil -> Saida: R$/h.
+    """
+    # Fase 1/Saida: tarifa de escritorio do perfil ativo.
+    return config.TARIFAS_HORA[config.PERFIL_EQUIPE]["escritorio"]
+
+def custo_por_odi(df_odis, uf, tipo_contrato):
+    """Calcula o custo de CAMPO de cada ODI a partir do resumo geometrico.
 
     Por que existe: e' o UNICO lugar onde a formula de custo vive; contrato estavel
-    permite trocar o modelo (F1) sem tocar no resto do pipeline.
+    permite ajustar o modelo so por config.py, sem tocar no resto do pipeline.
+    O termo fixo de escritorio NAO entra aqui (e' por estrato, ver agregar_por_estrato).
 
-    Logica: Entrada (df por ODI) -> Fase 1: distancia de acesso (base->centroide,
-    ida e volta, fator rodoviario) -> Fase 2: horas de deslocamento e de inspecao
-    -> Fase 3: R$ = horas x tarifas -> Saida: df com as colunas de custo.
+    Logica: Entrada (df por ODI, uf, tipo) -> Fase 1: por municipio, mobilizacao
+    (capital -> centroide municipal, ida e volta, uma vez) + saltos entre ODIs,
+    rateados igualmente entre as ODIs do municipio -> Fase 2: km -> horas (desloc)
+    e produtividade do tipo -> horas (inspecao) -> Fase 3: horas x tarifa de campo
+    -> Saida: df com as colunas de custo de campo.
     """
     # Copia para nao mutar a entrada.
     r = df_odis.copy()
-    # Fase 1: base de partida (v0: BASE_PADRAO para todas as ODIs).
-    lat_b, lon_b = config.BASES_REGIONAIS[config.BASE_PADRAO]
-    # Ida e volta ate o centroide, corrigida de linha reta para estrada.
-    r["dist_acesso_km"] = [
-        2 * haversine_km(lat_b, lon_b, la, lo) * config.FATOR_RODOVIARIO
-        for la, lo in zip(r["lat_centro"], r["lon_centro"])
-    ]
-    # Fase 2: tempo = distancia / velocidade; inspecao = n_ucs x horas por UC.
-    r["horas_desloc"] = (r["dist_acesso_km"] + r["dist_interna_km"]) / config.VELOCIDADE_KMH
-    r["horas_inspecao"] = r["n_ucs"] * config.HORAS_POR_UC
-    # Fase 3: custo = tempo x tarifa (tarifas distintas com/sem deslocamento).
-    r["custo_desloc"] = r["horas_desloc"] * config.TARIFA_HORA_DESLOC
-    r["custo_insp"] = r["horas_inspecao"] * config.TARIFA_HORA_INSP
+    # Capital da UF do contrato (G3); KeyError aqui = UF invalida (bug, nao dado).
+    lat_cap, lon_cap = config.CAPITAIS_UF[uf]
+    # Fase 1: distancia de acesso rateada por municipio.
+    acesso = {}
+    # Um grupo por municipio: a equipe mobiliza uma vez por municipio, nao por ODI.
+    for _mun, g in r.groupby("Municipio", sort=False):
+        # Centroide municipal = media dos centroides das ODIs do municipio.
+        lat_m, lon_m = float(g["lat_centro"].mean()), float(g["lon_centro"].mean())
+        # Mobilizacao: capital -> municipio, ida e volta, UMA vez.
+        mob = 2 * haversine_km(lat_cap, lon_cap, lat_m, lon_m)
+        # Saltos: rota gulosa entre os centroides das ODIs do municipio.
+        saltos = _rota_vizinho_mais_proximo(g["lat_centro"].to_numpy(), g["lon_centro"].to_numpy())
+        # Rateio igual entre as ODIs do municipio (so para exibicao por ODI).
+        for odi in g["ODI"]:
+            acesso[odi] = (mob + saltos) / len(g)
+    # Aplica o rateio e a correcao linha reta -> estrada em todas as distancias.
+    r["dist_acesso_km"] = r["ODI"].map(acesso) * config.FATOR_RODOVIARIO
+    r["dist_interna_corrigida_km"] = r["dist_interna_km"] * config.FATOR_RODOVIARIO
+    # Fase 2: km -> horas; inspecao usa a produtividade do tipo de contrato (G5).
+    r["horas_desloc"] = (r["dist_acesso_km"] + r["dist_interna_corrigida_km"]) / config.VELOCIDADE_KMH
+    # Horas por UC derivadas da jornada e da produtividade do tipo (LPT 30, MLA 3).
+    horas_por_uc = config.HORAS_DIA_CAMPO / config.UCS_POR_DIA[tipo_contrato]
+    r["horas_inspecao"] = r["n_ucs"] * horas_por_uc
+    # Fase 3: horas -> R$ pela tarifa de campo (G1/G2 via tarifa_campo()).
+    r["custo_desloc"] = r["horas_desloc"] * tarifa_campo()
+    r["custo_insp"] = r["horas_inspecao"] * tarifa_campo()
     r["custo_total"] = r["custo_desloc"] + r["custo_insp"]
-    # Saida: mesmo df, enriquecido com as colunas de custo.
+    # Saida: mesmo df, enriquecido com as colunas de custo de campo.
     return r
 
 def agregar_por_estrato(df_custos):
-    """Agrega os custos por estrato e acrescenta a linha TOTAL.
+    """Agrega por estrato, acrescenta o custo fixo de OS e a linha TOTAL.
 
-    Por que existe: a tabela-resumo (F5) e o gabarito reportam por estrato; concentrar
-    a agregacao aqui garante que resumo e mapas usem os MESMOS numeros.
+    Por que existe: a formula decifrada tem um termo FIXO por estrato (planejamento/
+    relatorio/apresentacao) que nao pertence a nenhuma ODI; ele entra aqui, garantindo
+    que resumo e mapas usem os mesmos numeros.
 
-    Logica: Entrada (df por ODI com custos) -> Fase 1: groupby Estrato somando ->
-    Fase 2: linha TOTAL -> Saida: df por estrato + TOTAL.
+    Logica: Entrada (df por ODI com custos de campo) -> Fase 1: groupby Estrato
+    somando -> Fase 2: equipe_dias e custo_fixo_os por estrato; total = campo + fixo
+    -> Fase 3: linha TOTAL -> Saida: df por estrato + TOTAL.
     """
-    # Fase 1: soma por estrato das grandezas aditivas.
+    # Fase 1: soma por estrato das grandezas aditivas de campo.
     agg = (df_custos.groupby("Estrato", sort=True)
            .agg(n_odis=("ODI", "count"), n_ucs=("n_ucs", "sum"),
-                dist_acesso_km=("dist_acesso_km", "sum"), dist_interna_km=("dist_interna_km", "sum"),
+                dist_acesso_km=("dist_acesso_km", "sum"),
+                dist_interna_km=("dist_interna_corrigida_km", "sum"),
                 horas_desloc=("horas_desloc", "sum"), horas_inspecao=("horas_inspecao", "sum"),
                 custo_desloc=("custo_desloc", "sum"), custo_insp=("custo_insp", "sum"),
-                custo_total=("custo_total", "sum"))
+                custo_campo=("custo_total", "sum"))
            .reset_index())
-    # Fase 2: linha TOTAL = soma das colunas numericas.
+    # Fase 2: equipe-dias (horas de campo / jornada) e o termo fixo de OS por estrato.
+    agg["equipe_dias"] = (agg["horas_desloc"] + agg["horas_inspecao"]) / config.HORAS_DIA_CAMPO
+    agg["custo_fixo_os"] = config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio()
+    # Total do estrato = campo (soma dos ODIs) + fixo (uma vez).
+    agg["custo_total"] = agg["custo_campo"] + agg["custo_fixo_os"]
+    # Fase 3: linha TOTAL = soma das colunas numericas (fixo somado por estrato).
     total = agg.drop(columns="Estrato").sum()
     total["Estrato"] = "TOTAL"
     # Saida: estratos ordenados + TOTAL ao final.
     return pd.concat([agg, total.to_frame().T], ignore_index=True)
 ```
 
-- [ ] **Step 4: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_custo.py -v` → Expected: `2 passed`.
+- [ ] **Step 4: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_custo.py -v` → Expected: `4 passed`.
 
 - [ ] **Step 5: Commit**
 
@@ -905,21 +1048,27 @@ from src.resumo import gravar_resumo
 from src.io_amostras import EntradaInvalida
 from testes.test_custo import _odis_teste
 
+def _custos():
+    # Custos de campo calculados com a config real (valores nao importam aqui;
+    # o teste confere ESTRUTURA da planilha, nao numeros).
+    return custo_por_odi(_odis_teste(), uf="PA", tipo_contrato="LPT")
+
 def test_gravar_resumo_estrutura(tmp_path):
-    custos = {1: custo_por_odi(_odis_teste()), 2: custo_por_odi(_odis_teste())}
+    custos = {1: _custos(), 2: _custos()}
     destino = tmp_path / "Resumo_Custos.xlsx"
     gravar_resumo(custos, destino)
     xls = pd.ExcelFile(destino)
     # Abas esperadas: Leia-me + (resumo, detalhe) por amostra.
     assert xls.sheet_names == ["Leia-me", "Amostra 1", "Detalhe 1", "Amostra 2", "Detalhe 2"]
-    # A aba de resumo tem a linha TOTAL.
+    # A aba de resumo tem a linha TOTAL e as colunas novas do modelo do gate.
     aba = xls.parse("Amostra 1")
     assert (aba["Estrato"].astype(str) == "TOTAL").any()
+    assert "Equipe-dias" in aba.columns and "Custo fixo OS (R$)" in aba.columns
 
 def test_gravar_resumo_arquivo_aberto(tmp_path):
     # Simula 'planilha aberta no Excel': arquivo destino travado para escrita.
     destino = tmp_path / "Resumo_Custos.xlsx"
-    custos = {1: custo_por_odi(_odis_teste())}
+    custos = {1: _custos()}
     with open(destino, "w") as trava:  # handle aberto impede a regravacao no Windows
         with pytest.raises(EntradaInvalida, match="[Ff]eche"):
             gravar_resumo(custos, destino)
@@ -941,8 +1090,11 @@ from src.io_amostras import EntradaInvalida
 COLUNAS_PT = {
     "Estrato": "Estrato", "n_odis": "Qtd ODIs", "n_ucs": "Qtd UCs",
     "dist_acesso_km": "Dist. acesso (km)", "dist_interna_km": "Dist. interna (km)",
+    "dist_interna_corrigida_km": "Dist. interna (km, estrada)",
     "horas_desloc": "Horas desloc.", "horas_inspecao": "Horas inspecao",
+    "equipe_dias": "Equipe-dias",
     "custo_desloc": "Custo desloc. (R$)", "custo_insp": "Custo inspecao (R$)",
+    "custo_campo": "Custo campo (R$)", "custo_fixo_os": "Custo fixo OS (R$)",
     "custo_total": "Custo total (R$)",
 }
 
@@ -1018,7 +1170,7 @@ def _ucs_teste():
 
 def test_gravar_mapa(tmp_path):
     destino = tmp_path / "Mapa_Amostra_1.html"
-    gravar_mapa(_ucs_teste(), custo_por_odi(_odis_teste()), destino)
+    gravar_mapa(_ucs_teste(), custo_por_odi(_odis_teste(), uf="PA", tipo_contrato="LPT"), destino)
     html = destino.read_text(encoding="utf-8")
     # HTML existe, tem os grupos por estrato e os popups com a ODI.
     assert destino.exists()
@@ -1093,7 +1245,8 @@ git add src testes ; git commit -m "feat: F6 - mapas folium por amostra com cama
 
 **Interfaces:**
 - Consumes: tudo das Tasks 2–7.
-- Produces: `executar(raiz: Path) -> int` (0 = sucesso, 1 = erro de entrada) e bloco `__main__`; saídas em `saida/Resumo_Custos.xlsx` + `saida/Mapa_Amostra_K.html`.
+- Produces: `executar(raiz: Path, contrato: str | None = None) -> int` (0 = sucesso, 1 = erro de entrada) e bloco `__main__`; saídas em `saida/Resumo_Custos.xlsx` + `saida/Mapa_Amostra_K.html`.
+- Resolução de UF/tipo (decisão G3/G5): se `contrato` informado, busca em `config.ARQUIVO_BASE_CONTRATOS` (chave exata; campos `uf` e `tipo_contrato`); contrato não encontrado → `EntradaInvalida` listando 5 chaves parecidas; sem contrato → usa `config.UF_PADRAO`/`config.TIPO_CONTRATO_PADRAO` com AVISO impresso. O `__main__` pergunta o contrato interativamente (Enter = padrão), no estilo do sistema canônico; `executar()` puro não lê stdin (testável).
 
 - [ ] **Step 1: Testes e2e que falham**
 
@@ -1114,7 +1267,9 @@ def _monta_entrada(raiz, odis_painel=ODIS):
 
 def test_e2e_feliz(tmp_path, capsys):
     _monta_entrada(tmp_path)
+    # Sem contrato informado: usa UF_PADRAO/TIPO_CONTRATO_PADRAO com aviso.
     assert executar(tmp_path) == 0
+    assert "AVISO" in capsys.readouterr().out  # aviso de contrato nao informado
     # Saidas existem.
     assert (tmp_path / "saida" / "Resumo_Custos.xlsx").exists()
     assert (tmp_path / "saida" / "Mapa_Amostra_1.html").exists()
@@ -1137,6 +1292,31 @@ def test_e2e_sem_entrada(tmp_path, capsys):
     (tmp_path / "saida").mkdir()
     assert executar(tmp_path) == 1
     assert "Lote.xlsx" in capsys.readouterr().out
+
+def test_e2e_contrato_conhecido(tmp_path, capsys, monkeypatch):
+    # Contrato valido no base_contratos.json: usa a UF e o tipo do contrato.
+    import json
+    from src import config
+    _monta_entrada(tmp_path)
+    # Base de contratos sintetica dentro do tmp_path (teste nao depende de minhas_notas/).
+    base = {"ECM TESTE-2026": {"uf": "PA", "tipo_contrato": "MLA", "vigente": "Andamento"}}
+    (tmp_path / "base_contratos.json").write_text(json.dumps(base), encoding="utf-8")
+    monkeypatch.setattr(config, "ARQUIVO_BASE_CONTRATOS", "base_contratos.json")
+    assert executar(tmp_path, contrato="ECM TESTE-2026") == 0
+    saida = capsys.readouterr().out
+    # Confirma que a resolucao do contrato foi aplicada (UF/tipo impressos).
+    assert "PA" in saida and "MLA" in saida
+
+def test_e2e_contrato_desconhecido(tmp_path, capsys, monkeypatch):
+    # Contrato inexistente: erro de entrada listando chaves parecidas.
+    import json
+    from src import config
+    _monta_entrada(tmp_path)
+    base = {"ECM TESTE-2026": {"uf": "PA", "tipo_contrato": "LPT", "vigente": "Andamento"}}
+    (tmp_path / "base_contratos.json").write_text(json.dumps(base), encoding="utf-8")
+    monkeypatch.setattr(config, "ARQUIVO_BASE_CONTRATOS", "base_contratos.json")
+    assert executar(tmp_path, contrato="ECM INEXISTENTE") == 1
+    assert "ECM TESTE-2026" in capsys.readouterr().out  # sugestao de chave parecida
 ```
 
 - [ ] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.estimar_custos`.
@@ -1163,33 +1343,66 @@ from src.distancias import resumo_por_odi                                      #
 from src.custo import custo_por_odi                                            # noqa: E402
 from src.resumo import gravar_resumo                                           # noqa: E402
 from src.mapas import gravar_mapa                                              # noqa: E402
+from src import config                                                          # noqa: E402
 
-def executar(raiz):
+def _resolver_contrato(raiz, contrato):
+    """Resolve (uf, tipo_contrato) a partir do contrato informado (decisoes G3/G5).
+
+    Por que existe: a base de partida (capital da UF) e a produtividade (LPT/MLA)
+    dependem do contrato; concentrar a resolucao aqui deixa executar() testavel.
+
+    Logica: Entrada (raiz, contrato ou None) -> Fase 1: sem contrato, usa padroes de
+    config com AVISO -> Fase 2: carrega base de contratos e busca a chave exata ->
+    Fase 3: chave ausente = erro com sugestoes parecidas -> Saida: (uf, tipo).
+    """
+    # Fase 1: sem contrato informado, usa os padroes de config e avisa.
+    if not contrato:
+        print(f"AVISO: contrato nao informado; usando UF={config.UF_PADRAO}, tipo={config.TIPO_CONTRATO_PADRAO}.")
+        return config.UF_PADRAO, config.TIPO_CONTRATO_PADRAO
+    # Fase 2: carrega a base de contratos (caminho relativo a raiz, vindo de config).
+    caminho = Path(raiz) / config.ARQUIVO_BASE_CONTRATOS
+    # Base ausente e' erro de entrada: o usuario pediu resolucao por contrato.
+    if not caminho.exists():
+        raise EntradaInvalida(f"Base de contratos nao encontrada: {caminho}")
+    import json
+    base = json.loads(caminho.read_text(encoding="utf-8"))
+    # Fase 3: chave exata; se ausente, sugere as 5 chaves mais parecidas.
+    if contrato not in base:
+        parecidas = [c for c in base if contrato.split()[0] in c][:5] or list(base)[:5]
+        raise EntradaInvalida(f"Contrato '{contrato}' nao encontrado na base.\nParecidos: {parecidas}")
+    dados = base[contrato]
+    # Saida: UF e tipo do contrato encontrado (impressos para conferencia do usuario).
+    print(f"Contrato {contrato}: UF={dados['uf']}, tipo={dados['tipo_contrato']}, vigente={dados.get('vigente', '?')}")
+    return dados["uf"], dados["tipo_contrato"]
+
+def executar(raiz, contrato=None):
     """Roda o pipeline completo a partir da raiz do projeto.
 
     Por que existe: separa a ORQUESTRACAO (esta funcao, testavel com tmp_path) do
-    ponto de entrada __main__ (que fixa a raiz real e o codigo de saida do processo).
+    ponto de entrada __main__ (que pergunta o contrato e fixa o codigo de saida).
 
-    Logica: Entrada (raiz) -> Fase 1: localizar e ler entradas -> Fase 2: juntar por
-    ODI -> Fase 3: geometria e custo por amostra -> Fase 4: gravar resumo e mapas ->
-    Saida: 0 (sucesso) ou 1 (erro de entrada, mensagem impressa).
+    Logica: Entrada (raiz, contrato) -> Fase 1: resolver UF/tipo -> Fase 2: localizar
+    e ler entradas -> Fase 3: juntar por ODI -> Fase 4: geometria e custo por amostra
+    -> Fase 5: gravar resumo e mapas -> Saida: 0 (sucesso) ou 1 (erro de entrada).
     """
     raiz = Path(raiz)
     try:
-        # Fase 1: localizar os dois arquivos e le-los.
+        # Fase 1: resolve a UF (base de partida) e o tipo (produtividade) do contrato.
+        uf, tipo = _resolver_contrato(raiz, contrato)
+        # Fase 2: localizar os dois arquivos e le-los.
         lote, painel = achar_entradas(raiz / "Entrada")
         print(f"Lendo amostras : {lote.name}")
         amostras = ler_amostras(lote)
         print(f"Lendo painel   : {painel.name}")
         ucs = ler_painel(painel)
-        # Fase 2: juncao validada por ODI (orfaos/tranche errada abortam aqui).
+        # Fase 3: juncao validada por ODI (orfaos/tranche errada abortam aqui).
         juntas = juntar_amostras_painel(amostras, ucs)
-        # Fase 3: por amostra, reduz a ODI, calcula custo e acumula para gravacao.
+        # Fase 4: por amostra, reduz a ODI, calcula custo e acumula para gravacao.
         custos = {}
         for k, df_ucs in juntas.items():
             print(f"Amostra {k}: {df_ucs['ODI'].nunique()} ODIs / {len(df_ucs)} UCs")
-            custos[k] = custo_por_odi(resumo_por_odi(df_ucs))
-        # Fase 4: grava a tabela-resumo e um mapa por amostra.
+            custos[k] = custo_por_odi(resumo_por_odi(df_ucs), uf=uf, tipo_contrato=tipo)
+        # Fase 5: grava a tabela-resumo e um mapa por amostra.
         (raiz / "saida").mkdir(exist_ok=True)
         gravar_resumo(custos, raiz / "saida" / "Resumo_Custos.xlsx")
         for k, df_ucs in juntas.items():
@@ -1204,7 +1417,9 @@ def executar(raiz):
 
 # Ponto de entrada: raiz = pasta acima de src/ (o .bat roda de qualquer diretorio).
 if __name__ == "__main__":
-    sys.exit(executar(Path(__file__).resolve().parent.parent))
+    # Pergunta interativa no estilo do sistema canonico (Enter = padroes de config).
+    resposta = input(f"Contrato (ex.: ECM 013-A-2023; Enter = {config.UF_PADRAO}/{config.TIPO_CONTRATO_PADRAO}): ").strip()
+    sys.exit(executar(Path(__file__).resolve().parent.parent, contrato=resposta or None))
 ```
 
 - [ ] **Step 4: Rodar TODA a suite** — Run: `.venv\Scripts\python.exe -m pytest testes -v` → Expected: todos passam.
