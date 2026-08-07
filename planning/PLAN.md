@@ -23,14 +23,19 @@ Sugestão de biblioteca para cálculos de geolocalização -> GeoPandas
 > Design aprovado: `planning/DESIGN.md` · Plano executável passo a passo: `planning/PLANO_IMPLEMENTACAO.md`
 > Companions visuais: `planning/html/DESIGN.html` · `planning/html/PLANO_IMPLEMENTACAO.html`
 
-[ ] F0 — Infraestrutura: `src/`, venv uv 3.12, requirements, ritual `.bat`, git, `definition of done.md`
-[ ] F1 — Estudo das referências → `MODELO_CUSTO.md` + companion HTML → **GATE: aprovação humana do modelo**
-[ ] F2 — `io_amostras`: localizar `Entrada/Lote.xlsx` + `*Painel de Monitoramento*`, ler amostras/UCs, juntar por ODI com validações
-[ ] F3 — `distancias`: haversine, centroide por ODI, rota interna (vizinho mais próximo)
-[ ] F4 — `custo.py`: fórmula aprovada na F1, parâmetros só em `config.py`
-[ ] F5 — `resumo.py`: `saida/Resumo_Custos.xlsx` (agregado por estrato + detalhe por ODI, por amostra)
-[ ] F6 — `mapas.py`: `saida/Mapa_Amostra_K.html` (folium, camadas por estrato, popup com custo)
+x F0 — Infraestrutura: `src/`, venv uv 3.12, requirements, ritual `.bat`, git, `definition of done.md` — commit `cc15119`
+x F1 — Estudo das referências → `MODELO_CUSTO.md` + companion HTML → **GATE: aprovação humana do modelo** — aprovado 2026-08-06, commits `26aa7f6`/`224719d`/`c2533de`
+x F2 — `io_amostras`: localizar `Entrada/Lote.xlsx` + `*Painel de Monitoramento*`, ler amostras/UCs, juntar por ODI com validações — commits `0e3ec0c`/`e944905`/`a9f8ec8`
+x F3 — `distancias`: haversine, centroide por ODI, rota interna (vizinho mais próximo) — commit `2e02acd`
+x F4 — `custo.py`: fórmula aprovada na F1, parâmetros só em `config.py` — commit `bb50c25`
+x F5 — `resumo.py`: `saida/Resumo_Custos.xlsx` (agregado por estrato + detalhe por ODI, por amostra) — commit `3ec9bdf`
+x F6 — `mapas.py`: `saida/Mapa_Amostra_K.html` (folium, camadas por estrato, popup com custo) — commit `eb627ad`
 [ ] F7 — Orquestrador + e2e (feliz e bordas) + `TESTES.md` + status report HTML
+
+> **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
+> reboot do SO antes de marcar o progresso; os `x` acima foram preenchidos retroativamente
+> conferindo código + git log. Estado verificado: **26 testes passando**, `src/estimar_custos.py`
+> ainda não existe (por isso `executar.bat` falha até a F7 fechar).
 
 ## Decisões e pendências
 

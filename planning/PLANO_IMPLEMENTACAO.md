@@ -4,6 +4,12 @@
 
 **Goal:** Estimar o custo de inspeção de cada amostra do SistemaAmostralPython, gerando tabela-resumo `.xlsx` e mapas folium `.html`, executável por duplo-clique em `.bat`.
 
+> **Progresso (2026-08-07):** Tasks 0–7 (F0–F6) concluídas e commitadas — 26 testes passando.
+> Task 8 (F7) em execução. Os checkboxes das Tasks 0–7 foram preenchidos retroativamente
+> conferindo o código contra o git log (a sessão anterior foi interrompida por reboot do SO
+> antes de marcar). **Onde o código difere do bloco escrito no plano, o código commitado vence** —
+> as diferenças conhecidas estão listadas em "Divergências plano × código" no fim deste documento.
+
 **Architecture:** Pipeline achatado no padrão do sistema canônico: módulos em `src/`, um único executável `src/estimar_custos.py`, entradas em `Entrada/`, saídas em `saida/`. O motor de custo (`custo.py`) tem contrato fixo e fórmula parametrizada em `config.py` — o modelo v0 deste plano será calibrado/ajustado na F1 com gate de aprovação humana.
 
 **Tech Stack:** Python 3.12 (uv/Astral), pandas, numpy, openpyxl, folium, pytest.
@@ -34,7 +40,7 @@
 **Interfaces:**
 - Produces: estrutura de pastas, venv 3.12 funcional, `pytest` rodando, ritual `.bat` idêntico ao canônico.
 
-- [ ] **Step 1: Inicializar git e criar .gitignore**
+- [x] **Step 1: Inicializar git e criar .gitignore**
 
 ```powershell
 git init
@@ -53,7 +59,7 @@ Entrada/*
 
 (`Entrada/` e `saida/` ficam fora do git: conterão dados reais da distribuidora.)
 
-- [ ] **Step 2: Criar estrutura e arquivos de ambiente**
+- [x] **Step 2: Criar estrutura e arquivos de ambiente**
 
 ```powershell
 New-Item -ItemType Directory -Force src, testes, Entrada, saida, planning\html
@@ -62,14 +68,14 @@ Set-Content -Encoding utf8 .python-version "3.12"
 Set-Content -Encoding utf8 requirements.txt "pandas`nnumpy`nopenpyxl`nfolium`npytest"
 ```
 
-- [ ] **Step 3: Criar venv e instalar dependências**
+- [x] **Step 3: Criar venv e instalar dependências**
 
 ```powershell
 uv venv --python 3.12
 uv pip install -r requirements.txt
 ```
 
-- [ ] **Step 4: Teste smoke**
+- [x] **Step 4: Teste smoke**
 
 `testes/test_smoke.py`:
 ```python
@@ -82,7 +88,7 @@ def test_imports():
 
 Run: `.venv\Scripts\python.exe -m pytest testes -v` → Expected: `1 passed`.
 
-- [ ] **Step 5: Criar o ritual de execução (copiado do padrão canônico)**
+- [x] **Step 5: Criar o ritual de execução (copiado do padrão canônico)**
 
 `instalar.ps1`:
 ```powershell
@@ -114,7 +120,7 @@ powershell -ExecutionPolicy Bypass -File "%~dp0_exec.ps1"
 pause
 ```
 
-- [ ] **Step 6: `planning/definition of done.md` inicial**
+- [x] **Step 6: `planning/definition of done.md` inicial**
 
 ```markdown
 # Definition of Done — por fase
@@ -133,7 +139,7 @@ pause
 [ ] F7 — e2e feliz + bordas passam; TESTES.md escrito; status report HTML gerado.
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```powershell
 git add -A ; git commit -m "chore: F0 - infraestrutura (uv 3.12, pytest, ritual .bat, definition of done)"
@@ -150,14 +156,14 @@ git add -A ; git commit -m "chore: F0 - infraestrutura (uv 3.12, pytest, ritual 
 - Consumes: `minhas_notas/CalculoDistancias.xlsx` (abas `CALCULO_VR`, `Grupo`, `Planilha1/6`), `minhas_notas/Formulário de Ordem de Serviço...xlsx` (abas `Custos Inspeções`, `Composição Equipes Inspeção`, `IMR`), gabarito `20260224_Tabela_Resumo_Estratos_Amostra.xlsx`.
 - Produces: fórmula de custo aprovada + valores calibrados dos parâmetros de `config.py` (Task 4 consome).
 
-- [ ] **Step 1: Extrair das referências os ingredientes do custo**
+- [x] **Step 1: Extrair das referências os ingredientes do custo**
 
 Ler com pandas (via `uv run --no-project --with pandas --with openpyxl`) e documentar:
 tarifas R$/hora por perfil (com/sem deslocamento) da aba `Custos Inspeções`; composição
 de equipe típica; como `CalculoDistancias.xlsx` transforma distância em custo (aba
 `CALCULO_VR` e `Grupo`); que grandezas o gabarito de resumo reporta por estrato.
 
-- [ ] **Step 2: Escrever `planning/MODELO_CUSTO.md`** com: (a) o que as referências fazem;
+- [x] **Step 2: Escrever `planning/MODELO_CUSTO.md`** com: (a) o que as referências fazem;
 (b) o modelo v0 proposto abaixo, com cada parâmetro, valor sugerido e fonte;
 (c) alternativas descartadas e por quê; (d) o que fica para v1 (ex.: diárias, pernoite);
 (e) **a memória de cálculo**: um texto curto, em linguagem simples para humanos, explicando
@@ -175,16 +181,16 @@ por ODI sorteado:
 por estrato: soma dos ODIs · por amostra: soma dos estratos
 ```
 
-- [ ] **Step 3: Companion HTML** `planning/html/MODELO_CUSTO.html` (estilo explicador de
+- [x] **Step 3: Companion HTML** `planning/html/MODELO_CUSTO.html` (estilo explicador de
 pesquisa, como `14-research-feature-explainer.html`): a fórmula em diagrama, tabela de
 parâmetros com fontes, perguntas abertas para o humano decidir.
 
-- [ ] **Step 4: GATE — apresentar ao humano e registrar a decisão**
+- [x] **Step 4: GATE — apresentar ao humano e registrar a decisão**
 
 Parar e pedir aprovação. Registrar no `PLAN.md` (seção Decisões) o modelo aprovado e
 ajustes pedidos. **Não iniciar a Task 4 sem este registro.**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add planning ; git commit -m "docs: F1 - modelo de custo proposto (MODELO_CUSTO.md + html)"
@@ -200,7 +206,7 @@ git add planning ; git commit -m "docs: F1 - modelo de custo proposto (MODELO_CU
 **Interfaces:**
 - Produces: `EntradaInvalida(Exception)`; `achar_entradas(pasta: Path) -> tuple[Path, Path]` (caminho do Lote, caminho do Painel).
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 `testes/test_io_amostras.py`:
 ```python
@@ -240,11 +246,11 @@ def test_erro_dois_paineis(tmp_path):
         achar_entradas(tmp_path)
 ```
 
-- [ ] **Step 2: Rodar e ver falhar**
+- [x] **Step 2: Rodar e ver falhar**
 
 Run: `.venv\Scripts\python.exe -m pytest testes/test_io_amostras.py -v` → Expected: FAIL (`ModuleNotFoundError` / `ImportError`).
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `src/io_amostras.py`:
 ```python
@@ -288,11 +294,11 @@ def achar_entradas(pasta):
     return lote, paineis[0]
 ```
 
-- [ ] **Step 4: Rodar e ver passar**
+- [x] **Step 4: Rodar e ver passar**
 
 Run: `.venv\Scripts\python.exe -m pytest testes/test_io_amostras.py -v` → Expected: `4 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src testes ; git commit -m "feat: F2 - achar_entradas com validacao de nomes (io_amostras)"
@@ -323,7 +329,7 @@ git add src testes ; git commit -m "feat: F2 - achar_entradas com validacao de n
 > Testes da Task 3 devem cobrir os dois ramos: órfão `Cons>0` aborta; órfão `Cons==0`
 > vira 1 linha no df com o centroide municipal e conta como `n_ucs = 1` a inspecionar.
 
-- [ ] **Step 1: Fixture sintética compartilhada**
+- [x] **Step 1: Fixture sintética compartilhada**
 
 `testes/fixtures.py`:
 ```python
@@ -365,7 +371,7 @@ def escrever_painel(caminho, odis=ODIS, ucs_por_odi=2):
         pd.DataFrame(linhas).to_excel(xls, sheet_name="Base_UC", index=False)
 ```
 
-- [ ] **Step 2: Testes que falham** (acrescentar a `testes/test_io_amostras.py`)
+- [x] **Step 2: Testes que falham** (acrescentar a `testes/test_io_amostras.py`)
 
 ```python
 import pandas as pd
@@ -418,9 +424,9 @@ def test_juntar_erro_intersecao_zero(tmp_path):
         juntar_amostras_painel(amostras, ucs)
 ```
 
-- [ ] **Step 3: Rodar e ver falhar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_io_amostras.py -v` → Expected: FAIL (`ImportError: ler_amostras`).
+- [x] **Step 3: Rodar e ver falhar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_io_amostras.py -v` → Expected: FAIL (`ImportError: ler_amostras`).
 
-- [ ] **Step 4: Implementar** (acrescentar a `src/io_amostras.py`)
+- [x] **Step 4: Implementar** (acrescentar a `src/io_amostras.py`)
 
 ```python
 import re
@@ -539,9 +545,9 @@ def juntar_amostras_painel(amostras, ucs):
     return juntas
 ```
 
-- [ ] **Step 5: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes -v` → Expected: todos passam.
+- [x] **Step 5: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes -v` → Expected: todos passam.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src testes ; git commit -m "feat: F2 - leitura de amostras/painel e juncao por ODI com validacoes"
@@ -560,7 +566,7 @@ git add src testes ; git commit -m "feat: F2 - leitura de amostras/painel e junc
   - `haversine_km(lat1, lon1, lat2, lon2) -> float | np.ndarray` — distância geodésica em km (vetorizável).
   - `resumo_por_odi(df_ucs: pd.DataFrame) -> pd.DataFrame` — uma linha por ODI: `ODI`, `Estrato`, `Municipio`, `n_ucs`, `lat_centro`, `lon_centro`, `dist_interna_km` (rota vizinho-mais-próximo pelas UCs, determinística).
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 `testes/test_distancias.py`:
 ```python
@@ -599,9 +605,9 @@ def test_resumo_odi_uma_uc_dist_zero():
     assert resumo_por_odi(df).loc[0, "dist_interna_km"] == 0.0
 ```
 
-- [ ] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.distancias`.
+- [x] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.distancias`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `src/distancias.py`:
 ```python
@@ -686,9 +692,9 @@ def resumo_por_odi(df_ucs):
     return pd.DataFrame(linhas)
 ```
 
-- [ ] **Step 4: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_distancias.py -v` → Expected: `4 passed`.
+- [x] **Step 4: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_distancias.py -v` → Expected: `4 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src testes ; git commit -m "feat: F3 - haversine, centroides e rota interna por ODI (distancias)"
@@ -716,7 +722,7 @@ git add src testes ; git commit -m "feat: F3 - haversine, centroides e rota inte
   - `custo_por_odi(df_odis: pd.DataFrame, uf: str, tipo_contrato: str) -> pd.DataFrame` — acrescenta `dist_acesso_km` (rateio municipal: mobilização + saltos), `dist_interna_corrigida_km`, `horas_desloc`, `horas_inspecao`, `custo_desloc`, `custo_insp`, `custo_total` (só campo; o fixo entra por estrato).
   - `agregar_por_estrato(df_custos: pd.DataFrame) -> pd.DataFrame` — uma linha por estrato somando ODIs + `equipe_dias` + `custo_fixo_os` (uma vez por estrato) + linha `TOTAL`.
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 `testes/test_custo.py`:
 ```python
@@ -797,9 +803,9 @@ def test_tarifa_campo_inclui_diaria(monkeypatch):
     assert tarifa_campo() == pytest.approx(110.0)
 ```
 
-- [ ] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.config`.
+- [x] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.config`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `src/config.py`:
 ```python
@@ -1016,9 +1022,9 @@ def agregar_por_estrato(df_custos):
     return pd.concat([agg, total.to_frame().T], ignore_index=True)
 ```
 
-- [ ] **Step 4: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_custo.py -v` → Expected: `4 passed`.
+- [x] **Step 4: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_custo.py -v` → Expected: `4 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src testes ; git commit -m "feat: F4 - motor de custo parametrizado por config.py"
@@ -1035,7 +1041,7 @@ git add src testes ; git commit -m "feat: F4 - motor de custo parametrizado por 
 - Consumes: `agregar_por_estrato` (Task 5), `EntradaInvalida` (Task 2).
 - Produces: `gravar_resumo(custos_por_amostra: dict[int, pd.DataFrame], caminho: Path) -> None` — grava `saida/Resumo_Custos.xlsx` com aba `Leia-me`, uma aba `Amostra K` (agregado por estrato) e uma `Detalhe K` (por ODI) por amostra.
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 `testes/test_resumo.py`:
 ```python
@@ -1074,9 +1080,9 @@ def test_gravar_resumo_arquivo_aberto(tmp_path):
             gravar_resumo(custos, destino)
 ```
 
-- [ ] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.resumo`.
+- [x] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.resumo`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `src/resumo.py`:
 ```python
@@ -1129,9 +1135,9 @@ def gravar_resumo(custos_por_amostra, caminho):
         raise EntradaInvalida(f"Nao consegui gravar {caminho}.\nFeche o arquivo no Excel e rode de novo.")
 ```
 
-- [ ] **Step 4: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_resumo.py -v` → Expected: `2 passed`.
+- [x] **Step 4: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_resumo.py -v` → Expected: `2 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src testes ; git commit -m "feat: F5 - tabela-resumo de custos em Excel"
@@ -1148,7 +1154,7 @@ git add src testes ; git commit -m "feat: F5 - tabela-resumo de custos em Excel"
 - Consumes: df de UCs por amostra (Task 3) + custos por ODI (Task 5).
 - Produces: `gravar_mapa(df_ucs: pd.DataFrame, custos: pd.DataFrame, caminho: Path) -> None` — grava um `.html` folium: `CircleMarker` por UC, cor por estrato, popup ODI/município/custo, `FeatureGroup` por estrato + `LayerControl`.
 
-- [ ] **Step 1: Testes que falham**
+- [x] **Step 1: Testes que falham**
 
 `testes/test_mapas.py`:
 ```python
@@ -1178,9 +1184,9 @@ def test_gravar_mapa(tmp_path):
     assert "ODI A" in html
 ```
 
-- [ ] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.mapas`.
+- [x] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.mapas`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `src/mapas.py`:
 ```python
@@ -1228,9 +1234,9 @@ def gravar_mapa(df_ucs, custos, caminho):
     mapa.save(str(caminho))
 ```
 
-- [ ] **Step 4: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_mapas.py -v` → Expected: `1 passed`.
+- [x] **Step 4: Rodar e ver passar** — Run: `.venv\Scripts\python.exe -m pytest testes/test_mapas.py -v` → Expected: `1 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add src testes ; git commit -m "feat: F6 - mapas folium por amostra com camadas por estrato"
@@ -1453,3 +1459,25 @@ git add -A ; git commit -m "feat: F7 - orquestrador, e2e, TESTES.md e status rep
 - **Cobertura do spec:** D1→Task 1 (gate); D2/D7→Tasks 2–3; D3→Task 7; D4→Tasks 1/8 (companions); D5→estrutura src/ em todas; D6→fixtures sintéticas (Tasks 3/8); D8→ADVERSARIAL_REVIEW fora deste plano (pós-PLAN.md, decisão do humano). Erros do DESIGN §7 → Tasks 2 (ausente/ambígua), 3 (órfão/interseção/bbox), 6 (arquivo aberto). Testes do DESIGN §8 → Tasks 2–8.
 - **Placeholders:** nenhum "TBD"; a única dependência aberta (fórmula final) tem v0 concreto + gate explícito na Task 1/5.
 - **Consistência de tipos:** `dict[int, DataFrame]` flui de `ler_amostras` → `juntar_amostras_painel` → `resumo_por_odi` (por amostra) → `custo_por_odi` → `gravar_resumo`/`gravar_mapa`; nomes de colunas conferidos entre Tasks 3–7 (`ODI/Estrato/Municipio/UC/LATITUDE/LONGITUDE` → `n_ucs/lat_centro/lon_centro/dist_interna_km` → colunas de custo).
+
+---
+
+## Divergências plano × código (registradas em 2026-08-07)
+
+Os blocos de código deste plano são o *plano*; o que está commitado é a *verdade*. As
+diferenças abaixo são refinamentos deliberados feitos durante a execução das Tasks 3 e 5,
+não desvios acidentais — todas cobertas por teste.
+
+| Onde | Plano dizia | Código commitado | Por quê |
+| --- | --- | --- | --- |
+| T3 `ler_amostras` | projeta `ODI/Estrato/Municipio` | projeta também **`Cons`** (0 quando a coluna falta) | a regra do órfão precisa de `Cons` para escolher entre erro e fallback |
+| T3 `_norm` | minúsculas + sem acento | também **remove ponto final** | o cabeçalho real é `Cons.`, não `Cons` |
+| T3 `ler_painel` | projeta `ODI/UC/lat/long` | projeta também **`Municipio`** | o fallback do órfão `Cons==0` precisa do centroide municipal |
+| T3 `juntar_amostras_painel` | aborta na primeira lista de órfãos | classifica em 3 baldes, **coleta todos os inválidos antes de abortar** e só aplica os fallbacks depois de a amostra inteira passar | não imprimir aviso de progresso que seria abortado depois (commit `a9f8ec8`) |
+| T3 `fixtures.escrever_lote` | `(caminho, abas, odis)` | `(caminho, abas, odis, municipios, cons)` | testar os dois ramos da regra do órfão |
+| T3 `fixtures.escrever_painel` | `(caminho, odis, ucs_por_odi)` | `(caminho, odis, ucs_por_odi, municipio)` | idem |
+| T5 `agregar_por_estrato` | — | soma `dist_interna_corrigida_km` para dentro da coluna `dist_interna_km` do agregado | por ODI a coluna é linha reta; por estrato já é km de estrada. **Mesmo nome, escala diferente** |
+
+Pendências que NÃO são código e continuam abertas (ver `definition of done.md`):
+validação com `Lote.xlsx`/Painel **reais** na `Entrada/` (F2), conferência visual do
+`Resumo_Custos.xlsx` contra o gabarito (F5) e dos mapas no browser (F6) pelo humano.
