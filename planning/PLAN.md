@@ -30,12 +30,16 @@ x F3 — `distancias`: haversine, centroide por ODI, rota interna (vizinho mais 
 x F4 — `custo.py`: fórmula aprovada na F1, parâmetros só em `config.py` — commit `bb50c25`
 x F5 — `resumo.py`: `saida/Resumo_Custos.xlsx` (agregado por estrato + detalhe por ODI, por amostra) — commit `3ec9bdf`
 x F6 — `mapas.py`: `saida/Mapa_Amostra_K.html` (folium, camadas por estrato, popup com custo) — commit `eb627ad`
-[ ] F7 — Orquestrador + e2e (feliz e bordas) + `TESTES.md` + status report HTML
+x F7 — Orquestrador + e2e (feliz e bordas) + `TESTES.md` + status report HTML — 2026-08-07
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
-> reboot do SO antes de marcar o progresso; os `x` acima foram preenchidos retroativamente
-> conferindo código + git log. Estado verificado: **26 testes passando**, `src/estimar_custos.py`
-> ainda não existe (por isso `executar.bat` falha até a F7 fechar).
+> reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
+> conferindo código + git log. A F7 foi executada em seguida na mesma sessão.
+> **Estado verificado: 38 testes passando; `executar.bat` roda ponta a ponta.**
+>
+> **Todas as macrofases estão fechadas do lado do código. O que falta é humano:**
+> nenhum `Lote.xlsx`/Painel **real** passou pelo programa até hoje (`Entrada/` está vazia) —
+> ver `definition of done.md` e `planning/html/STATUS_F7.html`.
 
 ## Decisões e pendências
 

@@ -1254,7 +1254,7 @@ git add src testes ; git commit -m "feat: F6 - mapas folium por amostra com cama
 - Produces: `executar(raiz: Path, contrato: str | None = None) -> int` (0 = sucesso, 1 = erro de entrada) e bloco `__main__`; saídas em `saida/Resumo_Custos.xlsx` + `saida/Mapa_Amostra_K.html`.
 - Resolução de UF/tipo (decisão G3/G5): se `contrato` informado, busca em `config.ARQUIVO_BASE_CONTRATOS` (chave exata; campos `uf` e `tipo_contrato`); contrato não encontrado → `EntradaInvalida` listando 5 chaves parecidas; sem contrato → usa `config.UF_PADRAO`/`config.TIPO_CONTRATO_PADRAO` com AVISO impresso. O `__main__` pergunta o contrato interativamente (Enter = padrão), no estilo do sistema canônico; `executar()` puro não lê stdin (testável).
 
-- [ ] **Step 1: Testes e2e que falham**
+- [x] **Step 1: Testes e2e que falham**
 
 `testes/test_e2e.py`:
 ```python
@@ -1325,9 +1325,9 @@ def test_e2e_contrato_desconhecido(tmp_path, capsys, monkeypatch):
     assert "ECM TESTE-2026" in capsys.readouterr().out  # sugestao de chave parecida
 ```
 
-- [ ] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.estimar_custos`.
+- [x] **Step 2: Rodar e ver falhar** — Expected: `ModuleNotFoundError: src.estimar_custos`.
 
-- [ ] **Step 3: Implementar**
+- [x] **Step 3: Implementar**
 
 `src/estimar_custos.py`:
 ```python
@@ -1428,25 +1428,25 @@ if __name__ == "__main__":
     sys.exit(executar(Path(__file__).resolve().parent.parent, contrato=resposta or None))
 ```
 
-- [ ] **Step 4: Rodar TODA a suite** — Run: `.venv\Scripts\python.exe -m pytest testes -v` → Expected: todos passam.
+- [x] **Step 4: Rodar TODA a suite** — Run: `.venv\Scripts\python.exe -m pytest testes -v` → Expected: todos passam.
 
-- [ ] **Step 5: Validar o ritual de duplo-clique**
+- [x] **Step 5: Validar o ritual de duplo-clique**
 
 Rodar `executar.bat` sem `Entrada/Lote.xlsx` real → deve terminar com a mensagem
 "Lote.xlsx nao encontrado... Coloque o arquivo..." (não traceback). Este é o critério
 da F0/F7 no `definition of done.md`.
 
-- [ ] **Step 6: Escrever `planning/TESTES.md`**
+- [x] **Step 6: Escrever `planning/TESTES.md`**
 
 Mapa de testes por fase: o que cada arquivo de teste cobre, como rodar a suite inteira,
 como rodar um teste só (`-k nome`), e o roteiro de teste manual com arquivos reais
 (colocar Lote.xlsx + Painel na Entrada/, duplo-clique, conferir saida/).
 
-- [ ] **Step 7: Status report HTML** — `planning/html/STATUS_F7.html` (estilo
+- [x] **Step 7: Status report HTML** — `planning/html/STATUS_F7.html` (estilo
 `11-status-report.html`): o que foi construído, resultado da suite, como testar com
 dados reais, pendências para v1.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```powershell
 git add -A ; git commit -m "feat: F7 - orquestrador, e2e, TESTES.md e status report"

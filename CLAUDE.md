@@ -33,13 +33,21 @@ entre amostras, coordenadas e custos; uma ODI tem N UCs (unidades consumidoras).
 
 ## Estado atual (2026-08-07)
 
-Fases F0–F6 implementadas e commitadas; **26 testes passando**. Falta a **F7**:
-`src/estimar_custos.py` (orquestrador) + `testes/test_e2e.py` + `planning/TESTES.md`.
+**Fases F0–F7 completas e commitadas; 38 testes passando.** O pipeline roda ponta a ponta:
+`executar.bat` → `_exec.ps1` → `src/estimar_custos.py` → `saida/`.
 
-Consequência prática: `_exec.ps1` já aponta para `src\estimar_custos.py`, que ainda **não
-existe** — `executar.bat` falha até a F7 ser concluída. A interface esperada do orquestrador
-(`executar(raiz, contrato=None) -> int`, resolução de UF/tipo pelo contrato, `__main__`
-interativo) está especificada em `planning/PLANO_IMPLEMENTACAO.md` Task 8.
+O orquestrador expõe `executar(raiz, contrato=None) -> int` (0 sucesso / 1 erro de entrada),
+puro e sem stdin — o `__main__` é quem pergunta o contrato. Todo `EntradaInvalida` é
+convertido ali, e só ali, em mensagem + exit 1.
+
+**O que falta é conferência humana, não código:** nenhum `Lote.xlsx`/Painel real passou pelo
+programa até hoje (`Entrada/` está vazia). Roteiro em `planning/TESTES.md`; pendências em
+`planning/definition of done.md` e `planning/html/STATUS_F7.html`.
+
+Armadilha de leitura da saída: **somar a coluna de custo da aba `Detalhe K` não dá o custo da
+amostra** — o detalhe é só campo; o fixo de escritório entra por estrato. O número válido é a
+linha `TOTAL` da aba `Amostra K`. O plano original tinha uma asserção e2e errada nisso (erro de
+R$ 38.880); o teste corrigido está em `test_e2e_total_bate_com_detalhe_mais_fixo`.
 
 **Não são código do produto** (não trate como fontes a manter):
 `ecc_dashboard.py` (GUI de outro contexto, import quebrado) · `claude resume.txt` (vazio) ·

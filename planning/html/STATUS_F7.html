@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STATUS F7 — Estimador de custos de inspeção</title>
+<style>
+  :root{
+    --bg:#f7f6f3; --card:#ffffff; --ink:#1e2430; --muted:#6b7280;
+    --accent:#0f6b5c; --accent-soft:#e3f2ee; --warn:#9a5b13; --warn-soft:#fdf1e0;
+    --line:#e3e1db; --code:#f1efe9; --ok:#127a4b; --ok-soft:#e5f4ec;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:"Segoe UI",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.55;padding:2rem 1rem 4rem}
+  .wrap{max-width:960px;margin:0 auto}
+  header{margin-bottom:2rem}
+  .kicker{font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-size:1.9rem;line-height:1.2;margin:.3rem 0 .5rem}
+  .sub{color:var(--muted);max-width:62ch}
+  h2{font-size:1.15rem;margin:2.2rem 0 .8rem;padding-bottom:.35rem;border-bottom:2px solid var(--line)}
+  h3{font-size:.98rem;margin:1.3rem 0 .5rem}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:1.1rem 1.3rem;margin:.8rem 0}
+  table{width:100%;border-collapse:collapse;font-size:.9rem;background:var(--card)}
+  th,td{text-align:left;padding:.55rem .7rem;border:1px solid var(--line);vertical-align:top}
+  th{background:var(--code);font-size:.8rem;text-transform:uppercase;letter-spacing:.05em}
+  .tablebox{overflow-x:auto;border-radius:10px;border:1px solid var(--line)}
+  .tablebox table{border:none}
+  code,pre{font-family:Consolas,"Cascadia Mono",monospace;font-size:.85rem}
+  code{background:var(--code);padding:.1rem .35rem;border-radius:4px}
+  pre{background:#20262e;color:#dfe6ee;padding:1rem 1.2rem;border-radius:10px;overflow-x:auto;line-height:1.5}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.8rem}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.9rem 1rem}
+  .stat b{display:block;font-size:1.7rem;line-height:1.1;color:var(--accent)}
+  .stat small{color:var(--muted);font-size:.8rem}
+  .fact{border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:0 8px 8px 0;padding:.8rem 1rem;font-size:.92rem;margin:.6rem 0}
+  .fact b{display:block;margin-bottom:.15rem}
+  .risk{border-left:4px solid var(--warn);background:var(--warn-soft);border-radius:0 8px 8px 0;padding:.8rem 1rem;font-size:.92rem;margin:.6rem 0}
+  .risk b{display:block;margin-bottom:.15rem}
+  .pill{display:inline-block;border-radius:99px;padding:0 .55rem;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+  .pill.ok{background:var(--ok-soft);color:var(--ok);border:1px solid var(--ok)}
+  .pill.open{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn)}
+  .flow{display:flex;flex-direction:column;gap:.45rem;margin:.6rem 0}
+  .frow{display:flex;align-items:stretch;gap:.45rem;flex-wrap:wrap}
+  .node{background:var(--card);border:1.5px solid var(--accent);border-radius:8px;padding:.5rem .8rem;font-size:.85rem;flex:1;min-width:150px}
+  .node.in{border-style:dashed;border-color:var(--muted)}
+  .node.out{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .node small{display:block;color:var(--muted);font-size:.75rem}
+  .node.out small{color:#cfe8e2}
+  .arrow{align-self:center;color:var(--accent);font-weight:700}
+  ol,ul{margin:.4rem 0 .4rem 1.3rem}
+  li{margin:.25rem 0}
+  footer{margin-top:3rem;color:var(--muted);font-size:.8rem;border-top:1px solid var(--line);padding-top:1rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Status report · F7 concluída · 2026-08-07</div>
+  <h1>Estimador de custos de inspeção — pronto para o primeiro teste real</h1>
+  <p class="sub">As sete macrofases (F0–F7) estão implementadas e testadas. O programa roda
+  ponta a ponta por duplo-clique. Falta a única coisa que o código não pode fazer sozinho:
+  passar por ele um <code>Lote.xlsx</code> e um Painel <b>reais</b>.</p>
+</header>
+
+<div class="grid">
+  <div class="stat"><b>38</b><small>testes, todos passando</small></div>
+  <div class="stat"><b>7/7</b><small>macrofases F0–F7</small></div>
+  <div class="stat"><b>0</b><small>arquivos reais já processados</small></div>
+  <div class="stat"><b>113</b><small>contratos resolvíveis (23 UFs)</small></div>
+</div>
+
+<h2>1 · O que o programa faz hoje</h2>
+<div class="flow card">
+  <div class="frow">
+    <div class="node in">Entrada/Lote.xlsx<small>abas Amostra 1/2/3 · STATUS="Selecionado"</small></div>
+    <div class="node in">Entrada/*Painel de Monitoramento*.xlsx<small>ODI → UCs com lat/long</small></div>
+  </div>
+  <div class="arrow" style="text-align:center">▼ &nbsp; join por <b>ODI</b> — órfão e tranche errada abortam com mensagem, não com traceback</div>
+  <div class="frow">
+    <div class="node">distancias<small>centroide + rota por ODI</small></div>
+    <div class="arrow">→</div>
+    <div class="node">custo<small>km → horas → R$</small></div>
+    <div class="arrow">→</div>
+    <div class="node">resumo + mapas<small>agrega por estrato</small></div>
+  </div>
+  <div class="arrow" style="text-align:center">▼</div>
+  <div class="frow">
+    <div class="node out">saida/Resumo_Custos.xlsx<small>Leia-me · Amostra K · Detalhe K</small></div>
+    <div class="node out">saida/Mapa_Amostra_K.html<small>folium, camadas por estrato</small></div>
+  </div>
+</div>
+
+<div class="fact">
+  <b>O que a F7 acrescentou</b>
+  <code>src/estimar_custos.py</code> — o orquestrador que amarra os seis módulos, resolve a UF
+  e o tipo de contrato a partir de <code>base_contratos.json</code>, e converte erro de dados em
+  mensagem amigável com código de saída 1. Mais <code>testes/test_e2e.py</code> (12 testes) e
+  <code>planning/TESTES.md</code>.
+</div>
+
+<h2>2 · Resultado da suíte</h2>
+<pre>.venv\Scripts\python.exe -m pytest testes -q
+......................................                       [100%]
+38 passed in 2.56s</pre>
+
+<div class="tablebox">
+<table>
+  <tr><th>Arquivo</th><th>Nº</th><th>Fase</th><th>Cobre</th></tr>
+  <tr><td><code>test_smoke.py</code></td><td>1</td><td>F0</td><td>ambiente e imports</td></tr>
+  <tr><td><code>test_io_amostras.py</code></td><td>14</td><td>F2</td><td>leitura, validação, os 3 ramos da regra do órfão</td></tr>
+  <tr><td><code>test_distancias.py</code></td><td>4</td><td>F3</td><td>haversine, centroide, rota interna</td></tr>
+  <tr><td><code>test_custo.py</code></td><td>4</td><td>F4</td><td>fórmula, rateio municipal, LPT×MLA, fixo por estrato</td></tr>
+  <tr><td><code>test_resumo.py</code></td><td>2</td><td>F5</td><td>abas do .xlsx, arquivo travado no Excel</td></tr>
+  <tr><td><code>test_mapas.py</code></td><td>1</td><td>F6</td><td>HTML com camadas e popup</td></tr>
+  <tr><td><code>test_e2e.py</code></td><td>12</td><td>F7</td><td>pipeline inteiro + 8 bordas</td></tr>
+</table>
+</div>
+
+<h2>3 · Um erro do plano que os testes pegaram</h2>
+<div class="risk">
+  <b>O plano mandava assertar que o TOTAL = soma do detalhe. Estava errado por R$ 38.880.</b>
+  A aba <code>Detalhe K</code> traz <b>só o custo de campo</b> por ODI. O custo fixo de escritório
+  (36 h × R$ 360 = <b>R$ 12.960</b>) entra <b>uma vez por estrato</b> e não pertence a nenhuma ODI —
+  na fixture de 3 estratos, a diferença é exatamente 3 × 12.960.
+</div>
+<p>O teste implementado checa as três relações que realmente valem:</p>
+<pre>TOTAL["Custo campo (R$)"]   ==  soma do detalhe por ODI
+TOTAL["Custo fixo OS (R$)"] ==  n_estratos × 36h × R$360
+TOTAL["Custo total (R$)"]   ==  campo + fixo     e   &gt;  soma do detalhe</pre>
+<p class="sub">Consequência prática para quem lê a planilha: <b>somar a coluna de custo da aba
+Detalhe não dá o custo da amostra.</b> O número que vale é a linha TOTAL da aba agregada.</p>
+
+<h2>4 · Como testar com dados reais</h2>
+<div class="card">
+  <ol>
+    <li>Copiar para <code>Entrada/</code> o <code>Lote.xlsx</code> da tranche e o
+        <code>*Painel de Monitoramento*.xlsx</code> <b>do mesmo certame</b>.</li>
+    <li>Duplo-clique em <code>executar.bat</code>.</li>
+    <li>Informar o contrato (ex.: <code>ECM 013-A-2023</code>) ou <kbd>Enter</kbd> para os padrões PA/LPT.</li>
+    <li>Conferir na tela: UF e tipo resolvidos, ODIs/UCs por amostra, avisos de descarte ou pseudo-UC.</li>
+    <li>Conferir <code>saida/Resumo_Custos.xlsx</code> contra o gabarito e abrir um mapa no browser.</li>
+  </ol>
+</div>
+<div class="risk">
+  <b>Se aparecer traceback, é bug do programa — não da planilha.</b>
+  Todo problema de dados previsto sai como <code>AVISO:</code> ou <code>ERRO DE ENTRADA:</code> em
+  português, com o que fazer a seguir. Traceback significa um caso que não anteciparam.
+</div>
+<p>O que provavelmente aparece primeiro: cabeçalhos do <code>Lote.xlsx</code> legado fora do
+previsto (cabeçalho na linha 3, duas linhas de rodapé) e o volume de UCs descartadas por
+coordenada inválida.</p>
+
+<h2>5 · O que continua aberto</h2>
+<div class="tablebox">
+<table>
+  <tr><th>Pendência</th><th>Fase</th><th>Quem resolve</th></tr>
+  <tr><td>Rodar com <code>Lote.xlsx</code> e Painel reais — <b>nunca foi feito</b></td><td>F2</td><td><span class="pill open">humano</span></td></tr>
+  <tr><td>Conferir o <code>Resumo_Custos.xlsx</code> contra o gabarito de 24/02</td><td>F5</td><td><span class="pill open">humano</span></td></tr>
+  <tr><td>Abrir os mapas no browser e validar as camadas</td><td>F6</td><td><span class="pill open">humano</span></td></tr>
+  <tr><td>Calibrar <code>VELOCIDADE_KMH</code> (45) e <code>FATOR_RODOVIARIO</code> (1,40) — hoje são chutes da F1</td><td>G4</td><td><span class="pill open">v1</span></td></tr>
+  <tr><td><code>planning/ADVERSARIAL_REVIEW.md</code> (decisão D8)</td><td>pós-plano</td><td><span class="pill open">v1</span></td></tr>
+  <tr><td><code>minhas_notas/base_contratos.json</code> é untracked mas <b>não</b> está no <code>.gitignore</code></td><td>—</td><td><span class="pill open">decidir</span></td></tr>
+</table>
+</div>
+
+<div class="fact">
+  <b>Os dois parâmetros que mais movem o número</b>
+  <code>VELOCIDADE_KMH</code> e <code>FATOR_RODOVIARIO</code> entraram como estimativa na F1 e
+  nunca foram calibrados contra dados de campo. Ambos vivem em <code>src/config.py</code> e mudam
+  o custo sem recompilar nada — é o lugar certo para experimentar quando houver dado real.
+</div>
+
+<footer>
+  Companion visual de <code>planning/TESTES.md</code> · gerado na F7, 2026-08-07 ·
+  documentos irmãos: <code>PLAN.md</code> · <code>DESIGN.md</code> · <code>MODELO_CUSTO.md</code> ·
+  <code>PLANO_IMPLEMENTACAO.md</code>
+</footer>
+
+</div>
+</body>
+</html>
