@@ -33,16 +33,16 @@ entre amostras, coordenadas e custos; uma ODI tem N UCs (unidades consumidoras).
 
 ## Estado atual (2026-08-10)
 
-**Fases F0–F9 completas; 68 testes passando.** O pipeline roda ponta a ponta com **dados reais**
-(contrato `ECO 037/2025`, ENERGISA/PB, 3 estratificações × 3 amostras):
+**Fases F0–F10 completas; 74 testes passando.** O pipeline roda ponta a ponta com **dados reais**
+(contrato `ECO 037/2025`, ENERGISA/PB, 3 estratificações):
 `executar.bat` → `_exec.ps1` → `src/estimar_custos.py` → `saida/`.
 
-O orquestrador expõe `executar(raiz, contrato=None) -> int` (0 sucesso / 1 erro de entrada),
-puro e sem stdin — o `__main__` é quem pergunta o contrato. Todo `EntradaInvalida` é
-convertido ali, e só ali, em mensagem + exit 1.
+O orquestrador expõe `executar(raiz, contrato=None, amostra=None) -> int` (0 sucesso / 1 erro de
+entrada), puro e sem stdin — o `__main__` é quem pergunta contrato **e amostra**. Todo
+`EntradaInvalida` é convertido ali, e só ali, em mensagem + exit 1.
 
-Saída atual (`saida/`): **um** `Resumo_Custos.xlsx` com todas as estratificações + um
-`Mapa_Estratos_N.html` por estratificação.
+Saída atual (`saida/`): **um** `Resumo_Custos.xlsx` (`Leia-me`/`Resumo`/`Cenarios`/`Detalhe`)
+com todas as estratificações da amostra escolhida + um `Mapa_Estratos_N.html` por estratificação.
 
 **O que falta é conferência humana com o olho, não código:** conferir o `Resumo_Custos.xlsx`
 contra o benchmark da engenharia (F5) e abrir um mapa no browser (F6). Ver
@@ -92,8 +92,8 @@ Cada seta abaixo é um **contrato de dataframe** — mudar uma coluna quebra o m
 | `io_amostras.py` | `Entrada/` → `achar_entradas` → `([(n_estratos, caminho), ...], painel)` (descobre **todas** as estratificações pelo conteúdo) · `ler_n_estratos` · `ler_amostras` `{k: df[ODI,Estrato,Municipio,Cons]}` · `ler_painel` `df[ODI,UC,Municipio,LATITUDE,LONGITUDE]` → `juntar_amostras_painel` `{k: df 1 linha por UC}` |
 | `distancias.py` | df de UCs → `resumo_por_odi` → **1 linha por ODI** (colunas fixas, mesmo vazio): `n_ucs`, `lat_centro`, `lon_centro`, `dist_interna_km` · `montar_roteiro(df_odis, lat0, lon0)` → `(df com ordem/km_trecho, km_total)` = **itinerário único** |
 | `config.py` | **todos** os números do modelo (G1–G5 do gate F1 + F9). Zero números mágicos fora daqui |
-| `custo.py` | `custo_amostra(df_odis, uf, tipo_contrato)` → `(dict com os números da AMOSTRA, df do roteiro)`. Um call por amostra — não há função por ODI nem por estrato |
-| `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, **números}, ...], caminho)` → `saida/Resumo_Custos.xlsx` com **3 abas fixas**: `Leia-me` + `Resumo` (1 linha por estratificação×amostra) + `Detalhe` (1 linha por obra, na ordem do roteiro) |
+| `custo.py` | `custo_amostra(df_odis, uf, tipo_contrato)` → `(dict com os números da AMOSTRA, df do roteiro)`. Um call por amostra — não há função por ODI nem por estrato · `cenarios_por_prazo(numeros)` → prazos alternativos (o inverso: dado o prazo, quantas equipes cabem) |
+| `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, cenarios, **números}, ...], caminho)` → `saida/Resumo_Custos.xlsx` com **4 abas fixas**: `Leia-me` + `Resumo` (1 linha por estratificação) + `Cenarios` (prazos alternativos) + `Detalhe` (1 linha por obra, na ordem do roteiro) |
 | `mapas.py` | `gravar_mapa({k: (df_ucs, roteiro)}, lat0, lon0, caminho)` → `saida/Mapa_Estratos_N.html` (folium, FeatureGroup **por amostra**, polilinha do roteiro, marcador da base) |
 
 Detalhes que não se deduzem lendo um arquivo só:
@@ -108,11 +108,26 @@ Detalhes que não se deduzem lendo um arquivo só:
   capital no fim. A hierarquia município→obra é deliberada: uma rota gulosa direta sobre as obras
   entraria e sairia do mesmo município. Nos dados reais isso é 1.529 km contra 10.521 km do
   modelo antigo — a correção que motivou a F9.
-- **Dias são inteiros.** `math.ceil(horas_campo / HORAS_DIA_CAMPO) + DIAS_MOBILIZACAO`. A fração
-  fica exposta na coluna `Dias (fração)` para o humano conferir o arredondamento.
+- **Dias são inteiros e POR EQUIPE.** `ceil(horas_campo / (HORAS_DIA_CAMPO × TAMANHO_EQUIPE))
+  + DIAS_MOBILIZACAO`; o custo multiplica por `TAMANHO_EQUIPE` de novo, porque o contrato paga
+  por hora-**profissional**. Consequência que surpreende: **mais equipes não barateia — encarece**
+  (cada equipe traz seu dia de mobilização e o arredondamento desperdiça mais). A fração fica
+  exposta na coluna `Dias (fração)` para conferir o teto.
 - **`TAMANHO_EQUIPE` é o parâmetro que separa a decisão G1 do benchmark.** Vale `1.0` (G1: só
   engenheiro), enquanto a engenharia usa `2`. Mudar para `2.0` reproduz o benchmark ao centavo —
   é o que `test_reproduz_a_formula_do_benchmark_da_engenharia` amarra.
+- **A aba `Cenarios` inverte o cálculo**: o prazo é dado e o nº de equipes se ajusta
+  (`equipes = ceil(horas / (jornada × dias))`), varrendo `dias_calculado ± VARIACAO_DIAS_CENARIOS`.
+  Ela assume o trabalho **perfeitamente divisível** entre equipes — na prática cada equipe teria
+  seu próprio roteiro saindo da capital e rodaria mais. Está dito no `Leia-me` da planilha.
+- **O custo não é monótono no prazo** dentro da aba `Cenarios`: encurtar de 6 para 5 dias pode
+  *baratear*, porque os dois cenários usam 2 equipes e 5 dias é menos dia-equipe que 6. A coluna
+  `Ocupação da equipe` é o que torna isso legível.
+- **Só UMA amostra é precificada por execução** (a 2 e a 3 são reservas da 1). `executar(raiz,
+  contrato, amostra)` — o `__main__` pergunta, padrão `config.AMOSTRA_PADRAO`. Estratificação sem
+  a aba pedida é pulada com aviso; se nenhuma tiver, é `EntradaInvalida`.
+- **Interseção zero de ODIs só é "tranche errada" se a amostra tiver obras.** Uma aba
+  `Amostra K` legitimamente vazia também dá interseção zero — acusá-la seria erro falso.
 - **Regra do órfão** (`juntar_amostras_painel`): ODI sorteada sem UC no painel aborta se `Cons > 0`;
   com `Cons == 0` (obra sem UC, ex.: reforço de rede) vira pseudo-UC no centroide do município,
   com aviso. A função **coleta todos os inválidos antes de abortar** e só aplica fallbacks depois
@@ -159,9 +174,9 @@ Detalhes que não se deduzem lendo um arquivo só:
 
 ```
 custo_amostra = 36h × R$360 (escritório, 1× por AMOSTRA)
-              + dias_faturados × TAMANHO_EQUIPE × 8h × R$600/h
+              + TAMANHO_EQUIPE × dias_faturados × 8h × R$600/h
 
-dias_faturados = teto((horas_roteiro + horas_inspecao) / 8h) + DIAS_MOBILIZACAO
+dias_faturados = teto((horas_roteiro + horas_inspecao) / (8h × TAMANHO_EQUIPE)) + DIAS_MOBILIZACAO
 horas_roteiro  = (km do itinerário único + percursos internos) × FATOR_RODOVIARIO ÷ VELOCIDADE_KMH
 horas_inspecao = n_ucs × 8h / UCS_POR_DIA[tipo]     (LPT 30/dia, MLA 3/dia)
 ```

@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from src import config
-from src.custo import custo_amostra, tarifa_campo
+from src.custo import cenarios_por_prazo, custo_amostra, tarifa_campo
 from src.distancias import haversine_km
 
 
@@ -108,15 +108,55 @@ def test_dias_arredondam_para_cima(monkeypatch):
     assert float(numeros["dias_trabalho"]).is_integer()
 
 
-def test_tamanho_equipe_multiplica_so_o_campo(monkeypatch):
-    # TAMANHO_EQUIPE e' o parametro que separa a decisao G1 (1 engenheiro) do benchmark
-    # da engenharia (2 pessoas): dobra o campo e deixa o fixo de escritorio intacto.
+def test_dobrar_a_equipe_metade_dos_dias_e_nao_metade_do_custo(monkeypatch):
+    # Duas equipes fazem o MESMO trabalho na metade dos dias (Fase 6 do MODELO_CUSTO.md).
+    # O custo nao cai junto: o contrato paga por hora-profissional. Ele ate sobe um pouco,
+    # porque cada equipe carrega o seu dia de mobilizacao e o arredondamento para dia
+    # inteiro desperdica mais quanto mais equipes houver.
     _config_redonda(monkeypatch)
     um, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
     monkeypatch.setattr(config, "TAMANHO_EQUIPE", 2.0)
     dois, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
-    assert dois["custo_campo"] == pytest.approx(2 * um["custo_campo"])
+    # Os dias por equipe caem (aproximadamente pela metade, com o teto por cima).
+    assert dois["dias_trabalho"] == math.ceil(um["dias_fracionarios"] / 2)
+    assert dois["dias_trabalho"] < um["dias_trabalho"]
+    # O custo de campo NAO cai - e' >= o de uma equipe so.
+    assert dois["custo_campo"] >= um["custo_campo"]
+    # O fixo de escritorio nao tem nada a ver com equipe.
     assert dois["custo_fixo"] == pytest.approx(um["custo_fixo"])
+
+
+def test_cenarios_por_prazo(monkeypatch):
+    # A aba Cenarios responde "e se eu precisar terminar antes?": o prazo e' dado e o
+    # numero de equipes se ajusta. A faixa e' centrada no prazo calculado.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "VARIACAO_DIAS_CENARIOS", 2)
+    numeros, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    cenarios = cenarios_por_prazo(numeros)
+    centro = numeros["dias_trabalho"]
+    # Faixa de 5 prazos (centro +- 2), em ordem crescente, sem descer abaixo de 1 dia.
+    assert [c["dias_trabalho"] for c in cenarios] == list(range(max(1, centro - 2), centro + 3))
+    assert all(c["dias_trabalho"] >= 1 and c["equipes"] >= 1 for c in cenarios)
+    # O cenario 'calculado' reproduz exatamente a linha oficial do Resumo.
+    base = [c for c in cenarios if c["cenario"] == "calculado"]
+    assert len(base) == 1
+    assert base[0]["custo_total"] == pytest.approx(numeros["custo_total"])
+    # Prazo mais curto exige equipe igual ou maior (nunca menor).
+    equipes = [c["equipes"] for c in cenarios]
+    assert equipes == sorted(equipes, reverse=True)
+    # Cada cenario fecha com a mesma formula do motor.
+    for c in cenarios:
+        assert c["custo_campo"] == pytest.approx(
+            c["equipes"] * c["dias_faturados"] * config.HORAS_DIA_CAMPO * 100.0)
+        assert c["custo_total"] == pytest.approx(c["custo_campo"] + c["custo_fixo"])
+
+
+def test_cenarios_de_amostra_vazia(monkeypatch):
+    # Amostra sem obra nenhuma nao tem prazo a explorar - lista vazia, nao divisao por zero.
+    _config_redonda(monkeypatch)
+    vazio = _odis_teste().iloc[0:0]
+    numeros, _ = custo_amostra(vazio, uf="PA", tipo_contrato="LPT")
+    assert cenarios_por_prazo(numeros) == []
 
 
 def test_reproduz_a_formula_do_benchmark_da_engenharia(monkeypatch):

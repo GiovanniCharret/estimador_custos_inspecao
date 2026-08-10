@@ -60,9 +60,40 @@ def test_e2e_feliz(tmp_path, capsys):
     # Saidas: UMA planilha com tudo + um mapa por estratificacao (decisao da F9).
     assert (tmp_path / "saida" / "Resumo_Custos.xlsx").exists()
     assert (tmp_path / "saida" / "Mapa_Estratos_3.html").exists()
-    # Duas amostras no Lote sintetico => duas linhas na aba Resumo, uma planilha so.
+    # Sem escolha explicita, so a amostra padrao (1) e' precificada: uma linha, nao duas.
     resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
-    assert list(resumo["Amostra"]) == [1, 2]
+    assert list(resumo["Amostra"]) == [config.AMOSTRA_PADRAO]
+
+
+def test_e2e_escolha_da_amostra(tmp_path):
+    # A amostra escolhida manda na planilha INTEIRA - resumo, cenarios, detalhe e mapa.
+    # As reservas (2 e 3) nem chegam a ser processadas.
+    _monta_entrada(tmp_path)
+    assert executar(tmp_path, amostra=2) == 0
+    caminho = tmp_path / "saida" / "Resumo_Custos.xlsx"
+    for aba in ("Resumo", "Cenarios", "Detalhe"):
+        assert set(pd.read_excel(caminho, sheet_name=aba)["Amostra"]) == {2}
+    # O mapa da estratificacao mostra a amostra 2, nao a 1.
+    html = (tmp_path / "saida" / "Mapa_Estratos_3.html").read_text(encoding="utf-8")
+    assert "Amostra 2" in html and "Amostra 1" not in html
+
+
+def test_e2e_amostra_inexistente(tmp_path, capsys):
+    # Lote so com as abas 1 e 2: pedir a 3 e' erro de entrada com mensagem, nao traceback.
+    _monta_entrada(tmp_path)
+    assert executar(tmp_path, amostra=3) == 1
+    assert "Amostra 3" in capsys.readouterr().out
+
+
+def test_e2e_amostra_faltando_em_uma_estratificacao(tmp_path, capsys):
+    # Uma estratificacao sem a aba pedida e' pulada COM aviso; as outras seguem normalmente.
+    _monta_entrada(tmp_path)                                          # Lote.xlsx: abas 1 e 2
+    escrever_lote(tmp_path / "Entrada" / "Estratos 5 - Python.xlsx", abas=(1,))
+    assert executar(tmp_path, amostra=2) == 0
+    saida = capsys.readouterr().out
+    assert "Estratos 5 - Python.xlsx" in saida and "Amostra 2" in saida
+    resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
+    assert list(resumo["Estratos"]) == [3]
 
 
 def test_e2e_custo_e_por_amostra_nao_por_estrato(tmp_path):
@@ -91,10 +122,11 @@ def test_e2e_varias_estratificacoes_numa_planilha_so(tmp_path, capsys):
     escrever_lote(tmp_path / "Entrada" / "Estratos 5 - Python.xlsx", abas=(1, 2))
     assert executar(tmp_path) == 0
     resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
-    # 2 estratificacoes x 2 amostras = 4 linhas, ordenadas por (estratificacao, amostra).
-    assert len(resumo) == 4
-    assert list(resumo["Estratos"]) == [3, 3, 5, 5]
-    assert list(resumo["Amostra"]) == [1, 2, 1, 2]
+    # 2 estratificacoes x 1 amostra escolhida = 2 linhas, ordenadas por estratificacao.
+    assert list(resumo["Estratos"]) == [3, 5]
+    # E os cenarios de prazo existem para as duas.
+    cenarios = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Cenarios")
+    assert set(cenarios["Estratos"]) == {3, 5}
     # Um mapa por estratificacao, nao um por amostra.
     assert (tmp_path / "saida" / "Mapa_Estratos_3.html").exists()
     assert (tmp_path / "saida" / "Mapa_Estratos_5.html").exists()
@@ -268,7 +300,7 @@ def test_e2e_estratificacoes_duplicadas_avisam(tmp_path, capsys):
     assert executar(tmp_path) == 0
     assert "IGNORADO" in capsys.readouterr().out
     resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
-    assert len(resumo) == 2               # so uma estratificacao x 2 amostras
+    assert len(resumo) == 1               # uma estratificacao so, uma linha so
 
 
 def test_e2e_amostra_vazia_nao_derruba_o_pipeline(tmp_path):
@@ -282,13 +314,17 @@ def test_e2e_amostra_vazia_nao_derruba_o_pipeline(tmp_path):
     with pd.ExcelWriter(caminho) as xls:
         cheia.to_excel(xls, sheet_name="Amostra 1", index=False)
         vazia.to_excel(xls, sheet_name="Amostra 2", index=False)
-    assert executar(tmp_path) == 0
+    # Pede justamente a amostra vazia: interseccao zero de ODIs nao pode ser confundida
+    # com "tranche errada" (os arquivos estao certos; a amostra e' que nao sorteou nada).
+    assert executar(tmp_path, amostra=2) == 0
     resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
     linha = resumo[resumo["Amostra"] == 2].iloc[0]
     # Sem obras: zero geometria, zero dias de trabalho - mas o fixo de OS continua existindo.
     assert linha["ODIs"] == 0 and linha["UCs"] == 0
     assert linha["Roteiro (km estrada)"] == pytest.approx(0.0)
     assert linha["Dias trabalho"] == 0
+    # E nao ha cenario de prazo a explorar para uma amostra sem trabalho.
+    assert len(pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Cenarios")) == 0
 
 
 def test_e2e_determinismo(tmp_path):

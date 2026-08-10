@@ -3,34 +3,52 @@
 import pandas as pd
 import pytest
 
-from src.custo import custo_amostra
+from src.custo import cenarios_por_prazo, custo_amostra
 from src.io_amostras import EntradaInvalida
 from src.resumo import gravar_resumo
 from testes.test_custo import _odis_teste
 
 
-def _resultado(n_estratos, amostra):
-    """Monta um item da lista que gravar_resumo espera (numeros + roteiro de uma amostra)."""
+def _resultado(n_estratos, amostra=1):
+    """Monta um item da lista que gravar_resumo espera (numeros + roteiro + cenarios)."""
     numeros, roteiro = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
-    return {"n_estratos": n_estratos, "amostra": amostra, "roteiro": roteiro, **numeros}
+    return {"n_estratos": n_estratos, "amostra": amostra, "roteiro": roteiro,
+            "cenarios": cenarios_por_prazo(numeros), **numeros}
 
 
 def test_gravar_resumo_estrutura(tmp_path):
-    # Duas estratificacoes x duas amostras: tudo cabe numa planilha so (decisao da F9).
-    resultados = [_resultado(3, 1), _resultado(3, 2), _resultado(4, 1), _resultado(4, 2)]
+    # Varias estratificacoes da MESMA amostra cabem numa planilha so (decisao da F9).
+    resultados = [_resultado(3), _resultado(4), _resultado(5)]
     destino = tmp_path / "Resumo_Custos.xlsx"
     gravar_resumo(resultados, destino)
     xls = pd.ExcelFile(destino)
-    # Tres abas fixas, independentemente de quantas estratificacoes existirem.
-    assert xls.sheet_names == ["Leia-me", "Resumo", "Detalhe"]
+    # Quatro abas fixas, independentemente de quantas estratificacoes existirem.
+    assert xls.sheet_names == ["Leia-me", "Resumo", "Cenarios", "Detalhe"]
     resumo = xls.parse("Resumo")
-    # Uma linha por (estratificacao, amostra) - sem abertura por estrato.
-    assert len(resumo) == 4
+    # Uma linha por estratificacao - sem abertura por estrato e sem as amostras reserva.
+    assert len(resumo) == 3
     assert "Estrato" not in resumo.columns
     assert {"Estratos", "Amostra", "Dias faturados", "Custo total (R$)"} <= set(resumo.columns)
     # As estratificacoes saem ordenadas, para comparacao lado a lado.
-    assert list(resumo["Estratos"]) == [3, 3, 4, 4]
-    assert list(resumo["Amostra"]) == [1, 2, 1, 2]
+    assert list(resumo["Estratos"]) == [3, 4, 5]
+    assert set(resumo["Amostra"]) == {1}
+
+
+def test_gravar_resumo_cenarios(tmp_path):
+    # A aba Cenarios traz os prazos alternativos de CADA estratificacao.
+    destino = tmp_path / "Resumo_Custos.xlsx"
+    gravar_resumo([_resultado(3), _resultado(4)], destino)
+    cenarios = pd.read_excel(destino, sheet_name="Cenarios")
+    # 2 estratificacoes x a faixa de prazos (calculado +- 2, sem descer de 1 dia).
+    assert len(cenarios) == 2 * len(cenarios_por_prazo(_resultado(3)))
+    assert set(cenarios["Estratos"]) == {3, 4}
+    # Exatamente um cenario 'calculado' por estratificacao - e' o que casa com o Resumo.
+    assert (cenarios["Cenario"] == "calculado").sum() == 2
+    assert {"Equipes", "Ocupacao da equipe", "Custo total (R$)"} <= set(cenarios.columns)
+    resumo = pd.read_excel(destino, sheet_name="Resumo")
+    base = cenarios[(cenarios["Cenario"] == "calculado") & (cenarios["Estratos"] == 3)].iloc[0]
+    oficial = resumo[resumo["Estratos"] == 3].iloc[0]
+    assert base["Custo total (R$)"] == pytest.approx(oficial["Custo total (R$)"])
 
 
 def test_gravar_resumo_detalhe_traz_a_ordem_do_roteiro(tmp_path):

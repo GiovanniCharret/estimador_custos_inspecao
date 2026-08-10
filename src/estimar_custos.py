@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.io_amostras import (EntradaInvalida, achar_entradas, ler_amostras,   # noqa: E402
                              ler_painel, juntar_amostras_painel)
 from src.distancias import resumo_por_odi                                     # noqa: E402
-from src.custo import custo_amostra                                           # noqa: E402
+from src.custo import cenarios_por_prazo, custo_amostra                       # noqa: E402
 from src.resumo import gravar_resumo                                          # noqa: E402
 from src.mapas import gravar_mapa                                             # noqa: E402
 from src import config                                                        # noqa: E402
@@ -104,22 +104,28 @@ def _resolver_contrato(raiz, contrato):
     return dados["uf"], dados["tipo_contrato"]
 
 
-def executar(raiz, contrato=None):
-    """Roda o pipeline completo a partir da raiz do projeto.
+def executar(raiz, contrato=None, amostra=None):
+    """Roda o pipeline completo a partir da raiz do projeto, para UMA amostra.
 
     Por que existe: separa a ORQUESTRACAO (esta funcao, testavel com tmp_path e sem
-    stdin) do ponto de entrada __main__ (que pergunta o contrato e fixa o exit code).
-    E' o unico lugar que converte EntradaInvalida em mensagem + codigo 1: erro de DADOS
-    nao vira traceback: bug de programa continua estourando normalmente.
+    stdin) do ponto de entrada __main__ (que pergunta contrato e amostra e fixa o exit
+    code). E' o unico lugar que converte EntradaInvalida em mensagem + codigo 1: erro de
+    DADOS nao vira traceback; bug de programa continua estourando normalmente.
 
-    Logica: Entrada (raiz, contrato) -> Fase 1: resolve UF/tipo -> Fase 2: localiza as
-    planilhas (uma por estratificacao) e le o painel uma unica vez -> Fase 3: por
-    estratificacao, junta por ODI (orfaos/tranche errada abortam aqui) e precifica cada
-    amostra -> Fase 4: grava a planilha unica de resumo e um mapa por estratificacao
-    -> Saida: 0 (sucesso) ou 1 (erro de entrada).
+    Por que UMA amostra: as amostras 2 e 3 sao reservas da 1. Precificar as tres juntas
+    enchia o resumo de linhas que nunca sao usadas ao mesmo tempo. O usuario escolhe qual
+    quer (padrao 1) e a planilha inteira - resumo, cenarios, detalhe e mapas - fala dela.
+
+    Logica: Entrada (raiz, contrato, amostra) -> Fase 1: resolve UF/tipo -> Fase 2:
+    localiza as planilhas (uma por estratificacao) e le o painel uma unica vez -> Fase 3:
+    por estratificacao, junta por ODI (orfaos/tranche errada abortam aqui), precifica a
+    amostra escolhida e monta os cenarios de prazo -> Fase 4: grava a planilha unica de
+    resumo e um mapa por estratificacao -> Saida: 0 (sucesso) ou 1 (erro de entrada).
     """
     # Normaliza para Path: o chamador pode passar str (ex.: do .bat) ou Path (dos testes).
     raiz = Path(raiz)
+    # Amostra escolhida (padrao de config quando o chamador nao decide).
+    amostra = config.AMOSTRA_PADRAO if amostra is None else int(amostra)
     try:
         # Fase 1: UF (base de partida do roteiro) e tipo (produtividade da inspecao).
         uf, tipo = _resolver_contrato(raiz, contrato)
@@ -129,24 +135,40 @@ def executar(raiz, contrato=None):
         # O painel serve a todas as estratificacoes - lido uma vez so.
         ucs = ler_painel(painel)
         print(f"Estratificacoes: {', '.join(f'{n} estratos ({c.name})' for n, c in lotes)}")
-        # Fase 3: uma passada por estratificacao; dentro dela, uma por amostra.
+        print(f"Amostra escolhida: {amostra}")
+        # Fase 3: uma passada por estratificacao, precificando so a amostra escolhida.
         resultados = []
         mapas = {}
         for n_estratos, caminho in lotes:
             amostras = ler_amostras(caminho)
+            # A estratificacao pode nao ter a amostra pedida (Lote com menos abas):
+            # avisa e segue com as outras, em vez de derrubar a execucao inteira.
+            if amostra not in amostras:
+                print(f"AVISO: {caminho.name} nao tem aba 'Amostra {amostra}' "
+                      f"(tem {sorted(amostras)}); estratificacao ignorada.")
+                continue
             # Juncao validada por ODI - aqui morrem tranche errada e ODI orfa com Cons>0.
-            juntas = juntar_amostras_painel(amostras, ucs)
-            mapas[n_estratos] = {}
-            for k, df_ucs in sorted(juntas.items()):
-                # resumo_por_odi reduz UC -> ODI; custo_amostra monta o roteiro e precifica.
-                numeros, roteiro = custo_amostra(resumo_por_odi(df_ucs), uf=uf, tipo_contrato=tipo)
-                print(f"  {n_estratos} estratos / amostra {k}: {numeros['n_odis']} ODIs, "
-                      f"{numeros['n_municipios']} municipios, {numeros['n_ucs']} UCs, "
-                      f"{numeros['km_roteiro']:,.0f} km, {numeros['dias_faturados']:g} dias "
-                      f"-> R$ {numeros['custo_total']:,.2f}")
-                # Guarda os numeros (para o resumo) e as duas granularidades (para o mapa).
-                resultados.append({"n_estratos": n_estratos, "amostra": k, "roteiro": roteiro, **numeros})
-                mapas[n_estratos][k] = (df_ucs, roteiro)
+            # So a amostra escolhida e' juntada: as reservas nem chegam a ser processadas.
+            juntas = juntar_amostras_painel({amostra: amostras[amostra]}, ucs)
+            df_ucs = juntas[amostra]
+            # resumo_por_odi reduz UC -> ODI; custo_amostra monta o roteiro e precifica.
+            numeros, roteiro = custo_amostra(resumo_por_odi(df_ucs), uf=uf, tipo_contrato=tipo)
+            # Prazos alternativos (aba Cenarios): mesmo trabalho, mais equipes, menos dias.
+            cenarios = cenarios_por_prazo(numeros)
+            print(f"  {n_estratos} estratos: {numeros['n_odis']} ODIs, "
+                  f"{numeros['n_municipios']} municipios, {numeros['n_ucs']} UCs, "
+                  f"{numeros['km_roteiro']:,.0f} km, {numeros['dias_faturados']:g} dias "
+                  f"-> R$ {numeros['custo_total']:,.2f}")
+            # Guarda os numeros (para o resumo) e as duas granularidades (para o mapa).
+            resultados.append({"n_estratos": n_estratos, "amostra": amostra,
+                               "roteiro": roteiro, "cenarios": cenarios, **numeros})
+            mapas[n_estratos] = {amostra: (df_ucs, roteiro)}
+        # Nenhuma estratificacao tinha a amostra pedida: erro de entrada, nao saida vazia.
+        if not resultados:
+            raise EntradaInvalida(
+                f"Nenhuma planilha da Entrada/ tem a aba 'Amostra {amostra}'.\n"
+                f"Escolha outra amostra ou confira os arquivos."
+            )
         # Fase 4: garante a pasta de saida e grava os dois produtos (uma tabela + um mapa por N).
         saida = raiz / "saida"
         saida.mkdir(exist_ok=True)
@@ -165,11 +187,34 @@ def executar(raiz, contrato=None):
         return 1
 
 
+def _perguntar_amostra():
+    """Pergunta qual amostra precificar, insistindo ate receber algo valido.
+
+    Por que existe: o numero da amostra entra no calculo inteiro; aceitar um lixo digitado
+    e cair no padrao em silencio faria o usuario levar embora a planilha da amostra errada
+    sem perceber. Como e' interativo, insistir e' melhor que abortar.
+
+    Logica: Entrada (stdin) -> Fase 1: le a resposta; vazia = padrao -> Fase 2: aceita
+    1, 2 ou 3; qualquer outra coisa reexplica e pergunta de novo -> Saida: int.
+    """
+    while True:
+        # Fase 1: Enter aceita o padrao (amostra 1 = principal).
+        resposta = input(f"Amostra a precificar [1/2/3, Enter = {config.AMOSTRA_PADRAO}]: ").strip()
+        if not resposta:
+            return config.AMOSTRA_PADRAO
+        # Fase 2: so 1, 2 e 3 existem (1 = principal, 2 e 3 = reservas).
+        if resposta in ("1", "2", "3"):
+            return int(resposta)
+        print("  Responda 1, 2 ou 3 (a 1 e' a amostra principal; 2 e 3 sao as reservas).")
+
+
 # Ponto de entrada: raiz = a pasta acima de src/, para o .bat rodar de qualquer diretorio.
 if __name__ == "__main__":
-    # Pergunta interativa no estilo do sistema canonico (Enter = padroes de config).
-    resposta = input(
+    # Perguntas interativas no estilo do sistema canonico (Enter = padroes de config).
+    contrato_digitado = input(
         f"Contrato (ex.: ECM 013-A-2023; Enter = {config.UF_PADRAO}/{config.TIPO_CONTRATO_PADRAO}): "
     ).strip()
+    amostra_escolhida = _perguntar_amostra()
     # O exit code propaga para o _exec.ps1, que so mantem a janela aberta quando != 0.
-    sys.exit(executar(Path(__file__).resolve().parent.parent, contrato=resposta or None))
+    sys.exit(executar(Path(__file__).resolve().parent.parent,
+                      contrato=contrato_digitado or None, amostra=amostra_escolhida))

@@ -59,8 +59,13 @@ HORAS_DIA_CAMPO = 8.0
 # multiplicava o fixo pelo numero de estratos - erro corrigido na reconstrucao.
 HORAS_ESCRITORIO_POR_OS = 36.0
 # Dias cobrados alem dos dias de trabalho, para a mobilizacao (sair da capital / voltar).
-# O benchmark da engenharia cobra exatamente 1 (custo = 12.960 + 9.600 x (dias + 1)).
+# CADA EQUIPE carrega o seu: o benchmark da engenharia cobra equipes x (dias + 1).
 DIAS_MOBILIZACAO = 1.0
+# Quantos dias para cima e para baixo do calculado a aba 'Cenarios' explora. Em cada
+# cenario o PRAZO e' dado e o numero de equipes e' que se ajusta para caber nele.
+VARIACAO_DIAS_CENARIOS = 2
+# Amostra usada quando o usuario nao escolhe (1 = principal; 2 e 3 sao as reservas).
+AMOSTRA_PADRAO = 1
 # UCs inspecionadas por equipe por dia, por tipo de contrato (decisao G5):
 # LPT = obras com rede/postes/transformador; MLA = fotovoltaico em regioes remotas.
 UCS_POR_DIA = {"LPT": 30.0, "MLA": 3.0}

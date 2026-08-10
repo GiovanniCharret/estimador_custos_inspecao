@@ -25,6 +25,20 @@ COLUNAS_RESUMO = {
     "custo_total": "Custo total (R$)",
 }
 
+# Renomeacao de apresentacao da aba Cenarios (prazos alternativos por estratificacao).
+COLUNAS_CENARIOS = {
+    "n_estratos": "Estratos",
+    "amostra": "Amostra",
+    "cenario": "Cenario",
+    "dias_trabalho": "Dias trabalho (por equipe)",
+    "equipes": "Equipes",
+    "dias_faturados": "Dias faturados (por equipe)",
+    "ocupacao": "Ocupacao da equipe",
+    "custo_campo": "Custo campo (R$)",
+    "custo_fixo": "Custo fixo OS (R$)",
+    "custo_total": "Custo total (R$)",
+}
+
 # Renomeacao de apresentacao da aba Detalhe (uma linha por obra, na ordem do roteiro).
 COLUNAS_DETALHE = {
     "n_estratos": "Estratos",
@@ -53,18 +67,26 @@ def _texto_leia_me():
     """
     # Fase 1: o que cada aba contem e como ler os numeros.
     linhas = [
-        "Estimativa de custo de inspecao das amostras, por estratificacao e por amostra.",
+        "Estimativa de custo de inspecao das amostras, por estratificacao.",
         "",
-        "Aba 'Resumo'  : uma linha por (estratificacao, amostra). E' o numero que vale.",
-        "Aba 'Detalhe' : uma linha por obra, NA ORDEM DO ROTEIRO da equipe.",
+        "Aba 'Resumo'   : uma linha por estratificacao. E' o numero que vale.",
+        "Aba 'Cenarios' : e se o prazo fosse outro? Um cenario por prazo possivel.",
+        "Aba 'Detalhe'  : uma linha por obra, NA ORDEM DO ROTEIRO da equipe.",
         "",
         "O custo e' por AMOSTRA, nao por estrato:",
-        "  custo = custo fixo de escritorio (1x) + dias faturados x equipe x jornada x tarifa",
-        "  dias faturados = teto(horas de campo / jornada) + dias de mobilizacao",
+        "  custo = custo fixo de escritorio (1x) + equipe x dias faturados x jornada x tarifa",
+        "  dias faturados = teto(horas de campo / (jornada x equipe)) + dias de mobilizacao",
         "  horas de campo = roteiro (km de estrada / velocidade) + inspecao (UCs / produtividade)",
         "",
         "O roteiro e' UMA viagem so: sai da capital da UF, encadeia todas as obras",
         "(municipio a municipio, obra a obra) e volta a capital uma unica vez no fim.",
+        "",
+        "Os DIAS sao por equipe: duas equipes fazem o mesmo trabalho na metade dos dias.",
+        "Encurtar o prazo NAO barateia - encarece. O contrato paga por hora-profissional,",
+        "cada equipe carrega o seu dia de mobilizacao, e o arredondamento para dia inteiro",
+        "desperdicia mais quanto mais equipes houver. A aba 'Cenarios' mostra esse preco.",
+        "Nela o trabalho e' tratado como perfeitamente divisivel entre as equipes; na pratica",
+        "cada equipe teria seu proprio roteiro saindo da capital e rodaria um pouco mais.",
         "",
         "PARAMETROS USADOS NESTA EXECUCAO:",
     ]
@@ -93,25 +115,31 @@ def gravar_resumo(resultados, caminho):
     permite comparar Estratos 3 x 4 x 5 lado a lado, que e' a decisao que o humano precisa
     tomar. Isolar a gravacao permite ajustar formato sem tocar no calculo.
 
-    Logica: Entrada (lista de dicts com os numeros + o roteiro de cada amostra, caminho)
-    -> Fase 1: separa os numeros do resumo dos roteiros de detalhe -> Fase 2: grava
-    Leia-me -> Fase 3: grava a aba Resumo (uma linha por amostra) -> Fase 4: grava a aba
-    Detalhe (todas as obras de todas as amostras, empilhadas) -> Saida: .xlsx gravado.
+    Logica: Entrada (lista de dicts com os numeros + roteiro + cenarios de cada amostra,
+    caminho) -> Fase 1: separa as tres granularidades (resumo, cenarios, detalhe) -> Fase 2:
+    grava Leia-me -> Fase 3: grava a aba Resumo (uma linha por estratificacao) -> Fase 4:
+    grava a aba Cenarios (prazos alternativos) -> Fase 5: grava a aba Detalhe (todas as
+    obras, empilhadas) -> Saida: .xlsx gravado.
     """
-    # Fase 1: separa as duas granularidades. O 'roteiro' sai do dict do resumo e vira detalhe.
+    # Fase 1: separa as tres granularidades a partir da mesma lista de resultados.
     linhas_resumo = []
+    linhas_cenarios = []
     detalhes = []
     for item in resultados:
-        # Copia sem o roteiro: o que sobra sao os numeros da amostra.
+        # Copia sem roteiro/cenarios: o que sobra sao os numeros da amostra.
         numeros = {c: item[c] for c in COLUNAS_RESUMO if c in item}
         linhas_resumo.append(numeros)
-        # O roteiro ganha as duas chaves que dizem de qual amostra ele e'.
+        # Cada cenario ganha as duas chaves que dizem de qual amostra ele e'.
+        for cenario in item.get("cenarios", []):
+            linhas_cenarios.append({"n_estratos": item["n_estratos"], "amostra": item["amostra"], **cenario})
+        # O roteiro tambem.
         roteiro = item["roteiro"].copy()
         roteiro["n_estratos"] = item["n_estratos"]
         roteiro["amostra"] = item["amostra"]
         detalhes.append(roteiro)
-    # Monta os dois dataframes ja com as colunas na ordem de apresentacao.
+    # Monta os dataframes ja com as colunas na ordem de apresentacao.
     resumo = pd.DataFrame(linhas_resumo).reindex(columns=list(COLUNAS_RESUMO))
+    cenarios = pd.DataFrame(linhas_cenarios).reindex(columns=list(COLUNAS_CENARIOS))
     detalhe = pd.concat(detalhes, ignore_index=True) if detalhes else pd.DataFrame()
     detalhe = detalhe.reindex(columns=[c for c in COLUNAS_DETALHE if c in detalhe.columns])
     try:
@@ -119,9 +147,11 @@ def gravar_resumo(resultados, caminho):
         with pd.ExcelWriter(caminho) as xls:
             # Fase 2: aba Leia-me com a memoria de calculo e os parametros vigentes.
             pd.DataFrame({"Leia-me": _texto_leia_me()}).to_excel(xls, sheet_name="Leia-me", index=False)
-            # Fase 3: a tabela que importa - uma linha por (estratificacao, amostra).
+            # Fase 3: a tabela que importa - uma linha por estratificacao.
             resumo.rename(columns=COLUNAS_RESUMO).round(2).to_excel(xls, sheet_name="Resumo", index=False)
-            # Fase 4: o detalhe por obra, na ordem em que a equipe as visita.
+            # Fase 4: os prazos alternativos, para a conversa de planejamento.
+            cenarios.rename(columns=COLUNAS_CENARIOS).round(2).to_excel(xls, sheet_name="Cenarios", index=False)
+            # Fase 5: o detalhe por obra, na ordem em que a equipe as visita.
             detalhe.rename(columns=COLUNAS_DETALHE).round(4).to_excel(xls, sheet_name="Detalhe", index=False)
     except PermissionError:
         # Arquivo travado (aberto no Excel): mensagem de usuario, nao traceback.

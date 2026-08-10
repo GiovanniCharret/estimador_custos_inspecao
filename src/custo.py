@@ -10,10 +10,15 @@ O custo e' POR AMOSTRA (nao por estrato):
   custo_amostra = CUSTO_FIXO + custo_campo
 
   CUSTO_FIXO  = HORAS_ESCRITORIO_POR_OS x tarifa_escritorio   (36h x 360 = 12.960, 1x)
-  custo_campo = dias_faturados x TAMANHO_EQUIPE x HORAS_DIA_CAMPO x tarifa_campo
+  custo_campo = TAMANHO_EQUIPE x dias_faturados x HORAS_DIA_CAMPO x tarifa_campo
 
-  dias_faturados = teto(horas_de_campo / HORAS_DIA_CAMPO) + DIAS_MOBILIZACAO
+  dias_faturados = teto(horas_de_campo / (HORAS_DIA_CAMPO x TAMANHO_EQUIPE)) + DIAS_MOBILIZACAO
   horas_de_campo = horas_roteiro + horas_inspecao
+
+  Os dias sao POR EQUIPE: duas equipes terminam o mesmo trabalho na metade dos dias.
+  Mais equipes NAO barateiam (o contrato paga por hora-profissional) - na verdade
+  encarecem um pouco, porque cada equipe carrega o seu dia de mobilizacao e porque o
+  arredondamento para dia inteiro desperdicia mais quanto mais equipes houver.
     horas_roteiro  = km_estrada / VELOCIDADE_KMH
       km_estrada   = FATOR_RODOVIARIO x (itinerario unico capital -> todas as obras ->
                      capital, encadeado, + percurso entre as UCs de cada obra)
@@ -89,14 +94,17 @@ def custo_amostra(df_odis, uf, tipo_contrato):
     n_ucs = int(roteiro["n_ucs"].sum()) if len(roteiro) else 0
     horas_por_uc = config.HORAS_DIA_CAMPO / config.UCS_POR_DIA[tipo_contrato]
     horas_inspecao = n_ucs * horas_por_uc
-    # Fase 4: dias de trabalho arredondados PARA CIMA (a equipe nao vende meio dia),
-    # mais os dias de mobilizacao. A fracao fica exposta para o humano conferir o teto.
+    # Fase 4: dias POR EQUIPE, arredondados PARA CIMA (a equipe nao vende meio dia), mais
+    # a mobilizacao. Dividir pelo tamanho da equipe e' o que a Fase 6 do MODELO_CUSTO.md
+    # prescreve: duas equipes fazem o mesmo trabalho na metade dos dias. A fracao fica
+    # exposta para o humano conferir o teto.
     horas_campo = horas_roteiro + horas_inspecao
-    dias_fracionarios = horas_campo / config.HORAS_DIA_CAMPO
+    dias_fracionarios = horas_campo / (config.HORAS_DIA_CAMPO * config.TAMANHO_EQUIPE)
     dias_trabalho = math.ceil(dias_fracionarios) if dias_fracionarios > 0 else 0
     dias_faturados = dias_trabalho + config.DIAS_MOBILIZACAO
     # Fase 5: dias -> R$ (pessoa-dia = jornada x tarifa) e o fixo de escritorio, uma vez.
-    custo_campo = dias_faturados * config.TAMANHO_EQUIPE * config.HORAS_DIA_CAMPO * tarifa_campo()
+    # O TAMANHO_EQUIPE multiplica aqui porque o contrato paga por hora-PROFISSIONAL.
+    custo_campo = config.TAMANHO_EQUIPE * dias_faturados * config.HORAS_DIA_CAMPO * tarifa_campo()
     custo_fixo = config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio()
     # Anota no detalhe o km de estrada de cada trecho (so exibicao; o total ja esta fechado).
     if len(roteiro):
@@ -118,6 +126,62 @@ def custo_amostra(df_odis, uf, tipo_contrato):
         "custo_fixo": custo_fixo,
         "custo_total": custo_campo + custo_fixo,
     }, roteiro
+
+
+def cenarios_por_prazo(numeros, variacao=None):
+    """Explora prazos alternativos: dado um numero de dias, quantas equipes cabem nele.
+
+    Por que existe: o custo calculado responde "quanto custa", mas a pergunta que sobra na
+    mesa de planejamento e' "e se eu precisar terminar antes?". Aqui o PRAZO vira o dado e o
+    numero de equipes e' que se ajusta - o inverso de custo_amostra, que parte da equipe.
+    Fica numa funcao separada (e numa aba separada) para nao poluir o numero oficial: o
+    Resumo continua sendo uma linha por amostra, com a equipe vigente em config.
+
+    O que o humano precisa enxergar aqui: mais equipes NAO baratearam nada. O contrato paga
+    por hora-profissional, entao encurtar o prazo custa mais - pelo dia de mobilizacao de
+    cada equipe nova e pelo desperdicio de arredondar para dia inteiro em mais equipes.
+
+    Simplificacao assumida (mesma da Fase 6 do MODELO_CUSTO.md): o trabalho e' tratado como
+    perfeitamente divisivel entre as equipes. Na pratica cada equipe teria seu proprio
+    roteiro saindo da capital, o que rodaria um pouco mais que a divisao exata.
+
+    Logica: Entrada (numeros de uma amostra, variacao em dias) -> Fase 1: recupera as horas
+    de campo e centra a faixa no prazo ja calculado -> Fase 2: para cada prazo da faixa,
+    deduz o menor numero de equipes que cabe nele -> Fase 3: precifica cada combinacao com
+    a mesma formula do motor -> Saida: lista de dicts, um por cenario.
+    """
+    # Fase 1: a faixa e' centrada no prazo calculado e nunca desce abaixo de 1 dia.
+    variacao = config.VARIACAO_DIAS_CENARIOS if variacao is None else variacao
+    horas_campo = numeros["horas_roteiro"] + numeros["horas_inspecao"]
+    # Amostra sem obra nenhuma nao tem prazo a explorar.
+    if horas_campo <= 0:
+        return []
+    centro = numeros["dias_trabalho"]
+    # O fixo de escritorio nao depende do prazo - calculado uma vez fora do laco.
+    custo_fixo = config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio()
+    linhas = []
+    # Fase 2: um cenario por prazo possivel na faixa.
+    for dias in range(max(1, centro - variacao), centro + variacao + 1):
+        # Menor numero de equipes que da conta do trabalho dentro deste prazo.
+        equipes = max(1, math.ceil(horas_campo / (config.HORAS_DIA_CAMPO * dias)))
+        # Fase 3: mesma formula do motor - cada equipe cobra os dias de trabalho + mobilizacao.
+        dias_faturados = dias + config.DIAS_MOBILIZACAO
+        custo_campo = equipes * dias_faturados * config.HORAS_DIA_CAMPO * tarifa_campo()
+        linhas.append({
+            "dias_trabalho": dias,
+            "equipes": equipes,
+            "dias_faturados": dias_faturados,
+            # Ocupacao = quanto da capacidade contratada e' realmente usada. Baixa demais
+            # significa que o arredondamento esta pagando por gente parada.
+            "ocupacao": horas_campo / (config.HORAS_DIA_CAMPO * dias * equipes),
+            "custo_campo": custo_campo,
+            "custo_fixo": custo_fixo,
+            "custo_total": custo_campo + custo_fixo,
+            # Marca o cenario que corresponde ao numero oficial da aba Resumo.
+            "cenario": "calculado" if dias == centro else f"{dias - centro:+d} dia(s)",
+        })
+    # Saida: os cenarios em ordem crescente de prazo (do mais apertado ao mais folgado).
+    return linhas
 
 
 def tabela_resumo(resultados):

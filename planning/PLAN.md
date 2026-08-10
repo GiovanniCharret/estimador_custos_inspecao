@@ -35,6 +35,8 @@ x F8 — Adequação ao formato REAL de entrada (Anexo V do projeto irmão) apó
     com dados de verdade — 2026-08-10
 x F9 — Reconstrução do modelo contra o benchmark da engenharia: roteiro encadeado, custo por
     amostra (não por estrato), dias inteiros, N estratificações numa planilha só — 2026-08-10
+x F10 — Escolha da amostra (1/2/3, padrão 1) e aba `Cenarios` com prazos alternativos
+    (dado o prazo, quantas equipes cabem) — 2026-08-10
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -89,4 +91,14 @@ x F9 — Reconstrução do modelo contra o benchmark da engenharia: roteiro enca
   de 5 estratos tem a rota mais curta e ganhou mais dias que a de 4). O modelo acerta −3,7% no
   agregado mas erra ±25% por amostra. `VELOCIDADE_KMH` e `FATOR_RODOVIARIO` (G4) seguem sendo
   os dois chutes com maior efeito.
+- **P7 RESPONDIDA (F10):** o número de equipes não é fixo nem perguntado — vira uma **faixa**.
+  A aba `Cenarios` inverte o cálculo (`config.VARIACAO_DIAS_CENARIOS = 2`): para cada prazo de
+  `calculado ± 2` dias, mostra quantas equipes cabem e quanto custa. Confirma o alerta da Fase 6
+  do `MODELO_CUSTO.md`: mais equipes não barateiam — **encarecem**, pelo dia de mobilização de
+  cada equipe e pelo desperdício de arredondar para dia inteiro.
+- **Decisão (F10):** cada execução precifica **uma** amostra (1, 2 ou 3; padrão 1), porque 2 e 3
+  são reservas da 1 e nunca são usadas ao mesmo tempo. `config.AMOSTRA_PADRAO`.
+- **Correção (F10):** `dias_trabalho` passou a dividir por `TAMANHO_EQUIPE`, como a Fase 6 do
+  `MODELO_CUSTO.md` sempre prescreveu. Era invisível com equipe = 1; com equipe = 2 o custo
+  dobrava em vez de ficar aproximadamente estável.
 - **Pendência (pós-plano):** escrever `planning/ADVERSARIAL_REVIEW.md` (D8).

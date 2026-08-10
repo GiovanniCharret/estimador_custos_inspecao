@@ -652,6 +652,22 @@ Somados, faziam a Amostra 1 da PB custar R$ 239.799 contra R$ 99.360 da engenhar
   2026-08-10), enquanto o benchmark usa 2 — a estimativa sai ~44% abaixo dele **por decisão**,
   não por erro. Mudar para `2.0` reproduz o benchmark sem tocar em código.
 
+**Complemento F10 (2026-08-10)** — duas coisas que faltavam:
+
+- **A Fase 6 virou código de verdade.** `dias = ceil(horas / (jornada × equipes))` — o código
+  não dividia pelo número de equipes. Era invisível com equipe = 1; com equipe = 2 o custo
+  dobrava em vez de ficar aproximadamente estável, contrariando o alerta desta seção
+  (*"mais equipes NÃO barateiam a inspeção... só terminam mais rápido"*).
+- **P7 respondida:** o nº de equipes não é fixo nem perguntado — vira uma **faixa**. A aba
+  `Cenarios` inverte o cálculo: para cada prazo de `calculado ± 2` dias, mostra quantas equipes
+  cabem, a ocupação delas e o custo. Com isso o alerta acima fica *visível* na planilha —
+  encurtar o prazo **encarece**, pelo dia de mobilização de cada equipe nova e pelo desperdício
+  de arredondar para dia inteiro em mais equipes. A aba assume o trabalho perfeitamente
+  divisível entre equipes; na prática cada equipe teria seu próprio roteiro saindo da capital.
+
+Também na F10: cada execução precifica **uma** amostra (1, 2 ou 3; padrão 1), porque a 2 e a 3
+são reservas da 1 e nunca são usadas ao mesmo tempo.
+
 **Margem honesta contra o benchmark** (com `TAMANHO_EQUIPE = 2`, para comparar maçã com maçã):
 −9,7% / +27,2% / −21,4% por amostra; **−3,7% no agregado**. O erro por amostra não é do
 modelo: os dias da engenharia **não seguem a geometria** (a amostra de 5 estratos tem a rota

@@ -1,6 +1,6 @@
 # TESTES — mapa da suíte do estimador
 
-Atualizado em 2026-08-10 (F9 — reconstrução do modelo). **68 testes, todos passando.**
+Atualizado em 2026-08-10 (F10 — escolha da amostra + cenários). **74 testes, todos passando.**
 
 Nenhum teste depende de `minhas_notas/` nem de `Entrada/` (decisão D6): as planilhas
 são geradas sinteticamente em `tmp_path` por `testes/fixtures.py`. Isso é o que permite
@@ -26,10 +26,10 @@ rodar a suíte numa máquina limpa, sem os dados reais da distribuidora.
 | `test_smoke.py` | 1 | F0 | ambiente: pandas/numpy/openpyxl/folium importam |
 | `test_io_amostras.py` | 25 | F2/F8/F9 | descoberta de **N estratificações** na `Entrada/` (ordem, duplicata, N do Leia-me → nome → contagem), painel ausente/ambíguo, ler abas `Amostra K`, filtro `STATUS`, `Cons` ausente, bbox do Brasil, os **3 ramos da regra do órfão**, e o **formato real do Anexo V** (cabeçalho na 2ª linha, apelidos de coluna, ODI texto × numérica, município com acento) |
 | `test_distancias.py` | 9 | F3/F9 | haversine contra valor conhecido (Belém→Castanhal ≈ 62 km), ponto igual = 0, centroide/rota interna, ODI com 1 UC, e o **roteiro encadeado** (permutação completa, município não é revisitado, km fecha com trechos + volta, determinismo, amostra vazia) |
-| `test_custo.py` | 8 | F4/F9 | fórmula da amostra com parâmetros redondos, roteiro < ida-e-volta, **fixo independente do nº de estratos**, LPT × MLA, arredondamento de dias, `TAMANHO_EQUIPE`, **reprodução da fórmula do benchmark**, diária diluída |
-| `test_resumo.py` | 4 | F5/F9 | as 3 abas fixas, ordem por (estratificação, amostra), ordem do roteiro no detalhe, Leia-me com os parâmetros vigentes, `PermissionError` → mensagem amigável |
+| `test_custo.py` | 10 | F4/F9/F10 | fórmula da amostra com parâmetros redondos, roteiro < ida-e-volta, **fixo independente do nº de estratos**, LPT × MLA, arredondamento de dias, **dobrar a equipe = metade dos dias e não metade do custo**, **cenários de prazo**, **reprodução da fórmula do benchmark**, diária diluída |
+| `test_resumo.py` | 5 | F5/F9/F10 | as 4 abas fixas, ordem por estratificação, aba `Cenarios` casando com o `Resumo`, ordem do roteiro no detalhe, Leia-me com os parâmetros vigentes, `PermissionError` → mensagem amigável |
 | `test_mapas.py` | 2 | F6/F9 | camada por **amostra** (e não por estrato) lida do `LayerControl`, polilinha do roteiro, marcador da base, popup com a ordem da parada |
-| `test_e2e.py` | 19 | F7/F8/F9 | pipeline inteiro `Entrada/` → `saida/` (abaixo) |
+| `test_e2e.py` | 22 | F7/F8/F9/F10 | pipeline inteiro `Entrada/` → `saida/` (abaixo) |
 
 ## O que o e2e cobre (F7)
 
@@ -42,7 +42,10 @@ Caminho feliz e as bordas que o `DESIGN.md` §7 elegeu como os erros mais prová
 | `test_e2e_varias_estratificacoes_numa_planilha_so` | Estratos 3 e 5 na `Entrada/` → 4 linhas na mesma aba `Resumo`, 2 mapas |
 | `test_e2e_roteiro_encadeado_derruba_a_quilometragem` | o roteiro gravado é menor que a soma das idas-e-voltas do modelo antigo |
 | `test_e2e_estratificacoes_duplicadas_avisam` | dois arquivos com o mesmo N → aviso e uma linha só |
-| `test_e2e_amostra_vazia_nao_derruba_o_pipeline` | aba `Amostra K` sem obra sorteada vira linha de zeros, não traceback |
+| `test_e2e_escolha_da_amostra` | a amostra escolhida manda em `Resumo`, `Cenarios`, `Detalhe` e no mapa |
+| `test_e2e_amostra_inexistente` | pedir a amostra 3 num lote com abas 1 e 2 → exit 1 com mensagem |
+| `test_e2e_amostra_faltando_em_uma_estratificacao` | estratificação sem a aba pedida é pulada com aviso; as outras seguem |
+| `test_e2e_amostra_vazia_nao_derruba_o_pipeline` | aba `Amostra K` sem obra sorteada vira linha de zeros e zero cenários, não traceback nem "tranche errada" |
 | `test_e2e_tranche_errada` | Painel de outra tranche → exit 1 com a mensagem específica |
 | `test_e2e_sem_entrada` | `Entrada/` vazia → exit 1 dizendo onde pôr o `Lote.xlsx` |
 | `test_e2e_odi_orfa_com_uc_aborta` | órfão com `Cons > 0` → aborta listando as ODIs |
@@ -138,7 +141,8 @@ dias que a de 4). Em produção o parâmetro fica em **1** por decisão G1.
    **do mesmo certame** (tranches diferentes → o programa aborta avisando).
 2. Duplo-clique em `executar.bat`.
 3. Informar o contrato **como está na base** (`ECO 037/2025`) — hífen no lugar da barra
-   também serve. Enter usa os padrões `PA`/`LPT`.
+   também serve. Enter usa os padrões `PA`/`LPT`. Depois, escolher a **amostra**
+   (1 = principal, 2 e 3 = reservas; Enter = 1).
 4. Conferir na tela: UF e tipo resolvidos, as estratificações encontradas, a aba/linha de
    cabeçalho que o Painel usou, e a linha de cada amostra (ODIs, municípios, UCs, km, dias,
    R$), mais avisos de coordenada descartada, pseudo-UC ou estratificação duplicada.

@@ -329,9 +329,11 @@ def juntar_amostras_painel(amostras, ucs):
     sorteada.
     """
     # Fase 1: intersecao zero indica arquivos de tranches diferentes - mensagem especifica.
+    # O 'odis_amostras and' e' essencial: uma amostra legitimamente VAZIA (aba sem obra
+    # sorteada) tambem tem intersecao zero, e acusa-la de tranche errada seria um erro falso.
     odis_painel = set(ucs["ODI"])
     odis_amostras = set().union(*[set(df["ODI"]) for df in amostras.values()])
-    if not odis_amostras & odis_painel:
+    if odis_amostras and not odis_amostras & odis_painel:
         raise EntradaInvalida(
             "Nenhuma ODI das amostras existe no Painel: os arquivos parecem ser de "
             "tranche/UF diferentes.\nConfira se Lote.xlsx e o Painel sao do MESMO certame."
