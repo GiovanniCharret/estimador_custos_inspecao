@@ -5,6 +5,12 @@ import pandas as pd
 # ODIs e coordenadas conhecidas (regiao de Belem-PA, dentro da bbox do Brasil).
 ODIS = ["PA001", "PA002", "PA003", "PA004", "PA005"]
 
+# A MESMA ODI escrita dos dois jeitos que aparecem nas planilhas reais: o Lote guarda
+# TEXTO com zeros a esquerda; o Painel guarda NUMERO. Servem aos testes de normalizacao
+# da chave de juncao (_norm_odi).
+ODIS_LOTE_TEXTO = ["0012500186", "0012500231", "0012500370", "0012500399", "0012500453"]
+ODIS_PAINEL_NUMERO = [12500186, 12500231, 12500370, 12500399, 12500453]
+
 
 def escrever_lote(caminho, abas=(1, 2), odis=ODIS, municipios=None, cons=None):
     """Grava um Lote.xlsx sintetico com abas 'Amostra K' no formato do sistema amostral.
@@ -58,3 +64,44 @@ def escrever_painel(caminho, odis=ODIS, ucs_por_odi=2, municipio="BARCARENA"):
         # Aba de enfeite primeiro: o leitor deve detectar a aba certa pelas colunas.
         pd.DataFrame({"qualquer": [1]}).to_excel(xls, sheet_name="Capa", index=False)
         pd.DataFrame(linhas).to_excel(xls, sheet_name="Base_UC", index=False)
+
+
+def escrever_painel_anexo_v(caminho, odis=ODIS_PAINEL_NUMERO, ucs_por_odi=2, municipio="GURINHÉM"):
+    """Grava um Painel no formato REAL do 'Anexo V - Painel de Monitoramento'.
+
+    Por que existe: o Painel real e' saida do projeto irmao (monitoramentolpt_producao_enbpar)
+    e difere do sintetico simples em tres pontos que ja quebraram a leitura uma vez: a aba
+    'Preenchimento' tem a PRIMEIRA linha mesclada com nomes de grupo (o cabecalho de verdade
+    esta na segunda), as colunas se chamam 'Numero ODI'/'Numero da Unidade Consumidora' em vez
+    de ODI/UC, e a ODI e' NUMERO (enquanto no Lote e' texto com zeros a esquerda). Reproduzir
+    isso numa fixture e' o que impede a regressao sem depender de dados reais (D6).
+
+    Logica: Entrada (caminho, odis, ucs_por_odi, municipio) -> Fase 1: monta as UCs com os
+    cabecalhos por extenso -> Fase 2: grava a tabela a partir da SEGUNDA linha -> Fase 3:
+    escreve e mescla a faixa de grupo na primeira linha -> Saida: .xlsx gravado.
+    """
+    linhas = []
+    # Fase 1: ucs_por_odi UCs por ODI, com os nomes de coluna exatos do Anexo V.
+    for i, odi in enumerate(odis):
+        for j in range(ucs_por_odi):
+            linhas.append({
+                "Distribuidora": "EPB",
+                "Número ODI": odi,
+                "Número da Unidade Consumidora": 4600000 + i * 10 + j,
+                "Município": municipio,
+                "UF": "PB",
+                # Coordenadas na Paraiba (dentro da bbox do Brasil).
+                "Latitude": -7.12 - i * 0.01,
+                "Longitude": -35.35 - j * 0.01,
+            })
+    df = pd.DataFrame(linhas)
+    with pd.ExcelWriter(caminho, engine="openpyxl") as xls:
+        # Fase 2: startrow=1 deixa a primeira linha livre para a faixa de grupo.
+        df.to_excel(xls, sheet_name="Preenchimento", index=False, startrow=1)
+        ws = xls.sheets["Preenchimento"]
+        # Fase 3: faixa mesclada por cima do cabecalho real - e' ela que faz o pandas com
+        # header=0 enxergar 'Identificacao minima' + varias colunas 'Unnamed'.
+        ws.cell(row=1, column=1, value="Identificação mínima")
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=5)
+        ws.cell(row=1, column=6, value="Classificação geral")
+        ws.merge_cells(start_row=1, start_column=6, end_row=1, end_column=len(df.columns))

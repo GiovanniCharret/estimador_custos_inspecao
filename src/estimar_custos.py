@@ -8,7 +8,9 @@ O pipeline inteiro em uma linha:
   Entrada/Lote.xlsx + Painel -> juncao por ODI -> geometria -> custo -> saida/
 """
 from pathlib import Path
+import difflib
 import json
+import re
 import sys
 
 # Garante que 'src' e' importavel quando rodado como script (python src/estimar_custos.py):
@@ -23,6 +25,27 @@ from src.custo import custo_por_odi                                           # 
 from src.resumo import gravar_resumo                                          # noqa: E402
 from src.mapas import gravar_mapa                                             # noqa: E402
 from src import config                                                        # noqa: E402
+
+
+def _chave_contrato(texto):
+    """Reduz o nome de um contrato a uma chave comparavel (maiusculas, separadores unificados).
+
+    Por que existe: o MESMO contrato aparece com separadores diferentes conforme a fonte.
+    A base grafa 'ECO 037/2025' (formato do contrato), enquanto o nome do arquivo do Anexo V
+    traz 'ECO 037-2025' - e e' dali que o usuario copia. Exigir a barra faz o programa recusar
+    um contrato que ele tem. Normalizar os DOIS lados com esta funcao resolve sem afrouxar a
+    exigencia de chave exata: continua sendo casamento 1-para-1, so que insensivel ao separador.
+
+    Logica: Entrada (texto) -> Fase 1: tira o BOM (que o terminal do Windows cola no inicio de
+    texto colado/canalizado), espacos das pontas e sobe a caixa -> Fase 2: colapsa qualquer
+    corrida de espaco, hifen ou barra num unico espaco -> Saida: chave canonica.
+    """
+    # Fase 1: BOM fora, espacos das pontas fora, caixa alta.
+    s = str(texto).replace("﻿", "").strip().upper()
+    # Fase 2: hifen, barra e espacos sao o MESMO separador para efeito de comparacao.
+    # (Verificado contra a base real: as 113 chaves continuam unicas apos esta reducao,
+    # inclusive a unica com hifen no prefixo, 'ECFS-332/2013'.)
+    return re.sub(r"[\s\-/]+", " ", s).strip()
 
 
 def _resolver_contrato(raiz, contrato):
@@ -55,17 +78,27 @@ def _resolver_contrato(raiz, contrato):
         )
     # Le o JSON de contratos (chave = nome do contrato; campos uf/tipo_contrato/vigente).
     base = json.loads(caminho.read_text(encoding="utf-8"))
-    # Fase 3: exige chave exata; digitacao aproximada nao vale para nao precificar o contrato errado.
-    if contrato not in base:
-        # Sugere chaves que compartilham o primeiro token (ex.: 'ECM'); se nada casar, mostra as 5 primeiras.
-        parecidas = [c for c in base if contrato.split()[0] in c][:5] or list(base)[:5]
+    # Fase 3: indexa a base pela chave canonica e busca o contrato informado pela mesma regra -
+    # continua sendo casamento exato, so que 'ECO 037-2025' e 'ECO 037/2025' viram a mesma chave.
+    indice = {_chave_contrato(c): c for c in base}
+    procurado = _chave_contrato(contrato)
+    if procurado not in indice:
+        # Sugestoes por semelhanca sobre as chaves canonicas (o filtro antigo, por primeiro token
+        # literal, devolvia 'ECFS...' para quem digitou 'ECO' - sugestao inutil).
+        parecidas = [indice[c] for c in difflib.get_close_matches(procurado, indice, n=5, cutoff=0.5)]
+        # Sem nenhuma parecida, cai no primeiro token (ex.: todas as 'ECO') e por fim nas 5 primeiras.
+        if not parecidas:
+            primeiro = procurado.split()[0] if procurado.split() else ""
+            parecidas = [c for c in base if _chave_contrato(c).startswith(primeiro)][:5] or list(base)[:5]
         raise EntradaInvalida(
             f"Contrato '{contrato}' nao encontrado na base ({len(base)} contratos).\n"
             f"Parecidos: {parecidas}"
         )
-    dados = base[contrato]
+    # Nome como esta gravado na base (pode diferir do digitado no separador).
+    nome_na_base = indice[procurado]
+    dados = base[nome_na_base]
     # Imprime o que foi resolvido: o usuario confere UF/tipo antes de confiar nos numeros.
-    print(f"Contrato {contrato}: UF={dados['uf']}, tipo={dados['tipo_contrato']}, "
+    print(f"Contrato {nome_na_base}: UF={dados['uf']}, tipo={dados['tipo_contrato']}, "
           f"vigente={dados.get('vigente', '?')}")
     # Saida: os dois parametros que o motor de custo precisa do contrato.
     return dados["uf"], dados["tipo_contrato"]

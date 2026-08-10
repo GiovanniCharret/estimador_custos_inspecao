@@ -12,7 +12,8 @@ import pytest
 
 from src import config
 from src.estimar_custos import executar
-from testes.fixtures import escrever_lote, escrever_painel, ODIS
+from testes.fixtures import (escrever_lote, escrever_painel, escrever_painel_anexo_v,
+                             ODIS, ODIS_LOTE_TEXTO)
 
 
 def _monta_entrada(raiz, odis_painel=ODIS, **kwargs_lote):
@@ -179,6 +180,52 @@ def test_e2e_base_de_contratos_ausente(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(config, "ARQUIVO_BASE_CONTRATOS", "nao_existe.json")
     assert executar(tmp_path, contrato="ECM QUALQUER") == 1
     assert "Base de contratos nao encontrada" in capsys.readouterr().out
+
+
+def test_e2e_contrato_aceita_hifen_no_lugar_da_barra(tmp_path, capsys, monkeypatch):
+    # A base grafa 'ECO 037/2025' (formato do contrato) mas o usuario copia 'ECO 037-2025'
+    # do nome do arquivo do Anexo V. As duas formas tem de resolver o MESMO contrato.
+    _monta_entrada(tmp_path)
+    _base_contratos(tmp_path, monkeypatch,
+                    {"ECO 037/2025": {"uf": "PB", "tipo_contrato": "LPT", "vigente": "Andamento"}})
+    assert executar(tmp_path, contrato="ECO 037-2025") == 0
+    saida = capsys.readouterr().out
+    # Imprime o nome COMO ESTA NA BASE, nao como foi digitado (o usuario confere o que casou).
+    assert "Contrato ECO 037/2025" in saida and "PB" in saida
+
+
+def test_e2e_contrato_ignora_bom_e_caixa(tmp_path, monkeypatch):
+    # O terminal do Windows cola um BOM no inicio do texto canalizado; caixa baixa e' erro
+    # de digitacao trivial. Nenhum dos dois pode impedir a resolucao do contrato.
+    _monta_entrada(tmp_path)
+    _base_contratos(tmp_path, monkeypatch,
+                    {"ECO 037/2025": {"uf": "PB", "tipo_contrato": "LPT", "vigente": "Andamento"}})
+    assert executar(tmp_path, contrato="﻿eco 037-2025") == 0
+
+
+def test_e2e_painel_no_formato_anexo_v(tmp_path, capsys):
+    # Pipeline inteiro sobre o formato REAL do Painel (faixa mesclada + cabecalhos por
+    # extenso) com ODI texto-com-zeros no Lote e numerica no Painel: e' a combinacao que
+    # travou a primeira execucao com dados reais.
+    (tmp_path / "Entrada").mkdir()
+    escrever_lote(tmp_path / "Entrada" / "Lote.xlsx", abas=(1, 2), odis=ODIS_LOTE_TEXTO,
+                  municipios={odi: "GURINHEM" for odi in ODIS_LOTE_TEXTO})
+    escrever_painel_anexo_v(tmp_path / "Entrada" / "Painel de Monitoramento T.xlsx")
+    assert executar(tmp_path) == 0
+    saida = capsys.readouterr().out
+    # Diz de qual aba/linha leu (com duas linhas de cabecalho possiveis, isso precisa ser visivel).
+    assert "cabecalho na linha 2" in saida
+    # 5 ODIs x 2 UCs por amostra chegaram ate o motor de custo.
+    assert "5 ODIs / 10 UCs" in saida
+    assert (tmp_path / "saida" / "Resumo_Custos.xlsx").exists()
+
+
+def test_e2e_lote_alternativo_na_entrada_gera_aviso(tmp_path, capsys):
+    # Estratos 4/5 esquecidos na Entrada/ sao ignorados - mas nunca em silencio.
+    _monta_entrada(tmp_path)
+    escrever_lote(tmp_path / "Entrada" / "Estratos 5 - Python.xlsx", abas=(1,))
+    assert executar(tmp_path) == 0
+    assert "Estratos 5 - Python.xlsx" in capsys.readouterr().out
 
 
 def test_e2e_determinismo(tmp_path):

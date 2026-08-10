@@ -31,15 +31,22 @@ x F4 — `custo.py`: fórmula aprovada na F1, parâmetros só em `config.py` —
 x F5 — `resumo.py`: `saida/Resumo_Custos.xlsx` (agregado por estrato + detalhe por ODI, por amostra) — commit `3ec9bdf`
 x F6 — `mapas.py`: `saida/Mapa_Amostra_K.html` (folium, camadas por estrato, popup com custo) — commit `eb627ad`
 x F7 — Orquestrador + e2e (feliz e bordas) + `TESTES.md` + status report HTML — 2026-08-07
+x F8 — Adequação ao formato REAL de entrada (Anexo V do projeto irmão) após a 1ª execução
+    com dados de verdade — 2026-08-10
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
 > conferindo código + git log. A F7 foi executada em seguida na mesma sessão.
 > **Estado verificado: 38 testes passando; `executar.bat` roda ponta a ponta.**
 >
-> **Todas as macrofases estão fechadas do lado do código. O que falta é humano:**
-> nenhum `Lote.xlsx`/Painel **real** passou pelo programa até hoje (`Entrada/` está vazia) —
-> ver `definition of done.md` e `planning/html/STATUS_F7.html`.
+> **Nota de acompanhamento (2026-08-10):** o humano colocou os arquivos reais na `Entrada/`
+> e a execução travou. Três bloqueios de formato + dois defeitos latentes foram corrigidos
+> na **F8**; o programa agora roda ponta a ponta com dados de verdade (contrato `ECO 037/2025`,
+> ENERGISA/PB, 26 ODIs por amostra, 0 órfãos). **48 testes passando.**
+> Detalhes em `planning/TESTES.md` § "Primeira execução com dados reais".
+>
+> **Falta só conferência humana com o olho:** F5 (comparar o `Resumo_Custos.xlsx` com o
+> gabarito de 24/02) e F6 (abrir um mapa no browser) — ver `definition of done.md`.
 
 ## Decisões e pendências
 
@@ -54,5 +61,13 @@ x F7 — Orquestrador + e2e (feliz e bordas) + `TESTES.md` + status report HTML 
   - **G4 (velocidade/fator rodoviário):** mantidos como parâmetros a calibrar (`VELOCIDADE_KMH = 45`, `FATOR_RODOVIARIO = 1.40`); aprimoramento futuro.
   - **G5 (produtividade):** substitui HORAS_POR_UC único por **`UCS_POR_DIA = {"LPT": 30, "MLA": 3}`** (LPT = obras com rede/transformador; MLA = fotovoltaico remoto) × `HORAS_DIA_CAMPO = 8`. O tipo do contrato vem do `base_contratos.json`.
 - **Regra do órfão (assumida, não contestada no gate):** ODI sem coordenada no painel aborta SÓ se tiver UCs (`Cons. > 0`); com `Cons. = 0` (obra sem UC, ex.: reforço de rede) → aviso + fallback centroide do município. Afeta T3.
-- **Pendência (F2):** validar o formato real de `Lote.xlsx`/Painel quando o humano colocar os arquivos em `Entrada/`.
+- **RESOLVIDO (F2/F8, 2026-08-10):** o formato real foi validado. O `Lote.xlsx` passou sem
+  alteração; o Painel real é o **"Anexo V - Painel de Monitoramento"**, saída do projeto irmão
+  `monitoramentolpt_producao_enbpar`, cujos cabeçalhos são **pétreos** (decisão do humano:
+  tabela de apelidos fixa, sem varredura de layout). Exigiu: cabeçalho na 2ª linha (1ª é faixa
+  mesclada), `ALIAS_PAINEL` (`Número ODI`, `Número da Unidade Consumidora`), normalização da
+  chave ODI (Lote texto × Painel número) e comparação de município sem acento.
+- **Pendência (modelo, aberta pelos dados reais):** a decisão G3 faz uma ida-e-volta da capital
+  **por município**; com 26 ODIs em 25 municípios isso vira ~88% do custo da amostra. Confirmar
+  com o humano se a inspeção real encadeia municípios numa viagem só (mudaria `custo.py`, não `config.py`).
 - **Pendência (pós-plano):** escrever `planning/ADVERSARIAL_REVIEW.md` (D8).

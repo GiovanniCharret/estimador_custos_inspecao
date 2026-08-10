@@ -31,18 +31,23 @@ Entrada/*Painel de Monitoramento*.xlsx (LATITUDE/LONGITUDE por UC)
 Cada estrato gera 3 amostras (1 principal + 2 reservas). **`ODI` é a chave de junção**
 entre amostras, coordenadas e custos; uma ODI tem N UCs (unidades consumidoras).
 
-## Estado atual (2026-08-07)
+## Estado atual (2026-08-10)
 
-**Fases F0–F7 completas e commitadas; 38 testes passando.** O pipeline roda ponta a ponta:
-`executar.bat` → `_exec.ps1` → `src/estimar_custos.py` → `saida/`.
+**Fases F0–F8 completas e commitadas; 48 testes passando.** O pipeline roda ponta a ponta
+com **dados reais** (contrato `ECO 037/2025`, ENERGISA/PB): `executar.bat` → `_exec.ps1` →
+`src/estimar_custos.py` → `saida/`.
 
 O orquestrador expõe `executar(raiz, contrato=None) -> int` (0 sucesso / 1 erro de entrada),
 puro e sem stdin — o `__main__` é quem pergunta o contrato. Todo `EntradaInvalida` é
 convertido ali, e só ali, em mensagem + exit 1.
 
-**O que falta é conferência humana, não código:** nenhum `Lote.xlsx`/Painel real passou pelo
-programa até hoje (`Entrada/` está vazia). Roteiro em `planning/TESTES.md`; pendências em
-`planning/definition of done.md` e `planning/html/STATUS_F7.html`.
+**O que falta é conferência humana com o olho, não código:** comparar o `Resumo_Custos.xlsx`
+gerado com o gabarito de 24/02 (F5) e abrir um mapa no browser (F6). Ver
+`planning/definition of done.md` § Placar e `planning/TESTES.md`.
+
+Pendência de **modelo**, aberta pelos dados reais: a decisão G3 faz uma ida-e-volta da capital
+por município; com 26 ODIs em 25 municípios, deslocamento vira ~88% do custo da amostra. Está
+correto conforme aprovado na F1, mas não foi confirmado contra a prática de campo.
 
 Armadilha de leitura da saída: **somar a coluna de custo da aba `Detalhe K` não dá o custo da
 amostra** — o detalhe é só campo; o fixo de escritório entra por estrato. O número válido é a
@@ -112,8 +117,27 @@ Detalhes que não se deduzem lendo um arquivo só:
   para `dist_interna_km`. Mesmo nome, escala diferente — não compare os dois níveis direto.
 - **`custo.py` importa `_rota_vizinho_mais_proximo` (privada) de `distancias.py`**: a mesma rota gulosa
   serve o percurso entre UCs de uma ODI e os saltos entre ODIs de um município. Renomeá-la quebra `custo.py`.
-- **`ler_painel` para na PRIMEIRA aba** que tenha `ODI` + `LATITUDE` + `LONGITUDE` — a ordem das abas
-  do painel importa. `ler_amostras`, por outro lado, processa todas as abas `Amostra K` que existirem.
+- **`ler_painel` para na PRIMEIRA combinação (aba × linha de cabeçalho)** que produza
+  `odi` + `latitude` + `longitude` — a ordem das abas do painel importa. `ler_amostras`, por
+  outro lado, processa todas as abas `Amostra K` que existirem.
+- **O Painel real tem DUAS linhas de cabeçalho.** O `Anexo V - Painel de Monitoramento` (saída do
+  projeto irmão `monitoramentolpt_producao_enbpar`) traz na 1ª linha da aba `Preenchimento` uma
+  faixa **mesclada** de grupos (`Identificação mínima` / `Classificação geral`); o cabeçalho real
+  está na 2ª. Por isso `LINHAS_CABECALHO_PAINEL = (0, 1)`. Os nomes de coluna daquele projeto são
+  **pétreos** (confirmado pelo humano) — daí `ALIAS_PAINEL` ser uma tabela fixa (`Número ODI`,
+  `Número da Unidade Consumidora`) em vez de uma varredura heurística de layout.
+- **`_norm_odi` é o que faz a junção funcionar.** A mesma ODI é TEXTO com zeros à esquerda no Lote
+  (`'0012500186'`) e NÚMERO no Painel (`12500186`, às vezes float). Sem normalizar os dois lados,
+  basta uma célula suja no Lote para a interseção dar zero e o programa acusar "tranche errada" —
+  um erro **falso** e desnorteante. IDs não numéricos (fixtures `PA001`) passam intactos.
+- **Município compara com `_norm`, não com `upper()`**: Lote grava `GURINHEM`, Painel `GURINHÉM`.
+  Só a comparação sem acento evita o falso "município sem nenhuma UC no Painel" na regra do órfão.
+- **Outros `.xlsx` com abas `Amostra K` na `Entrada/` são ignorados com AVISO** (`_avisar_lotes_ignorados`).
+  O sistema upstream gera `Estratos 4/5/6 - Python.xlsx` e é natural sobrar algum lá; sem o aviso,
+  o programa precificaria a estratificação errada em silêncio.
+- **O nome do contrato aceita `-` ou `/`** (`_chave_contrato` colapsa espaço/hífen/barra e remove BOM):
+  a base grafa `ECO 037/2025`, mas o usuário copia `ECO 037-2025` do nome do arquivo do Anexo V.
+  Continua sendo casamento exato — verificado que as 113 chaves seguem únicas após a redução.
 - **`Cons` é opcional no Lote**: ausente vira `0`, o que joga *toda* ODI órfã na regra do fallback
   (pseudo-UC no centroide municipal) em vez do caminho de erro. Painel incompleto passa despercebido.
 - **A linha `TOTAL` soma `custo_fixo_os` de todos os estratos** (N estratos × 36h × tarifa), o que é o
@@ -161,7 +185,8 @@ contrato informado. Dois cuidados:
 
 O programa lê **só de `Entrada/`** — dois arquivos por convenção de nome (D7):
 `Lote.xlsx` (abas `Amostra K`, coluna `STATUS`) e um `*Painel de Monitoramento*.xlsx`
-(qualquer aba com `ODI` + `LATITUDE` + `LONGITUDE`; a aba é detectada pelas colunas, não pelo nome).
+(a aba é detectada pelas colunas, não pelo nome; ver as regras de cabeçalho/apelido acima).
+Na prática o painel é o `Anexo V - Painel de Monitoramento preenchido - <CONTRATO>.xlsx`.
 `Entrada/` e `saida/` estão no `.gitignore` (conterão dados reais da distribuidora).
 
 `minhas_notas/` é material de **pesquisa**, nunca entrada de execução:

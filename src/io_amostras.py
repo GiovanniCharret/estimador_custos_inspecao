@@ -7,6 +7,32 @@ import pandas as pd
 # Bounding box aproximada do Brasil: coordenada fora daqui e' erro de digitacao/projecao.
 BBOX_BRASIL = {"lat_min": -34.0, "lat_max": 5.5, "lon_min": -74.0, "lon_max": -34.0}
 
+# Apelidos de cabecalho do Painel: nome real (ja normalizado por _norm) -> nome interno.
+# Por que existe: o Painel real e' o "Anexo V - Painel de Monitoramento", saida do projeto
+# irmao (monitoramentolpt_producao_enbpar), cujos cabecalhos sao PETREOS - 'Numero ODI' e
+# 'Numero da Unidade Consumidora' em vez de 'ODI'/'UC'. Mapear aqui evita espalhar
+# condicionais de nome pelo leitor e aceita tambem os paineis antigos (que ja usavam ODI/UC).
+ALIAS_PAINEL = {
+    "odi": "odi",
+    "numero odi": "odi",
+    "n odi": "odi",
+    "uc": "uc",
+    "numero da unidade consumidora": "uc",
+    "numero da uc": "uc",
+    "municipio": "municipio",
+    "latitude": "latitude",
+    "longitude": "longitude",
+}
+
+# Colunas sem as quais o Painel nao serve para nada (a UC e o municipio sao opcionais).
+COLUNAS_MINIMAS_PAINEL = {"odi", "latitude", "longitude"}
+
+# Linhas de cabecalho testadas no Painel, nesta ordem. A 0 cobre o formato simples
+# (e todos os testes sinteticos); a 1 cobre o Anexo V real, cuja primeira linha e' uma
+# faixa MESCLADA de grupos ('Identificacao minima' / 'Classificacao geral') e o cabecalho
+# de verdade mora na segunda linha.
+LINHAS_CABECALHO_PAINEL = (0, 1)
+
 
 class EntradaInvalida(Exception):
     """Erro de entrada com mensagem pronta para o usuario final.
@@ -39,8 +65,41 @@ def achar_entradas(pasta):
     if len(paineis) > 1:
         nomes = "\n  - ".join(p.name for p in paineis)
         raise EntradaInvalida(f"Mais de um Painel de Monitoramento em {pasta}:\n  - {nomes}\nDeixe apenas um.")
+    # Fase 3: avisa sobre outras planilhas de amostra na pasta (ignoradas em silencio ate aqui).
+    _avisar_lotes_ignorados(pasta, lote, paineis[0])
     # Saida: os dois caminhos validados.
     return lote, paineis[0]
+
+
+def _avisar_lotes_ignorados(pasta, lote, painel):
+    """Avisa que outros .xlsx com abas 'Amostra K' na Entrada/ NAO serao lidos.
+
+    Por que existe: o sistema amostral upstream gera um arquivo por numero de estratos
+    ('Estratos 4 - Python.xlsx', 'Estratos 5 - Python.xlsx', ...) e e' natural o usuario
+    largar varios na Entrada/. O programa le SO o Lote.xlsx; sem este aviso ele
+    precificaria a estratificacao errada sem que ninguem percebesse - limitacao silenciosa,
+    o que a convencao do projeto proibe.
+
+    Logica: Entrada (pasta, lote, painel) -> Fase 1: varre os .xlsx da pasta pulando os dois
+    ja escolhidos e os temporarios do Excel -> Fase 2: le so os NOMES das abas de cada um
+    -> Fase 3: imprime um AVISO por arquivo que tenha aba 'Amostra K' -> Saida: None (efeito
+    e' so o aviso impresso).
+    """
+    # Fase 1: candidatos = todo .xlsx da pasta que nao seja o Lote, o Painel ou um ~$temporario.
+    for arquivo in sorted(Path(pasta).glob("*.xlsx")):
+        if arquivo.name.startswith("~$") or arquivo == lote or arquivo == painel:
+            continue
+        # Fase 2: le apenas a lista de abas; qualquer falha de leitura e' irrelevante aqui
+        # (o arquivo nao e' entrada do programa) e nao pode derrubar a execucao.
+        try:
+            abas = pd.ExcelFile(arquivo).sheet_names
+        except Exception:
+            continue
+        # Fase 3: tem aba 'Amostra K'? entao e' uma estratificacao alternativa sendo ignorada.
+        if any(re.fullmatch(r"Amostra\s*\d+", str(a).strip()) for a in abas):
+            print(f"AVISO: {arquivo.name} tambem tem abas 'Amostra K' e sera IGNORADO - "
+                  f"o programa le apenas Lote.xlsx. Se e' este que voce quer precificar, "
+                  f"renomeie-o para Lote.xlsx.")
 
 
 def _norm(nome):
@@ -59,6 +118,34 @@ def _norm(nome):
     s = s.translate(tabela)
     # Fase 3: remove ponto final (cabecalhos como 'Cons.' viram 'cons').
     return s.rstrip(".")
+
+
+def _norm_odi(valor):
+    """Normaliza uma ODI para a forma canonica de juncao (so digitos, sem zeros a esquerda).
+
+    Por que existe: a MESMA ODI chega escrita de dois jeitos. No Lote.xlsx ela e' TEXTO com
+    zeros a esquerda ('0012500186'); no Painel e' NUMERO ('12500186', que o pandas pode ainda
+    entregar como float '12500186.0'). Sem normalizar, a juncao por ODI depende de o pandas ter
+    convertido a coluna inteira para inteiro - basta uma celula suja no Lote para a coluna virar
+    texto, a intersecao dar zero e o programa acusar 'tranche errada', que e' um erro FALSO e
+    muito confuso. Normalizar os dois lados torna a chave imune a como cada planilha guardou.
+
+    Logica: Entrada (valor de celula) -> Fase 1: string sem espacos nas pontas -> Fase 2: se veio
+    como float inteiro ('12500186.0'), corta a parte decimal -> Fase 3: se sobrou so digitos,
+    remove zeros a esquerda -> Saida: chave canonica. IDs nao numericos (ex.: 'PA001' das
+    fixtures) passam intactos, pois neles o zero a esquerda pode ser significativo.
+    """
+    # Fase 1: garante string e tira espacos nas pontas.
+    s = str(valor).strip()
+    # Fase 2: float inteiro vindo do Excel ('12500186.0') volta a ser inteiro textual.
+    if re.fullmatch(r"\d+\.0+", s):
+        s = s.split(".")[0]
+    # Fase 3: so mexe em ODI puramente numerica; 'PA001' fica como esta.
+    if re.fullmatch(r"\d+", s):
+        # O 'or "0"' protege o caso degenerado '000' (viraria string vazia).
+        s = s.lstrip("0") or "0"
+    # Saida: chave pronta para comparar entre Lote e Painel.
+    return s
 
 
 def ler_amostras(caminho):
@@ -88,9 +175,11 @@ def ler_amostras(caminho):
             raise EntradaInvalida(f"Aba '{aba}' sem colunas obrigatorias: {faltam}.\nColunas: {list(df.columns)}")
         # Filtra apenas as obras sorteadas (STATUS == 'Selecionado').
         sel = df[df[colmap["status"]].astype(str).str.strip() == "Selecionado"]
-        # Projeta e renomeia para o contrato interno (ODI como str preserva zeros a esquerda).
+        # Projeta e renomeia para o contrato interno. A ODI passa por _norm_odi para casar
+        # com a do Painel: aqui ela vem como texto com zeros a esquerda ('0012500186'),
+        # la vem como numero - sem normalizar, a juncao falharia por formato, nao por dado.
         resultado[k] = pd.DataFrame({
-            "ODI": sel[colmap["odi"]].astype(str).str.strip(),
+            "ODI": sel[colmap["odi"]].map(_norm_odi),
             "Estrato": sel[colmap["estrato"]].astype(int),
             "Municipio": sel[colmap["municipio"]].astype(str).str.strip() if "municipio" in colmap else "",
             # Cons ('Cons.' no Lote real) = numero de UCs da obra; 0 quando a coluna nao existe
@@ -106,25 +195,49 @@ def ler_painel(caminho):
 
     Por que existe: o painel real tem varias abas; detectar a aba certa pelas colunas
     (ODI + latitude + longitude) evita depender do nome da aba, que varia entre tranches.
+    Alem disso o Anexo V real tem DUAS linhas de cabecalho (a primeira e' uma faixa mesclada
+    de grupos) e nomeia as colunas por extenso - por isso a busca testa mais de uma linha de
+    cabecalho e traduz os nomes por ALIAS_PAINEL.
 
-    Logica: Entrada (caminho) -> Fase 1: acha a primeira aba com as colunas necessarias
-    -> Fase 2: projeta ODI/UC/Municipio/lat/long -> Fase 3: descarta coordenadas invalidas
-    com aviso -> Saida: df de UCs validas.
+    Logica: Entrada (caminho) -> Fase 1: para cada aba, tenta cada linha de cabecalho de
+    LINHAS_CABECALHO_PAINEL e para na primeira combinacao que produza ODI+lat+long ->
+    Fase 2: projeta ODI/UC/Municipio/lat/long (ODI normalizada por _norm_odi) -> Fase 3:
+    descarta coordenadas invalidas com aviso -> Saida: df de UCs validas.
     """
     xls = pd.ExcelFile(caminho)
-    # Fase 1: varre as abas procurando uma que tenha ODI, latitude e longitude.
+    achado = None
+    # Fase 1: varre aba x linha-de-cabecalho procurando ODI + latitude + longitude.
     for aba in xls.sheet_names:
-        df = xls.parse(aba)
-        colmap = {_norm(c): c for c in df.columns}
-        if {"odi", "latitude", "longitude"} <= set(colmap):
+        for linha_cabecalho in LINHAS_CABECALHO_PAINEL:
+            df = xls.parse(aba, header=linha_cabecalho)
+            # Traduz cada cabecalho real pelo apelido; o 'not in' preserva a PRIMEIRA
+            # coluna que reivindicar cada papel (evita uma coluna posterior sobrescrever).
+            colmap = {}
+            for coluna in df.columns:
+                interno = ALIAS_PAINEL.get(_norm(coluna))
+                if interno and interno not in colmap:
+                    colmap[interno] = coluna
+            if COLUNAS_MINIMAS_PAINEL <= set(colmap):
+                achado = (aba, linha_cabecalho, df, colmap)
+                break
+        if achado:
             break
-    else:
-        raise EntradaInvalida(f"Nenhuma aba de {caminho.name} tem colunas ODI/LATITUDE/LONGITUDE.")
+    if achado is None:
+        raise EntradaInvalida(
+            f"Nenhuma aba de {caminho.name} tem colunas de ODI/LATITUDE/LONGITUDE.\n"
+            f"Abas vistas: {xls.sheet_names}\n"
+            f"Cabecalhos aceitos para a ODI: {sorted(a for a, i in ALIAS_PAINEL.items() if i == 'odi')}."
+        )
+    aba, linha_cabecalho, df, colmap = achado
+    # Diz de onde os dados vieram: com duas linhas de cabecalho possiveis, o usuario precisa
+    # poder conferir que o programa leu a linha certa.
+    print(f"Painel: aba '{aba}' (cabecalho na linha {linha_cabecalho + 1}), {len(df)} linha(s).")
     # Fase 2: projeta para o contrato interno; UC pode nao existir (usa o indice como id).
     # Municipio tambem e' projetado (quando existir): a regra do orfao com Cons==0 precisa dele
     # para achar o centroide das UCs do mesmo municipio no painel (ver juntar_amostras_painel).
     ucs = pd.DataFrame({
-        "ODI": df[colmap["odi"]].astype(str).str.strip(),
+        # Mesma normalizacao aplicada no Lote: e' o que faz a chave casar entre as duas planilhas.
+        "ODI": df[colmap["odi"]].map(_norm_odi),
         "UC": df[colmap["uc"]].astype(str).str.strip() if "uc" in colmap else df.index.astype(str),
         "Municipio": df[colmap["municipio"]].astype(str).str.strip() if "municipio" in colmap else "",
         "LATITUDE": pd.to_numeric(df[colmap["latitude"]], errors="coerce"),
@@ -185,10 +298,12 @@ def juntar_amostras_painel(amostras, ucs):
                 orfaos_com_uc_esperada.append(odi)
                 continue
             # Cons == 0 (obra sem UC, ex.: reforco de rede): busca UCs do mesmo municipio no
-            # painel para calcular o centroide (comparacao sem acento/caixa nao e' necessaria
-            # aqui pois ambos vem da mesma normalizacao de string; usamos upper+strip por seguranca).
+            # painel para calcular o centroide. A comparacao passa por _norm (minusculas, SEM
+            # acento) porque as duas planilhas grafam diferente: o Lote traz 'GURINHEM' e o
+            # Painel traz 'GURINHÉM' - comparar so com upper/strip acusaria falsamente
+            # "municipio sem nenhuma UC no Painel" e abortaria uma amostra sadia.
             municipio = linha["Municipio"]
-            candidatas = ucs[ucs["Municipio"].astype(str).str.upper().str.strip() == str(municipio).upper().strip()]
+            candidatas = ucs[ucs["Municipio"].map(_norm) == _norm(municipio)]
             if candidatas.empty:
                 # Nem o municipio tem UC no painel: nao ha centroide possivel - candidato a erro
                 # (coletado aqui, NAO lancado direto, para poder ser listado junto dos demais).
