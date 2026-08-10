@@ -132,6 +132,68 @@ def montar_roteiro(df_odis, lat_origem, lon_origem):
     return r.sort_values("ordem").reset_index(drop=True), km_total
 
 
+def dividir_roteiro(df_odis, lat_origem, lon_origem, n_equipes):
+    """Reparte as obras entre N equipes e devolve o roteiro de cada uma.
+
+    Por que existe: com mais de uma equipe a pergunta "por onde cada uma passa" so tem
+    resposta se o trabalho for de fato repartido. O custo (custo.py) trata o trabalho como
+    perfeitamente divisivel - uma aproximacao boa para R$, mas que nao desenha nada. Esta
+    funcao produz a divisao concreta que o mapa mostra, e de quebra revela o preco real de
+    dividir: cada equipe tem de sair da capital e voltar, entao a quilometragem SOMADA de
+    N equipes e' sempre maior que a de uma equipe so.
+
+    Como divide: o itinerario de uma equipe ja sai em ordem geografica (montar_roteiro
+    encadeia municipio a municipio), entao basta cortar essa ordem em N blocos CONTIGUOS -
+    cada equipe fica com uma regiao, e nenhum municipio e' partido entre duas. Os cortes
+    equilibram a quilometragem acumulada, nao a contagem de obras: 10 obras vizinhas dao
+    menos trabalho que 3 espalhadas.
+
+    Logica: Entrada (df por ODI, origem, n_equipes) -> Fase 1: uma equipe (ou uma obra so)
+    e' o caso trivial -> Fase 2: monta o itinerario de referencia e acumula o km de cada
+    parada -> Fase 3: corta em N blocos de km acumulado parecido -> Fase 4: remonta o
+    roteiro de cada bloco a partir da capital -> Saida: lista de (roteiro, km), uma por
+    equipe, na ordem em que aparecem no itinerario de referencia.
+    """
+    # Fase 1: sem divisao a fazer - devolve o roteiro unico dentro de uma lista de um item.
+    n_equipes = int(n_equipes)
+    if n_equipes <= 1 or len(df_odis) <= 1:
+        return [montar_roteiro(df_odis, lat_origem, lon_origem)]
+    # Fase 2: itinerario de referencia (ja em ordem geografica) e o km acumulado ate cada parada.
+    base, _ = montar_roteiro(df_odis, lat_origem, lon_origem)
+    # Carga de cada parada = trecho ate ela + percurso interno entre as UCs da obra.
+    carga = (base["km_trecho"] + base["dist_interna_km"]).to_numpy()
+    total = float(carga.sum())
+    # Mais equipes que obras: cada equipe pega no maximo uma obra, as excedentes ficam de fora.
+    n_equipes = min(n_equipes, len(base))
+    # Fase 3: percorre a ordem acumulando ate fechar a cota de cada bloco.
+    blocos = []
+    inicio = 0
+    acumulado = 0.0
+    for i, valor in enumerate(carga):
+        acumulado += float(valor)
+        # Cota do bloco atual = fatia proporcional do total; o ultimo bloco leva o resto.
+        cota = total * (len(blocos) + 1) / n_equipes
+        faltam_blocos = n_equipes - len(blocos) - 1
+        restantes = len(carga) - i - 1
+        # Nao ha mais bloco a fechar, ou nao sobram obras para os blocos seguintes.
+        if faltam_blocos <= 0 or restantes < faltam_blocos:
+            continue
+        # Fecha o bloco quando a cota foi atingida OU quando as obras restantes sao
+        # exatamente as necessarias para os blocos que faltam. Sem esta segunda condicao a
+        # funcao devolveria MENOS rotas que equipes pedidas sempre que a cota nao fosse
+        # atingida a tempo - com 2 obras e 2 equipes, a primeira obra quase nunca chega
+        # a metade do percurso e as duas acabavam na mesma equipe.
+        if acumulado >= cota or restantes == faltam_blocos:
+            blocos.append(base.iloc[inicio:i + 1])
+            inicio = i + 1
+    # O que sobrou vai para a ultima equipe (garante que nenhuma obra fique sem dono).
+    if inicio < len(base):
+        blocos.append(base.iloc[inicio:])
+    # Fase 4: cada bloco vira um roteiro proprio, saindo da capital e voltando a ela.
+    # Remontar (em vez de reaproveitar os trechos) e' o que cobra a ida e a volta de cada equipe.
+    return [montar_roteiro(bloco.reset_index(drop=True), lat_origem, lon_origem) for bloco in blocos]
+
+
 def resumo_por_odi(df_ucs):
     """Reduz o df de UCs a uma linha por ODI com centroide e percurso interno.
 

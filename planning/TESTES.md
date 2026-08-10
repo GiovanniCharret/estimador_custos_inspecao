@@ -1,6 +1,6 @@
 # TESTES — mapa da suíte do estimador
 
-Atualizado em 2026-08-10 (F10 — escolha da amostra + cenários). **74 testes, todos passando.**
+Atualizado em 2026-08-10 (F11 — rotas por equipe no mapa). **82 testes, todos passando.**
 
 Nenhum teste depende de `minhas_notas/` nem de `Entrada/` (decisão D6): as planilhas
 são geradas sinteticamente em `tmp_path` por `testes/fixtures.py`. Isso é o que permite
@@ -25,11 +25,11 @@ rodar a suíte numa máquina limpa, sem os dados reais da distribuidora.
 | --- | --- | --- | --- |
 | `test_smoke.py` | 1 | F0 | ambiente: pandas/numpy/openpyxl/folium importam |
 | `test_io_amostras.py` | 25 | F2/F8/F9 | descoberta de **N estratificações** na `Entrada/` (ordem, duplicata, N do Leia-me → nome → contagem), painel ausente/ambíguo, ler abas `Amostra K`, filtro `STATUS`, `Cons` ausente, bbox do Brasil, os **3 ramos da regra do órfão**, e o **formato real do Anexo V** (cabeçalho na 2ª linha, apelidos de coluna, ODI texto × numérica, município com acento) |
-| `test_distancias.py` | 9 | F3/F9 | haversine contra valor conhecido (Belém→Castanhal ≈ 62 km), ponto igual = 0, centroide/rota interna, ODI com 1 UC, e o **roteiro encadeado** (permutação completa, município não é revisitado, km fecha com trechos + volta, determinismo, amostra vazia) |
+| `test_distancias.py` | 14 | F3/F9/F11 | haversine contra valor conhecido (Belém→Castanhal ≈ 62 km), ponto igual = 0, centroide/rota interna, ODI com 1 UC, o **roteiro encadeado** (permutação completa, município não é revisitado, km fecha com trechos + volta, determinismo, amostra vazia) e a **divisão entre equipes** (toda obra tem dono, dividir soma mais km, 1 equipe = roteiro inteiro, mais equipes que obras, determinismo) |
 | `test_custo.py` | 10 | F4/F9/F10 | fórmula da amostra com parâmetros redondos, roteiro < ida-e-volta, **fixo independente do nº de estratos**, LPT × MLA, arredondamento de dias, **dobrar a equipe = metade dos dias e não metade do custo**, **cenários de prazo**, **reprodução da fórmula do benchmark**, diária diluída |
 | `test_resumo.py` | 5 | F5/F9/F10 | as 4 abas fixas, ordem por estratificação, aba `Cenarios` casando com o `Resumo`, ordem do roteiro no detalhe, Leia-me com os parâmetros vigentes, `PermissionError` → mensagem amigável |
-| `test_mapas.py` | 2 | F6/F9 | camada por **amostra** (e não por estrato) lida do `LayerControl`, polilinha do roteiro, marcador da base, popup com a ordem da parada |
-| `test_e2e.py` | 22 | F7/F8/F9/F10 | pipeline inteiro `Entrada/` → `saida/` (abaixo) |
+| `test_mapas.py` | 4 | F6/F9/F11 | **radio por nº de equipes** (`GroupedLayerControl`) com o km no rótulo, uma polilinha por equipe, marcador da base, popup com equipe + ordem da parada, amostra vazia sem camada |
+| `test_e2e.py` | 23 | F7/F8/F9/F10/F11 | pipeline inteiro `Entrada/` → `saida/` (abaixo) |
 
 ## O que o e2e cobre (F7)
 
@@ -43,6 +43,7 @@ Caminho feliz e as bordas que o `DESIGN.md` §7 elegeu como os erros mais prová
 | `test_e2e_roteiro_encadeado_derruba_a_quilometragem` | o roteiro gravado é menor que a soma das idas-e-voltas do modelo antigo |
 | `test_e2e_estratificacoes_duplicadas_avisam` | dois arquivos com o mesmo N → aviso e uma linha só |
 | `test_e2e_escolha_da_amostra` | a amostra escolhida manda em `Resumo`, `Cenarios`, `Detalhe` e no mapa |
+| `test_e2e_mapa_oferece_os_mesmos_cenarios_de_equipe_da_planilha` | o radio do mapa cobre exatamente os nºs de equipe da aba `Cenarios` — os dois artefatos não podem oferecer opções diferentes |
 | `test_e2e_amostra_inexistente` | pedir a amostra 3 num lote com abas 1 e 2 → exit 1 com mensagem |
 | `test_e2e_amostra_faltando_em_uma_estratificacao` | estratificação sem a aba pedida é pulada com aviso; as outras seguem |
 | `test_e2e_amostra_vazia_nao_derruba_o_pipeline` | aba `Amostra K` sem obra sorteada vira linha de zeros e zero cenários, não traceback nem "tranche errada" |
@@ -148,7 +149,8 @@ dias que a de 4). Em produção o parâmetro fica em **1** por decisão G1.
    R$), mais avisos de coordenada descartada, pseudo-UC ou estratificação duplicada.
 5. Conferir em `saida/`: a aba `Resumo` do `Resumo_Custos.xlsx` contra o benchmark
    `minhas_notas/Tabela_Resumo_Extratos_Amostra.xlsx`, e abrir um `Mapa_Estratos_N.html`
-   no browser ligando/desligando as camadas de amostra e seguindo a linha do roteiro.
+   no browser, alternando o radio "Equipes em campo" e seguindo a linha de cada equipe.
+   O km no rótulo do radio mostra quanto se roda a mais ao dividir o trabalho.
 
 Sinais de que a entrada é que está errada, não o programa: `ERRO DE ENTRADA:` e `AVISO:`.
 Se aparecer **traceback**, é bug do programa — a planilha nunca deve produzir um.

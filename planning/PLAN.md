@@ -37,6 +37,8 @@ x F9 — Reconstrução do modelo contra o benchmark da engenharia: roteiro enca
     amostra (não por estrato), dias inteiros, N estratificações numa planilha só — 2026-08-10
 x F10 — Escolha da amostra (1/2/3, padrão 1) e aba `Cenarios` com prazos alternativos
     (dado o prazo, quantas equipes cabem) — 2026-08-10
+x F11 — Mapa com a divisão real das obras entre equipes e painel de radio por nº de
+    equipes (`dividir_roteiro` + `GroupedLayerControl`) — 2026-08-10
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -98,6 +100,12 @@ x F10 — Escolha da amostra (1/2/3, padrão 1) e aba `Cenarios` com prazos alte
   cada equipe e pelo desperdício de arredondar para dia inteiro.
 - **Decisão (F10):** cada execução precifica **uma** amostra (1, 2 ou 3; padrão 1), porque 2 e 3
   são reservas da 1 e nunca são usadas ao mesmo tempo. `config.AMOSTRA_PADRAO`.
+- **Pendência aberta pela F11 — o custo de dividir não está no custo.** `dividir_roteiro`
+  mediu a divisão real das obras entre equipes: 2 equipes rodam **+18% a +37%** mais km que
+  uma, porque cada uma sai da capital e volta. A aba `Cenarios` ainda assume trabalho
+  perfeitamente divisível, então seus cenários multi-equipe são **otimistas**. O mapa mostra
+  o km real e o `Leia-me` avisa. Decidir se `cenarios_por_prazo` passa a usar a geometria real
+  (encareceria os cenários de prazo curto e daria consistência total entre mapa e planilha).
 - **Correção (F10):** `dias_trabalho` passou a dividir por `TAMANHO_EQUIPE`, como a Fase 6 do
   `MODELO_CUSTO.md` sempre prescreveu. Era invisível com equipe = 1; com equipe = 2 o custo
   dobrava em vez de ficar aproximadamente estável.

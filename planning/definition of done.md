@@ -23,6 +23,14 @@ x F6 — mapas HTML gerados com camadas por estrato e popup de custo; teste pass
 x F7 — e2e feliz + 8 bordas passam (16 testes); `planning/TESTES.md` escrito;
     status report `planning/html/STATUS_F7.html` gerado; `executar.bat` validado
     (sem entrada → "Lote.xlsx nao encontrado", exit 1, sem traceback).
+x F11 — mapa com as rotas por equipe (2026-08-10). Critérios:
+    - `dividir_roteiro` reparte as obras entre N equipes em blocos geográficos contíguos
+      (nenhuma obra sem dono, nenhum município partido) e roteia cada bloco da capital;
+    - o mapa traz um **radio** (`GroupedLayerControl`) com um cenário por nº de equipes,
+      rotulado com o km somado — o painel "Amostra 1" deixou de existir;
+    - uma cor e uma polilinha por equipe, popup dizendo equipe + ordem da parada;
+    - o radio oferece exatamente os nºs de equipe que a aba `Cenarios` propõe;
+    - 82 testes passando e execução real com exit 0.
 x F10 — escolha da amostra + cenários de prazo (2026-08-10). Critérios:
     - o script pergunta qual amostra precificar (1/2/3, Enter = 1) e a escolha vale para a
       planilha inteira: `Resumo`, `Cenarios`, `Detalhe` e mapas;
@@ -53,9 +61,9 @@ x F8 — adequação ao formato REAL de entrada (2026-08-10). Critérios:
 
 ---
 
-## Placar (2026-08-10, pós-F10)
+## Placar (2026-08-10, pós-F11)
 
-**74 testes passando. As 10 macrofases estão fechadas do lado do código, e o programa
+**82 testes passando. As 11 macrofases estão fechadas do lado do código, e o programa
 roda ponta a ponta com dados REAIS de uma tranche.**
 
 O que o programa entrega hoje para o contrato `ECO 037/2025`, **Amostra 1**
@@ -80,6 +88,17 @@ E os prazos alternativos (aba `Cenarios`, exemplo de 3 estratos):
 Repare que **encurtar o prazo encarece** (o contrato paga por hora-profissional, e cada
 equipe traz seu dia de mobilização) e que o custo **não é monótono**: 5 dias sai mais barato
 que 6, porque ambos precisam de 2 equipes e 5 dias é menos dia-equipe.
+
+E o mapa (F11) mostra o que a tabela ainda não cobra — dividir custa quilometragem:
+
+| Estratos | 1 equipe | 2 equipes | 3 equipes |
+| --- | --- | --- | --- |
+| 3 | 1.536 km | 2.100 km (+37%) | 2.501 km (+63%) |
+| 4 | 1.560 km | 1.838 km (+18%) | 2.426 km (+56%) |
+| 5 | 1.059 km | 1.301 km (+23%) | 1.832 km (+73%) |
+
+(km em linha reta, antes do fator rodoviário). Os cenários multi-equipe da aba `Cenarios`
+são portanto **otimistas** — está avisado no `Leia-me` da planilha e no rótulo do radio.
 
 As 2 pendências restantes são de conferência humana com o olho — nenhuma depende de
 escrever mais código:

@@ -33,7 +33,7 @@ entre amostras, coordenadas e custos; uma ODI tem N UCs (unidades consumidoras).
 
 ## Estado atual (2026-08-10)
 
-**Fases F0–F10 completas; 74 testes passando.** O pipeline roda ponta a ponta com **dados reais**
+**Fases F0–F11 completas; 82 testes passando.** O pipeline roda ponta a ponta com **dados reais**
 (contrato `ECO 037/2025`, ENERGISA/PB, 3 estratificações):
 `executar.bat` → `_exec.ps1` → `src/estimar_custos.py` → `saida/`.
 
@@ -90,11 +90,11 @@ Cada seta abaixo é um **contrato de dataframe** — mudar uma coluna quebra o m
 | Módulo | Entrada → Saída |
 | --- | --- |
 | `io_amostras.py` | `Entrada/` → `achar_entradas` → `([(n_estratos, caminho), ...], painel)` (descobre **todas** as estratificações pelo conteúdo) · `ler_n_estratos` · `ler_amostras` `{k: df[ODI,Estrato,Municipio,Cons]}` · `ler_painel` `df[ODI,UC,Municipio,LATITUDE,LONGITUDE]` → `juntar_amostras_painel` `{k: df 1 linha por UC}` |
-| `distancias.py` | df de UCs → `resumo_por_odi` → **1 linha por ODI** (colunas fixas, mesmo vazio): `n_ucs`, `lat_centro`, `lon_centro`, `dist_interna_km` · `montar_roteiro(df_odis, lat0, lon0)` → `(df com ordem/km_trecho, km_total)` = **itinerário único** |
+| `distancias.py` | df de UCs → `resumo_por_odi` → **1 linha por ODI** (colunas fixas, mesmo vazio): `n_ucs`, `lat_centro`, `lon_centro`, `dist_interna_km` · `montar_roteiro(df_odis, lat0, lon0)` → `(df com ordem/km_trecho, km_total)` = **itinerário único** · `dividir_roteiro(..., n_equipes)` → `[(roteiro, km), ...]`, um por equipe |
 | `config.py` | **todos** os números do modelo (G1–G5 do gate F1 + F9). Zero números mágicos fora daqui |
 | `custo.py` | `custo_amostra(df_odis, uf, tipo_contrato)` → `(dict com os números da AMOSTRA, df do roteiro)`. Um call por amostra — não há função por ODI nem por estrato · `cenarios_por_prazo(numeros)` → prazos alternativos (o inverso: dado o prazo, quantas equipes cabem) |
 | `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, cenarios, **números}, ...], caminho)` → `saida/Resumo_Custos.xlsx` com **4 abas fixas**: `Leia-me` + `Resumo` (1 linha por estratificação) + `Cenarios` (prazos alternativos) + `Detalhe` (1 linha por obra, na ordem do roteiro) |
-| `mapas.py` | `gravar_mapa({k: (df_ucs, roteiro)}, lat0, lon0, caminho)` → `saida/Mapa_Estratos_N.html` (folium, FeatureGroup **por amostra**, polilinha do roteiro, marcador da base) |
+| `mapas.py` | `gravar_mapa(df_ucs, {n_equipes: [(roteiro, km), ...]}, lat0, lon0, caminho)` → `saida/Mapa_Estratos_N.html` (folium; **radio por nº de equipes**, uma polilinha e uma cor por equipe, marcador da base) |
 
 Detalhes que não se deduzem lendo um arquivo só:
 
@@ -118,8 +118,17 @@ Detalhes que não se deduzem lendo um arquivo só:
   é o que `test_reproduz_a_formula_do_benchmark_da_engenharia` amarra.
 - **A aba `Cenarios` inverte o cálculo**: o prazo é dado e o nº de equipes se ajusta
   (`equipes = ceil(horas / (jornada × dias))`), varrendo `dias_calculado ± VARIACAO_DIAS_CENARIOS`.
-  Ela assume o trabalho **perfeitamente divisível** entre equipes — na prática cada equipe teria
-  seu próprio roteiro saindo da capital e rodaria mais. Está dito no `Leia-me` da planilha.
+- **`Cenarios` (custo) e o mapa (geometria) discordam de propósito, e isso está documentado.**
+  A aba assume o trabalho **perfeitamente divisível** (N equipes rodam os mesmos km que uma);
+  `dividir_roteiro` faz a divisão real e mostra que 2 equipes rodam **+18% a +37%** mais nos
+  dados reais, porque cada uma sai da capital e volta. Os cenários multi-equipe são portanto
+  **otimistas** — dito no `Leia-me` da planilha e no rótulo do radio do mapa (que traz o km real).
+- **`dividir_roteiro` corta o itinerário em blocos CONTÍGUOS** equilibrados por km acumulado
+  (não por contagem de obras). Como `montar_roteiro` já ordena município a município, os blocos
+  saem geograficamente coerentes e nenhum município é partido entre duas equipes.
+- **O mapa usa `GroupedLayerControl`, não `LayerControl`.** Os cenários precisam ser
+  mutuamente exclusivos (radio), e `FeatureGroup(overlay=False)` os colocaria no mesmo grupo
+  do tile de fundo — trocar de cenário apagaria o mapa. Exige `folium>=0.14`.
 - **O custo não é monótono no prazo** dentro da aba `Cenarios`: encurtar de 6 para 5 dias pode
   *baratear*, porque os dois cenários usam 2 equipes e 5 dias é menos dia-equipe que 6. A coluna
   `Ocupação da equipe` é o que torna isso legível.

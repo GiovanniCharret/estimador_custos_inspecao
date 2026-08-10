@@ -6,6 +6,7 @@ provaveis do usuario final: tranche errada, entrada ausente, ODI orfa (nos dois
 ramos da regra do orfao) e Resumo_Custos.xlsx travado pelo Excel.
 """
 import json
+import re
 
 import pandas as pd
 import pytest
@@ -73,9 +74,9 @@ def test_e2e_escolha_da_amostra(tmp_path):
     caminho = tmp_path / "saida" / "Resumo_Custos.xlsx"
     for aba in ("Resumo", "Cenarios", "Detalhe"):
         assert set(pd.read_excel(caminho, sheet_name=aba)["Amostra"]) == {2}
-    # O mapa da estratificacao mostra a amostra 2, nao a 1.
+    # O mapa nao rotula mais camadas por amostra - a amostra e' unica na execucao inteira.
     html = (tmp_path / "saida" / "Mapa_Estratos_3.html").read_text(encoding="utf-8")
-    assert "Amostra 2" in html and "Amostra 1" not in html
+    assert "Amostra 1" not in html and "Amostra 2" not in html
 
 
 def test_e2e_amostra_inexistente(tmp_path, capsys):
@@ -152,6 +153,20 @@ def test_e2e_roteiro_encadeado_derruba_a_quilometragem(tmp_path):
     assert a1["Roteiro (km estrada)"] < ida_e_volta
     # A ordem do roteiro e' uma numeracao completa das obras da amostra.
     assert sorted(obras["Ordem"]) == list(range(1, len(obras) + 1))
+
+
+def test_e2e_mapa_oferece_os_mesmos_cenarios_de_equipe_da_planilha(tmp_path):
+    # Mapa e planilha tem de falar das MESMAS opcoes: o radio do mapa cobre exatamente os
+    # numeros de equipe que a aba Cenarios chegou a propor.
+    _monta_entrada(tmp_path, municipios={odi: f"MUNICIPIO {i}" for i, odi in enumerate(ODIS)})
+    assert executar(tmp_path) == 0
+    cenarios = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Cenarios")
+    equipes = sorted(set(cenarios[cenarios["Estratos"] == 3]["Equipes"]))
+    html = (tmp_path / "saida" / "Mapa_Estratos_3.html").read_text(encoding="utf-8")
+    rotulos = re.findall(r"(\d+) equipes? - [\d,]+ km", html)
+    assert sorted({int(n) for n in rotulos}) == equipes
+    # E o painel e' de radio (um cenario por vez), com titulo proprio.
+    assert "Equipes em campo" in html and "groupedlayers" in html.lower()
 
 
 def test_e2e_tranche_errada(tmp_path, capsys):

@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Testes do mapa folium: camada por amostra, roteiro desenhado, base da equipe."""
+"""Testes do mapa folium: radio de equipes, roteiro por equipe, base da equipe."""
 import re
 
 import pandas as pd
 
 from src import config
-from src.custo import custo_amostra
+from src.distancias import dividir_roteiro, resumo_por_odi
 from src.mapas import gravar_mapa
 from testes.test_custo import _odis_teste
 
@@ -22,36 +22,57 @@ def _ucs_teste():
     })
 
 
-def _amostras(quantas):
-    """Monta o dict {k: (df_ucs, roteiro)} que gravar_mapa espera."""
-    saida = {}
-    for k in range(1, quantas + 1):
-        _, roteiro = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
-        saida[k] = (_ucs_teste(), roteiro)
-    return saida
+def _rotas(*quantidades_de_equipes):
+    """Monta o dict {n_equipes: [(roteiro, km), ...]} que gravar_mapa espera."""
+    return {n: dividir_roteiro(_odis_teste(), *config.CAPITAIS_UF["PA"], n)
+            for n in quantidades_de_equipes}
 
 
-def test_gravar_mapa_camada_por_amostra(tmp_path):
-    # A camada e' por AMOSTRA (nao por estrato): a comparacao util e' principal x reservas.
+def test_gravar_mapa_radio_por_numero_de_equipes(tmp_path):
+    # O painel oferece um cenario de equipes por vez (radio), nao a amostra.
     destino = tmp_path / "Mapa_Estratos_3.html"
-    gravar_mapa(_amostras(3), *config.CAPITAIS_UF["PA"], destino)
+    gravar_mapa(_ucs_teste(), _rotas(1, 2), *config.CAPITAIS_UF["PA"], destino)
     html = destino.read_text(encoding="utf-8")
     assert destino.exists()
-    # O bloco 'overlays' do LayerControl e' a lista de camadas ligaveis do mapa.
-    overlays = re.search(r"overlays\s*:\s*\{(.*?)\}", html, flags=re.DOTALL).group(1)
-    assert "Amostra 1" in overlays and "Amostra 2" in overlays and "Amostra 3" in overlays
-    # O estrato nao pode mais virar camada (foi o que a F9 simplificou); ele segue
-    # aparecendo no popup do marcador, que e' informacao, nao filtro.
-    assert "Estrato" not in overlays
-    assert "Estrato 1" in html
+    # GroupedLayerControl (radio proprio) e nao o LayerControl padrao, que misturaria
+    # os cenarios com o tile de fundo e apagaria o mapa ao trocar de cenario.
+    assert "groupedlayers" in html.lower()
+    assert "Equipes em campo" in html
+    # Um rotulo por cenario, com o km somado - e' o que revela o preco de dividir.
+    rotulos = re.findall(r"\d+ equipes? - [\d,]+ km", html)
+    assert len(rotulos) == 2
+    # A amostra nao e' mais camada (so uma e' precificada por execucao).
+    assert "Amostra 1" not in html
 
 
-def test_gravar_mapa_desenha_o_roteiro_e_a_base(tmp_path):
-    # A polilinha e o marcador da capital sao o que torna visivel "uma viagem so".
+def test_gravar_mapa_desenha_roteiro_e_base(tmp_path):
+    # A polilinha e o marcador da capital tornam visivel "uma viagem so".
     destino = tmp_path / "Mapa_Estratos_3.html"
-    gravar_mapa(_amostras(1), *config.CAPITAIS_UF["PA"], destino)
+    gravar_mapa(_ucs_teste(), _rotas(1), *config.CAPITAIS_UF["PA"], destino)
     html = destino.read_text(encoding="utf-8")
     assert "poly_line" in html.lower() or "polyline" in html.lower()
     assert "Base da equipe" in html
-    # O popup diz a ordem da parada, que e' a leitura nova do mapa.
-    assert "Parada" in html and "ODI A" in html
+    # O popup diz de qual equipe e' a parada e em que ordem ela cai.
+    assert "Equipe 1 - parada" in html and "ODI A" in html
+
+
+def test_gravar_mapa_duas_equipes_tem_duas_linhas(tmp_path):
+    # Com 2 equipes ha 2 polilinhas, cada uma com o seu tooltip de obras/km.
+    destino = tmp_path / "Mapa_Estratos_3.html"
+    gravar_mapa(_ucs_teste(), _rotas(2), *config.CAPITAIS_UF["PA"], destino)
+    html = destino.read_text(encoding="utf-8")
+    assert "Equipe 1:" in html and "Equipe 2:" in html
+
+
+def test_gravar_mapa_amostra_vazia(tmp_path):
+    # Amostra sem obra nenhuma: mapa so com a base, sem camadas e sem estourar.
+    vazio = resumo_por_odi(pd.DataFrame(columns=["ODI", "Estrato", "Municipio", "UC",
+                                                 "LATITUDE", "LONGITUDE"]))
+    destino = tmp_path / "Mapa_Estratos_3.html"
+    gravar_mapa(_ucs_teste().iloc[0:0],
+                {1: dividir_roteiro(vazio, *config.CAPITAIS_UF["PA"], 1)},
+                *config.CAPITAIS_UF["PA"], destino)
+    html = destino.read_text(encoding="utf-8")
+    assert destino.exists()
+    assert "Base da equipe" in html
+    assert "Equipes em campo" not in html

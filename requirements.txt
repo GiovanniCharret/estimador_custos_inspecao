@@ -1,5 +1,5 @@
 ﻿pandas
 numpy
 openpyxl
-folium
+folium>=0.14          # GroupedLayerControl (radio de equipes no mapa) so existe a partir da 0.14
 pytest
