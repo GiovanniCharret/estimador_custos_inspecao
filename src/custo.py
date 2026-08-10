@@ -1,23 +1,39 @@
 # -*- coding: utf-8 -*-
-"""Motor de custo: transforma distancias em R$ conforme o modelo aprovado (F1).
+"""Motor de custo: transforma a geometria de uma amostra em R$ (modelo F9).
 
 === MEMORIA DE CALCULO (para humanos) ===
 [Mesmo bloco de src/config.py -- duplicado de proposito: quem abrir qualquer um dos
 dois arquivos entende o calculo sem ler mais nada.]
-custo_estrato = CUSTO_FIXO + custo_campo, onde:
-  CUSTO_FIXO  = HORAS_ESCRITORIO_POR_OS x tarifa_escritorio  (36h x 360 = 12.960, 1x por estrato)
-  custo_campo = (horas_desloc + horas_inspecao) x tarifa_campo (600/h = 4.800/equipe-dia)
-  horas_desloc = km_estrada / VELOCIDADE_KMH, com km_estrada = FATOR_RODOVIARIO x
-    (mobilizacao: capital da UF -> centro do municipio, ida e volta, UMA vez por municipio
-     + saltos entre as obras do municipio + percurso entre as UCs de cada obra)
-  horas_inspecao = n_ucs x (HORAS_DIA_CAMPO / UCS_POR_DIA[tipo])  (LPT: 30/dia; MLA: 3/dia)
-Amostra = soma dos estratos. A mobilizacao municipal e' rateada igualmente entre as
-obras do municipio so para exibir custo por obra; o total do estrato nao depende do rateio.
+
+O custo e' POR AMOSTRA (nao por estrato):
+
+  custo_amostra = CUSTO_FIXO + custo_campo
+
+  CUSTO_FIXO  = HORAS_ESCRITORIO_POR_OS x tarifa_escritorio   (36h x 360 = 12.960, 1x)
+  custo_campo = dias_faturados x TAMANHO_EQUIPE x HORAS_DIA_CAMPO x tarifa_campo
+
+  dias_faturados = teto(horas_de_campo / HORAS_DIA_CAMPO) + DIAS_MOBILIZACAO
+  horas_de_campo = horas_roteiro + horas_inspecao
+    horas_roteiro  = km_estrada / VELOCIDADE_KMH
+      km_estrada   = FATOR_RODOVIARIO x (itinerario unico capital -> todas as obras ->
+                     capital, encadeado, + percurso entre as UCs de cada obra)
+    horas_inspecao = n_ucs x (HORAS_DIA_CAMPO / UCS_POR_DIA[tipo])  (LPT 30/dia; MLA 3/dia)
+
+O ESTRATO nao participa do custo. Ele identifica de onde cada obra veio na
+estratificacao e aparece so como coluna informativa no detalhe.
+
+BENCHMARK: a engenharia da PB 7a Tranche obedece, ao centavo, a
+  custo = 12.960 + 9.600 x (dias + 1), com 9.600 = 2 pessoas x 8h x R$600.
+E' esta mesma formula com TAMANHO_EQUIPE = 2; aqui o parametro vale 1 (decisao G1).
 === FIM DA MEMORIA DE CALCULO ===
 """
+import math
+
 import pandas as pd
+
 from src import config
-from src.distancias import haversine_km, _rota_vizinho_mais_proximo
+from src.distancias import montar_roteiro
+
 
 def tarifa_campo():
     """Tarifa horaria de campo do perfil ativo, com diaria diluida por hora.
@@ -33,6 +49,7 @@ def tarifa_campo():
     # Fase 2: diaria (G2: 0 por padrao) diluida pelas horas do dia de campo.
     return base + config.CUSTO_DIARIA / config.HORAS_DIA_CAMPO
 
+
 def tarifa_escritorio():
     """Tarifa horaria de escritorio (sem deslocamento) do perfil ativo.
 
@@ -44,78 +61,78 @@ def tarifa_escritorio():
     # Fase 1/Saida: tarifa de escritorio do perfil ativo.
     return config.TARIFAS_HORA[config.PERFIL_EQUIPE]["escritorio"]
 
-def custo_por_odi(df_odis, uf, tipo_contrato):
-    """Calcula o custo de CAMPO de cada ODI a partir do resumo geometrico.
 
-    Por que existe: e' o UNICO lugar onde a formula de custo vive; contrato estavel
-    permite ajustar o modelo so por config.py, sem tocar no resto do pipeline.
-    O termo fixo de escritorio NAO entra aqui (e' por estrato, ver agregar_por_estrato).
+def custo_amostra(df_odis, uf, tipo_contrato):
+    """Precifica uma amostra inteira a partir do resumo geometrico por ODI.
 
-    Logica: Entrada (df por ODI, uf, tipo) -> Fase 1: por municipio, mobilizacao
-    (capital -> centroide municipal, ida e volta, uma vez) + saltos entre ODIs,
-    rateados igualmente entre as ODIs do municipio -> Fase 2: km -> horas (desloc)
-    e produtividade do tipo -> horas (inspecao) -> Fase 3: horas x tarifa de campo
-    -> Saida: df com as colunas de custo de campo.
+    Por que existe: e' o UNICO lugar onde a formula de custo vive. Trabalha na
+    granularidade AMOSTRA porque e' assim que o custo se comporta: o roteiro e' uma
+    viagem so (nao da para somar viagens por obra) e o fixo de escritorio e' uma OS so.
+    Devolver tambem o detalhe por obra evita que o resumo e o mapa recalculem o roteiro
+    por conta propria e acabem discordando entre si.
+
+    Logica: Entrada (df por ODI, uf, tipo) -> Fase 1: monta o itinerario unico a partir
+    da capital da UF -> Fase 2: soma o percurso interno de cada obra e converte linha
+    reta em estrada -> Fase 3: km -> horas de roteiro; UCs -> horas de inspecao ->
+    Fase 4: horas -> dias inteiros + mobilizacao -> Fase 5: dias -> R$, mais o fixo
+    de escritorio -> Saida: (dict com os numeros da amostra, df do roteiro por obra).
     """
-    # Copia para nao mutar a entrada.
-    r = df_odis.copy()
     # Capital da UF do contrato (G3); KeyError aqui = UF invalida (bug, nao dado).
     lat_cap, lon_cap = config.CAPITAIS_UF[uf]
-    # Fase 1: distancia de acesso rateada por municipio.
-    acesso = {}
-    # Um grupo por municipio: a equipe mobiliza uma vez por municipio, nao por ODI.
-    for _mun, g in r.groupby("Municipio", sort=False):
-        # Centroide municipal = media dos centroides das ODIs do municipio.
-        lat_m, lon_m = float(g["lat_centro"].mean()), float(g["lon_centro"].mean())
-        # Mobilizacao: capital -> municipio, ida e volta, UMA vez.
-        mob = 2 * haversine_km(lat_cap, lon_cap, lat_m, lon_m)
-        # Saltos: rota gulosa entre os centroides das ODIs do municipio.
-        saltos = _rota_vizinho_mais_proximo(g["lat_centro"].to_numpy(), g["lon_centro"].to_numpy())
-        # Rateio igual entre as ODIs do municipio (so para exibicao por ODI).
-        for odi in g["ODI"]:
-            acesso[odi] = (mob + saltos) / len(g)
-    # Aplica o rateio e a correcao linha reta -> estrada em todas as distancias.
-    r["dist_acesso_km"] = r["ODI"].map(acesso) * config.FATOR_RODOVIARIO
-    r["dist_interna_corrigida_km"] = r["dist_interna_km"] * config.FATOR_RODOVIARIO
-    # Fase 2: km -> horas; inspecao usa a produtividade do tipo de contrato (G5).
-    r["horas_desloc"] = (r["dist_acesso_km"] + r["dist_interna_corrigida_km"]) / config.VELOCIDADE_KMH
-    # Horas por UC derivadas da jornada e da produtividade do tipo (LPT 30, MLA 3).
+    # Fase 1: itinerario unico, encadeado, com volta a capital uma unica vez no fim.
+    roteiro, km_roteiro_reta = montar_roteiro(df_odis, lat_cap, lon_cap)
+    # Fase 2: o percurso entre as UCs de cada obra soma ao roteiro; so entao vira estrada.
+    km_interno_reta = float(roteiro["dist_interna_km"].sum()) if len(roteiro) else 0.0
+    km_estrada = (km_roteiro_reta + km_interno_reta) * config.FATOR_RODOVIARIO
+    # Fase 3: km -> horas de estrada; UCs -> horas de inspecao pela produtividade do tipo (G5).
+    horas_roteiro = km_estrada / config.VELOCIDADE_KMH
+    n_ucs = int(roteiro["n_ucs"].sum()) if len(roteiro) else 0
     horas_por_uc = config.HORAS_DIA_CAMPO / config.UCS_POR_DIA[tipo_contrato]
-    r["horas_inspecao"] = r["n_ucs"] * horas_por_uc
-    # Fase 3: horas -> R$ pela tarifa de campo (G1/G2 via tarifa_campo()).
-    r["custo_desloc"] = r["horas_desloc"] * tarifa_campo()
-    r["custo_insp"] = r["horas_inspecao"] * tarifa_campo()
-    r["custo_total"] = r["custo_desloc"] + r["custo_insp"]
-    # Saida: mesmo df, enriquecido com as colunas de custo de campo.
-    return r
+    horas_inspecao = n_ucs * horas_por_uc
+    # Fase 4: dias de trabalho arredondados PARA CIMA (a equipe nao vende meio dia),
+    # mais os dias de mobilizacao. A fracao fica exposta para o humano conferir o teto.
+    horas_campo = horas_roteiro + horas_inspecao
+    dias_fracionarios = horas_campo / config.HORAS_DIA_CAMPO
+    dias_trabalho = math.ceil(dias_fracionarios) if dias_fracionarios > 0 else 0
+    dias_faturados = dias_trabalho + config.DIAS_MOBILIZACAO
+    # Fase 5: dias -> R$ (pessoa-dia = jornada x tarifa) e o fixo de escritorio, uma vez.
+    custo_campo = dias_faturados * config.TAMANHO_EQUIPE * config.HORAS_DIA_CAMPO * tarifa_campo()
+    custo_fixo = config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio()
+    # Anota no detalhe o km de estrada de cada trecho (so exibicao; o total ja esta fechado).
+    if len(roteiro):
+        roteiro = roteiro.copy()
+        roteiro["km_trecho_estrada"] = roteiro["km_trecho"] * config.FATOR_RODOVIARIO
+    # Saida: os numeros da amostra + o roteiro que os gerou.
+    return {
+        "n_odis": len(roteiro),
+        "n_municipios": int(roteiro["Municipio"].nunique()) if len(roteiro) else 0,
+        "n_ucs": n_ucs,
+        "km_roteiro": km_estrada,
+        "horas_roteiro": horas_roteiro,
+        "horas_inspecao": horas_inspecao,
+        "dias_fracionarios": dias_fracionarios,
+        "dias_trabalho": dias_trabalho,
+        "dias_faturados": dias_faturados,
+        "tamanho_equipe": config.TAMANHO_EQUIPE,
+        "custo_campo": custo_campo,
+        "custo_fixo": custo_fixo,
+        "custo_total": custo_campo + custo_fixo,
+    }, roteiro
 
-def agregar_por_estrato(df_custos):
-    """Agrega por estrato, acrescenta o custo fixo de OS e a linha TOTAL.
 
-    Por que existe: a formula decifrada tem um termo FIXO por estrato (planejamento/
-    relatorio/apresentacao) que nao pertence a nenhuma ODI; ele entra aqui, garantindo
-    que resumo e mapas usem os mesmos numeros.
+def tabela_resumo(resultados):
+    """Empilha os resultados de varias amostras numa unica tabela comparavel.
 
-    Logica: Entrada (df por ODI com custos de campo) -> Fase 1: groupby Estrato
-    somando -> Fase 2: equipe_dias e custo_fixo_os por estrato; total = campo + fixo
-    -> Fase 3: linha TOTAL -> Saida: df por estrato + TOTAL.
+    Por que existe: a Entrada/ traz varias estratificacoes (Estratos 3, 4, 5...) x 3
+    amostras cada; o humano precisa ver todas lado a lado para escolher. Montar a
+    tabela aqui - e nao em resumo.py - mantem resumo.py como pura gravacao de Excel.
+
+    Logica: Entrada (lista de dicts com n_estratos/amostra/numeros) -> Fase 1: ordena
+    por estratificacao e depois por amostra -> Saida: DataFrame, uma linha por amostra.
     """
-    # Fase 1: soma por estrato das grandezas aditivas de campo.
-    agg = (df_custos.groupby("Estrato", sort=True)
-           .agg(n_odis=("ODI", "count"), n_ucs=("n_ucs", "sum"),
-                dist_acesso_km=("dist_acesso_km", "sum"),
-                dist_interna_km=("dist_interna_corrigida_km", "sum"),
-                horas_desloc=("horas_desloc", "sum"), horas_inspecao=("horas_inspecao", "sum"),
-                custo_desloc=("custo_desloc", "sum"), custo_insp=("custo_insp", "sum"),
-                custo_campo=("custo_total", "sum"))
-           .reset_index())
-    # Fase 2: equipe-dias (horas de campo / jornada) e o termo fixo de OS por estrato.
-    agg["equipe_dias"] = (agg["horas_desloc"] + agg["horas_inspecao"]) / config.HORAS_DIA_CAMPO
-    agg["custo_fixo_os"] = config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio()
-    # Total do estrato = campo (soma dos ODIs) + fixo (uma vez).
-    agg["custo_total"] = agg["custo_campo"] + agg["custo_fixo_os"]
-    # Fase 3: linha TOTAL = soma das colunas numericas (fixo somado por estrato).
-    total = agg.drop(columns="Estrato").sum()
-    total["Estrato"] = "TOTAL"
-    # Saida: estratos ordenados + TOTAL ao final.
-    return pd.concat([agg, total.to_frame().T], ignore_index=True)
+    # Fase 1: ordem estavel e previsivel para leitura (N crescente, amostra crescente).
+    df = pd.DataFrame(resultados)
+    if len(df):
+        df = df.sort_values(["n_estratos", "amostra"]).reset_index(drop=True)
+    # Saida: uma linha por (estratificacao, amostra).
+    return df

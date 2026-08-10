@@ -43,63 +43,117 @@ class EntradaInvalida(Exception):
 
 
 def achar_entradas(pasta):
-    """Localiza os dois arquivos de entrada dentro de Entrada/.
+    """Localiza as planilhas de amostra e o painel de coordenadas dentro de Entrada/.
 
-    Por que existe: o usuario deposita arquivos por convencao de nome (D7);
-    centralizar a busca da um unico lugar para mensagens de erro claras.
+    Por que existe: o sistema amostral upstream gera UMA planilha por numero de estratos
+    ('Estratos 3/4/5/6 - Python.xlsx', as vezes renomeada para 'Lote.xlsx') e o humano
+    quer precificar TODAS de uma vez para escolher a estratificacao. Descobrir os arquivos
+    pelo CONTEUDO (ter abas 'Amostra K') em vez de por um nome fixo evita que uma
+    estratificacao seja ignorada em silencio so por causa do nome do arquivo.
 
-    Logica: Entrada (pasta) -> Fase 1: valida Lote.xlsx -> Fase 2: procura
-    *Painel de Monitoramento*.xlsx e exige exatamente 1 -> Saida: (lote, painel).
+    Logica: Entrada (pasta) -> Fase 1: acha o painel por nome (D7) e exige exatamente 1
+    -> Fase 2: varre os demais .xlsx e fica com os que tem aba 'Amostra K' -> Fase 3:
+    descobre o numero de estratos de cada um e descarta duplicatas com aviso -> Saida:
+    (lista de (n_estratos, caminho) ordenada por n, caminho do painel).
     """
-    # Fase 1: o Lote.xlsx tem nome fixo; sem ele nao ha amostras a precificar.
-    lote = Path(pasta) / "Lote.xlsx"
-    # Se nao existe, aborta ja dizendo onde colocar o arquivo.
-    if not lote.exists():
-        raise EntradaInvalida(f"Lote.xlsx nao encontrado.\nColoque o arquivo com as amostras em: {pasta}\\Lote.xlsx")
-    # Fase 2: o painel e localizado por nome contendo o padrao (D7), ignorando temporarios do Excel (~$).
-    paineis = [p for p in Path(pasta).glob("*Painel de Monitoramento*.xlsx") if not p.name.startswith("~$")]
+    pasta = Path(pasta)
+    # Fase 1: o painel e' localizado por nome contendo o padrao (D7), ignorando temporarios (~$).
+    paineis = [p for p in pasta.glob("*Painel de Monitoramento*.xlsx") if not p.name.startswith("~$")]
     # Nenhum painel: aborta explicando a convencao de nome.
     if not paineis:
-        raise EntradaInvalida(f"Arquivo de coordenadas nao encontrado.\nColoque em {pasta}\\ um .xlsx cujo nome contenha 'Painel de Monitoramento'.")
-    # Mais de um painel: ambiguidade — aborta listando para o usuario remover o excedente.
+        raise EntradaInvalida(
+            f"Arquivo de coordenadas nao encontrado.\n"
+            f"Coloque em {pasta}\\ um .xlsx cujo nome contenha 'Painel de Monitoramento'."
+        )
+    # Mais de um painel: ambiguidade - aborta listando para o usuario remover o excedente.
     if len(paineis) > 1:
         nomes = "\n  - ".join(p.name for p in paineis)
         raise EntradaInvalida(f"Mais de um Painel de Monitoramento em {pasta}:\n  - {nomes}\nDeixe apenas um.")
-    # Fase 3: avisa sobre outras planilhas de amostra na pasta (ignoradas em silencio ate aqui).
-    _avisar_lotes_ignorados(pasta, lote, paineis[0])
-    # Saida: os dois caminhos validados.
-    return lote, paineis[0]
-
-
-def _avisar_lotes_ignorados(pasta, lote, painel):
-    """Avisa que outros .xlsx com abas 'Amostra K' na Entrada/ NAO serao lidos.
-
-    Por que existe: o sistema amostral upstream gera um arquivo por numero de estratos
-    ('Estratos 4 - Python.xlsx', 'Estratos 5 - Python.xlsx', ...) e e' natural o usuario
-    largar varios na Entrada/. O programa le SO o Lote.xlsx; sem este aviso ele
-    precificaria a estratificacao errada sem que ninguem percebesse - limitacao silenciosa,
-    o que a convencao do projeto proibe.
-
-    Logica: Entrada (pasta, lote, painel) -> Fase 1: varre os .xlsx da pasta pulando os dois
-    ja escolhidos e os temporarios do Excel -> Fase 2: le so os NOMES das abas de cada um
-    -> Fase 3: imprime um AVISO por arquivo que tenha aba 'Amostra K' -> Saida: None (efeito
-    e' so o aviso impresso).
-    """
-    # Fase 1: candidatos = todo .xlsx da pasta que nao seja o Lote, o Painel ou um ~$temporario.
-    for arquivo in sorted(Path(pasta).glob("*.xlsx")):
-        if arquivo.name.startswith("~$") or arquivo == lote or arquivo == painel:
+    painel = paineis[0]
+    # Fase 2: candidato a planilha de amostra = qualquer .xlsx (menos o painel) com aba 'Amostra K'.
+    candidatos = []
+    for arquivo in sorted(pasta.glob("*.xlsx")):
+        if arquivo.name.startswith("~$") or arquivo == painel:
             continue
-        # Fase 2: le apenas a lista de abas; qualquer falha de leitura e' irrelevante aqui
-        # (o arquivo nao e' entrada do programa) e nao pode derrubar a execucao.
+        # Le apenas os NOMES das abas; arquivo ilegivel simplesmente nao e' candidato.
         try:
             abas = pd.ExcelFile(arquivo).sheet_names
         except Exception:
             continue
-        # Fase 3: tem aba 'Amostra K'? entao e' uma estratificacao alternativa sendo ignorada.
         if any(re.fullmatch(r"Amostra\s*\d+", str(a).strip()) for a in abas):
-            print(f"AVISO: {arquivo.name} tambem tem abas 'Amostra K' e sera IGNORADO - "
-                  f"o programa le apenas Lote.xlsx. Se e' este que voce quer precificar, "
-                  f"renomeie-o para Lote.xlsx.")
+            candidatos.append(arquivo)
+    # Sem nenhuma planilha de amostra: aborta dizendo o que colocar na pasta.
+    if not candidatos:
+        raise EntradaInvalida(
+            f"Nenhuma planilha de amostras encontrada em {pasta}.\n"
+            f"Coloque ali o(s) arquivo(s) gerado(s) pelo sistema amostral - 'Lote.xlsx' ou\n"
+            f"'Estratos N - Python.xlsx' - que tenham abas 'Amostra 1/2/3'."
+        )
+    # Fase 3: descobre o N de cada candidato; duas planilhas com o mesmo N seriam a mesma
+    # estratificacao contada duas vezes, entao a segunda e' descartada COM aviso.
+    lotes = {}
+    for arquivo in candidatos:
+        n = ler_n_estratos(arquivo)
+        if n in lotes:
+            print(f"AVISO: {arquivo.name} declara {n} estratos, igual a {lotes[n].name}; "
+                  f"sera IGNORADO para nao contar a mesma estratificacao duas vezes.")
+            continue
+        lotes[n] = arquivo
+    # Saida: estratificacoes ordenadas por numero de estratos + o painel.
+    return [(n, lotes[n]) for n in sorted(lotes)], painel
+
+
+def ler_n_estratos(caminho):
+    """Descobre quantos estratos uma planilha de amostras usa.
+
+    Por que existe: o numero de estratos e' o rotulo que distingue uma estratificacao da
+    outra no resumo final, e ele NAO esta nas abas de amostra - so na aba 'Leia-me' que o
+    sistema upstream escreve. Ter os tres caminhos aqui (Leia-me, nome do arquivo, contagem)
+    evita que o programa recuse uma planilha valida so porque o Leia-me sumiu.
+
+    Logica: Entrada (caminho) -> Fase 1: procura na aba 'Leia-me' a linha 'N (estratos por
+    grupo)' -> Fase 2: se nao achou, tenta o numero no nome do arquivo ('Estratos 4 - ...')
+    -> Fase 3: em ultimo caso conta os estratos distintos da primeira aba de amostra, com
+    aviso -> Saida: int.
+    """
+    xls = pd.ExcelFile(caminho)
+    # Fase 1: o Leia-me do upstream traz 'Campo | Valor'; procuramos a linha do N.
+    if "Leia-me" in xls.sheet_names:
+        leia = xls.parse("Leia-me", header=None)
+        for _, linha in leia.iterrows():
+            # A primeira celula e' o rotulo; normalizamos para nao depender de acento/caixa.
+            rotulo = _norm(linha.iloc[0]) if len(linha) else ""
+            if rotulo.startswith("n (estratos por grupo)"):
+                try:
+                    return int(float(linha.iloc[1]))
+                except (ValueError, TypeError):
+                    # Rotulo achado mas valor ilegivel: cai nos proximos caminhos.
+                    break
+    # Fase 2: nome do arquivo no padrao do upstream ('Estratos 4 - Python.xlsx').
+    achado = re.search(r"estratos\s*(\d+)", caminho.name, flags=re.IGNORECASE)
+    if achado:
+        return int(achado.group(1))
+    # Fase 3: ultimo recurso - conta os estratos distintos da primeira aba de amostra.
+    for aba in xls.sheet_names:
+        if re.fullmatch(r"Amostra\s*\d+", str(aba).strip()):
+            df = xls.parse(aba)
+            colmap = {_norm(c): c for c in df.columns}
+            if "estrato" in colmap:
+                # So as obras SORTEADAS contam: a aba traz o lote inteiro, e as linhas nao
+                # selecionadas podem carregar rotulos de estrato que nao existem na amostra.
+                if "status" in colmap:
+                    df = df[df[colmap["status"]].astype(str).str.strip() == "Selecionado"]
+                n = int(df[colmap["estrato"]].dropna().nunique())
+                print(f"AVISO: {caminho.name} nao diz quantos estratos usa (sem 'Leia-me' nem "
+                      f"numero no nome); contei {n} estratos distintos na aba '{aba}'.")
+                return n
+            break
+    # Nenhum caminho funcionou: e' erro de dado, com instrucao de como resolver.
+    raise EntradaInvalida(
+        f"Nao consegui descobrir quantos estratos {caminho.name} usa.\n"
+        f"Renomeie o arquivo para 'Estratos N - Python.xlsx' (N = numero de estratos)\n"
+        f"ou mantenha a aba 'Leia-me' gerada pelo sistema amostral."
+    )
 
 
 def _norm(nome):

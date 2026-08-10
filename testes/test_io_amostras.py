@@ -3,8 +3,8 @@
 from pathlib import Path
 import pandas as pd
 import pytest
-from src.io_amostras import (achar_entradas, ler_amostras, ler_painel, juntar_amostras_painel,
-                             EntradaInvalida, _norm_odi)
+from src.io_amostras import (achar_entradas, ler_amostras, ler_n_estratos, ler_painel,
+                             juntar_amostras_painel, EntradaInvalida, _norm_odi)
 from testes.fixtures import (escrever_lote, escrever_painel, escrever_painel_anexo_v,
                              ODIS, ODIS_LOTE_TEXTO, ODIS_PAINEL_NUMERO)
 
@@ -14,28 +14,75 @@ def _cria(pasta, *nomes):
         (pasta / n).write_bytes(b"")
 
 def test_acha_lote_e_painel(tmp_path):
-    # Caso feliz: um Lote.xlsx e um arquivo contendo "Painel de Monitoramento".
-    _cria(tmp_path, "Lote.xlsx", "2026 Painel de Monitoramento PA.xlsx")
-    lote, painel = achar_entradas(tmp_path)
-    assert lote.name == "Lote.xlsx"
+    # Caso feliz: uma planilha de amostras e um arquivo "Painel de Monitoramento".
+    escrever_lote(tmp_path / "Lote.xlsx", abas=(1,))
+    escrever_painel(tmp_path / "2026 Painel de Monitoramento PA.xlsx")
+    lotes, painel = achar_entradas(tmp_path)
+    # O Lote.xlsx nao diz o N no nome nem tem Leia-me: cai na contagem de estratos (3).
+    assert [c.name for _, c in lotes] == ["Lote.xlsx"]
     assert "Painel de Monitoramento" in painel.name
 
-def test_erro_sem_lote(tmp_path):
-    # Sem Lote.xlsx: erro dizendo o que colocar na pasta.
-    _cria(tmp_path, "Painel de Monitoramento.xlsx")
-    with pytest.raises(EntradaInvalida, match="Lote.xlsx"):
+def test_acha_varias_estratificacoes_ordenadas(tmp_path):
+    # A Entrada/ recebe uma planilha por numero de estratos; TODAS devem ser precificadas,
+    # em ordem crescente de N (decisao da F9). O N vem do nome quando nao ha Leia-me.
+    escrever_lote(tmp_path / "Estratos 5 - Python.xlsx", abas=(1,))
+    escrever_lote(tmp_path / "Estratos 3 - Python.xlsx", abas=(1,))
+    escrever_lote(tmp_path / "Estratos 4 - Python.xlsx", abas=(1,))
+    escrever_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    lotes, _ = achar_entradas(tmp_path)
+    assert [n for n, _ in lotes] == [3, 4, 5]
+
+def test_estratificacoes_duplicadas_avisam_e_usam_uma(tmp_path, capsys):
+    # Dois arquivos com o mesmo N sao a mesma estratificacao: contar as duas dobraria a
+    # linha no resumo. Descarta a segunda, mas nunca em silencio.
+    escrever_lote(tmp_path / "Estratos 4 - Python.xlsx", abas=(1,))
+    escrever_lote(tmp_path / "Estratos 4 - copia.xlsx", abas=(1,))
+    escrever_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    lotes, _ = achar_entradas(tmp_path)
+    assert [n for n, _ in lotes] == [4]
+    assert "IGNORADO" in capsys.readouterr().out
+
+def test_erro_sem_planilha_de_amostras(tmp_path):
+    # So o painel na pasta: erro dizendo o que falta colocar.
+    escrever_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    with pytest.raises(EntradaInvalida, match="Nenhuma planilha de amostras"):
         achar_entradas(tmp_path)
 
+def test_painel_nao_e_confundido_com_planilha_de_amostras(tmp_path):
+    # O painel tem abas proprias e nao pode virar candidato a lote.
+    escrever_lote(tmp_path / "Lote.xlsx", abas=(1,))
+    escrever_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    lotes, painel = achar_entradas(tmp_path)
+    assert painel not in [c for _, c in lotes]
+
 def test_erro_sem_painel(tmp_path):
-    _cria(tmp_path, "Lote.xlsx")
+    escrever_lote(tmp_path / "Lote.xlsx", abas=(1,))
     with pytest.raises(EntradaInvalida, match="Painel de Monitoramento"):
         achar_entradas(tmp_path)
 
 def test_erro_dois_paineis(tmp_path):
     # Dois arquivos casando o padrao: aborta listando ambos.
-    _cria(tmp_path, "Lote.xlsx", "Painel de Monitoramento A.xlsx", "Painel de Monitoramento B.xlsx")
+    escrever_lote(tmp_path / "Lote.xlsx", abas=(1,))
+    _cria(tmp_path, "Painel de Monitoramento A.xlsx", "Painel de Monitoramento B.xlsx")
     with pytest.raises(EntradaInvalida, match="A.xlsx"):
         achar_entradas(tmp_path)
+
+def test_n_estratos_vem_do_leia_me(tmp_path):
+    # O Leia-me do sistema upstream e' a fonte autoritativa do N - manda sobre o nome
+    # do arquivo (que aqui diz 9 de proposito, para provar a precedencia).
+    escrever_lote(tmp_path / "Estratos 9 - Python.xlsx", abas=(1,), n_estratos_leia_me=4)
+    assert ler_n_estratos(tmp_path / "Estratos 9 - Python.xlsx") == 4
+
+def test_n_estratos_cai_no_nome_do_arquivo(tmp_path):
+    # Sem Leia-me, o numero do nome resolve.
+    escrever_lote(tmp_path / "Estratos 6 - Python.xlsx", abas=(1,))
+    assert ler_n_estratos(tmp_path / "Estratos 6 - Python.xlsx") == 6
+
+def test_n_estratos_cai_na_contagem_com_aviso(tmp_path, capsys):
+    # Sem Leia-me e sem numero no nome: conta os estratos distintos, avisando.
+    escrever_lote(tmp_path / "Lote.xlsx", abas=(1,))
+    assert ler_n_estratos(tmp_path / "Lote.xlsx") == 3      # a fixture cicla estratos 1/2/3
+    assert "AVISO" in capsys.readouterr().out
 
 
 def test_ler_amostras_filtra_selecionado(tmp_path):
@@ -122,19 +169,6 @@ def test_juntar_orfao_cons_zero_sem_uc_no_municipio_erro(tmp_path):
     ucs = ler_painel(tmp_path / "Painel.xlsx")
     with pytest.raises(EntradaInvalida, match="PALMAS"):
         juntar_amostras_painel(amostras, ucs)
-
-def test_achar_entradas_avisa_lote_alternativo_ignorado(tmp_path, capsys):
-    # O sistema amostral upstream gera um arquivo por numero de estratos; se sobrar algum
-    # na Entrada/, o programa le SO o Lote.xlsx - e precisa dizer isso em voz alta.
-    escrever_lote(tmp_path / "Lote.xlsx", abas=(1,))
-    escrever_lote(tmp_path / "Estratos 5 - Python.xlsx", abas=(1,))
-    escrever_painel(tmp_path / "Painel de Monitoramento T.xlsx")
-    achar_entradas(tmp_path)
-    saida = capsys.readouterr().out
-    assert "Estratos 5 - Python.xlsx" in saida and "IGNORADO" in saida
-    # O Painel nao tem aba 'Amostra K': nao pode ser confundido com um lote alternativo.
-    assert "Painel de Monitoramento T.xlsx" not in saida
-
 
 def test_ler_painel_anexo_v_cabecalho_na_segunda_linha(tmp_path):
     # Formato real: faixa mesclada na linha 1, cabecalho na 2, colunas por extenso.

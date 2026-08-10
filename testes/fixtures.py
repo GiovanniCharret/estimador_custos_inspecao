@@ -12,17 +12,20 @@ ODIS_LOTE_TEXTO = ["0012500186", "0012500231", "0012500370", "0012500399", "0012
 ODIS_PAINEL_NUMERO = [12500186, 12500231, 12500370, 12500399, 12500453]
 
 
-def escrever_lote(caminho, abas=(1, 2), odis=ODIS, municipios=None, cons=None):
+def escrever_lote(caminho, abas=(1, 2), odis=ODIS, municipios=None, cons=None,
+                  n_estratos_leia_me=None):
     """Grava um Lote.xlsx sintetico com abas 'Amostra K' no formato do sistema amostral.
 
     Por que existe: os testes de io_amostras precisam de um Lote.xlsx real em disco,
     com a coluna 'Cons.' (numero de UCs da obra) e linhas nao selecionadas, sem
     depender de arquivos reais de minhas_notas/.
 
-    Logica: Entrada (caminho, abas, odis, municipios, cons) -> Fase 1: aplica os
-    defaults (municipio BARCARENA, Cons=3 - obra com UC) sobre os overrides recebidos
-    -> Fase 2: monta, por aba, o df com ODI/Estrato/Municipio/Cons./STATUS, incluindo
-    uma linha extra NAO selecionada (que o leitor deve filtrar) -> Saida: .xlsx gravado.
+    Logica: Entrada (caminho, abas, odis, municipios, cons, n_estratos_leia_me) -> Fase 1:
+    aplica os defaults (municipio BARCARENA, Cons=3 - obra com UC) sobre os overrides
+    recebidos -> Fase 2: monta, por aba, o df com ODI/Estrato/Municipio/Cons./STATUS,
+    incluindo uma linha extra NAO selecionada (que o leitor deve filtrar) -> Fase 3: se
+    pedido, grava a aba 'Leia-me' no formato do upstream (e' de la que sai o numero de
+    estratos da estratificacao) -> Saida: .xlsx gravado.
     """
     # Fase 1a: municipio padrao e' BARCARENA para todo ODI que o chamador nao customizar.
     muni = {odi: "BARCARENA" for odi in odis}
@@ -34,6 +37,12 @@ def escrever_lote(caminho, abas=(1, 2), odis=ODIS, municipios=None, cons=None):
         cns.update(cons)
     # Fase 2: grava uma aba 'Amostra K' por numero pedido, todas com os mesmos dados.
     with pd.ExcelWriter(caminho) as xls:
+        # Fase 3: 'Leia-me' no formato do upstream (Campo | Valor), quando pedido.
+        if n_estratos_leia_me is not None:
+            pd.DataFrame([["Metodo desta planilha", "SEM regional"],
+                          ["N (estratos por grupo)", n_estratos_leia_me]],
+                         columns=["Campo", "Valor"]).to_excel(
+                xls, sheet_name="Leia-me", index=False)
         for k in abas:
             df = pd.DataFrame({
                 "ODI": list(odis) + ["PA_NAO_SEL"],

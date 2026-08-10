@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 from src import config
+from src.distancias import haversine_km
 from src.estimar_custos import executar
 from testes.fixtures import (escrever_lote, escrever_painel, escrever_painel_anexo_v,
                              ODIS, ODIS_LOTE_TEXTO)
@@ -56,31 +57,69 @@ def test_e2e_feliz(tmp_path, capsys):
     assert executar(tmp_path) == 0
     # O aviso de contrato nao informado precisa aparecer (limitacao nunca silenciosa).
     assert "AVISO" in capsys.readouterr().out
-    # Saidas existem: um resumo e um mapa por amostra.
+    # Saidas: UMA planilha com tudo + um mapa por estratificacao (decisao da F9).
     assert (tmp_path / "saida" / "Resumo_Custos.xlsx").exists()
-    assert (tmp_path / "saida" / "Mapa_Amostra_1.html").exists()
-    assert (tmp_path / "saida" / "Mapa_Amostra_2.html").exists()
+    assert (tmp_path / "saida" / "Mapa_Estratos_3.html").exists()
+    # Duas amostras no Lote sintetico => duas linhas na aba Resumo, uma planilha so.
+    resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
+    assert list(resumo["Amostra"]) == [1, 2]
 
 
-def test_e2e_total_bate_com_detalhe_mais_fixo(tmp_path):
-    # Invariante central do modelo: o TOTAL do agregado NAO e' a soma do detalhe -
-    # o detalhe so tem custo de CAMPO; o fixo de escritorio entra uma vez por estrato.
+def test_e2e_custo_e_por_amostra_nao_por_estrato(tmp_path):
+    # INVARIANTE CENTRAL DO MODELO F9: o custo fixo de escritorio entra UMA vez por
+    # amostra. Antes ele entrava uma vez por ESTRATO, o que multiplicava R$12.960 pelo
+    # numero de estratos (na amostra real da PB isso sozinho inflava R$25.920).
     _monta_entrada(tmp_path)
     assert executar(tmp_path) == 0
-    agg = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Amostra 1")
-    det = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Detalhe 1")
-    total = agg[agg["Estrato"].astype(str) == "TOTAL"].iloc[0]
-    # (a) o campo do agregado bate com a soma do detalhe por ODI (tolerancia de arredondamento).
-    assert total["Custo campo (R$)"] == pytest.approx(det["Custo total (R$)"].sum(), abs=0.05)
-    # (b) o total = campo + fixo, e o fixo e' contado uma vez por estrato (3 estratos aqui).
-    estratos = agg[agg["Estrato"].astype(str) != "TOTAL"]
-    assert len(estratos) == 3
-    assert total["Custo fixo OS (R$)"] == pytest.approx(
-        config.HORAS_ESCRITORIO_POR_OS * config.TARIFAS_HORA[config.PERFIL_EQUIPE]["escritorio"] * 3, abs=0.05)
-    assert total["Custo total (R$)"] == pytest.approx(
-        total["Custo campo (R$)"] + total["Custo fixo OS (R$)"], abs=0.05)
-    # (c) somar o detalhe direto NAO da o total - o teste registra a diferenca esperada.
-    assert total["Custo total (R$)"] > det["Custo total (R$)"].sum()
+    resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
+    fixo_esperado = config.HORAS_ESCRITORIO_POR_OS * config.TARIFAS_HORA[config.PERFIL_EQUIPE]["escritorio"]
+    # Uma linha por amostra, e o fixo e' o mesmo valor unico em todas (nunca N x 12.960).
+    assert resumo["Custo fixo OS (R$)"].tolist() == pytest.approx([fixo_esperado] * len(resumo))
+    # O total fecha com campo + fixo, sem nenhum termo escondido.
+    assert resumo["Custo total (R$)"].tolist() == pytest.approx(
+        (resumo["Custo campo (R$)"] + resumo["Custo fixo OS (R$)"]).tolist())
+    # E o campo fecha com a formula de dias (o que amarra o modelo ao benchmark).
+    esperado_campo = (resumo["Dias faturados"] * config.TAMANHO_EQUIPE
+                      * config.HORAS_DIA_CAMPO * config.TARIFAS_HORA[config.PERFIL_EQUIPE]["campo"])
+    assert resumo["Custo campo (R$)"].tolist() == pytest.approx(esperado_campo.tolist())
+
+
+def test_e2e_varias_estratificacoes_numa_planilha_so(tmp_path, capsys):
+    # A Entrada/ recebe uma planilha por numero de estratos; todas viram linhas da MESMA
+    # aba Resumo, para o humano comparar Estratos 3 x 4 x 5 lado a lado.
+    _monta_entrada(tmp_path)
+    escrever_lote(tmp_path / "Entrada" / "Estratos 5 - Python.xlsx", abas=(1, 2))
+    assert executar(tmp_path) == 0
+    resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
+    # 2 estratificacoes x 2 amostras = 4 linhas, ordenadas por (estratificacao, amostra).
+    assert len(resumo) == 4
+    assert list(resumo["Estratos"]) == [3, 3, 5, 5]
+    assert list(resumo["Amostra"]) == [1, 2, 1, 2]
+    # Um mapa por estratificacao, nao um por amostra.
+    assert (tmp_path / "saida" / "Mapa_Estratos_3.html").exists()
+    assert (tmp_path / "saida" / "Mapa_Estratos_5.html").exists()
+    assert not (tmp_path / "saida" / "Mapa_Amostra_1.html").exists()
+
+
+def test_e2e_roteiro_encadeado_derruba_a_quilometragem(tmp_path):
+    # REGRESSAO DA F9: com o modelo antigo (ida e volta da capital por municipio) o
+    # deslocamento era ~7x maior. O roteiro gravado tem de ser menor que essa soma.
+    # Cada ODI num municipio proprio - e' assim que a amostra real se comporta (26 ODIs
+    # em 25 municipios) e e' o cenario em que o modelo antigo explodia.
+    _monta_entrada(tmp_path, municipios={odi: f"MUNICIPIO {i}" for i, odi in enumerate(ODIS)})
+    assert executar(tmp_path) == 0
+    resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
+    detalhe = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Detalhe")
+    a1 = resumo[resumo["Amostra"] == 1].iloc[0]
+    obras = detalhe[detalhe["Amostra"] == 1]
+    lat_cap, lon_cap = config.CAPITAIS_UF[config.UF_PADRAO]
+    # Modelo antigo: 2 x (capital -> obra) para cada municipio distinto.
+    por_municipio = obras.groupby("Municipio")[["Latitude", "Longitude"]].mean()
+    ida_e_volta = sum(2 * haversine_km(lat_cap, lon_cap, r.Latitude, r.Longitude)
+                      for r in por_municipio.itertuples()) * config.FATOR_RODOVIARIO
+    assert a1["Roteiro (km estrada)"] < ida_e_volta
+    # A ordem do roteiro e' uma numeracao completa das obras da amostra.
+    assert sorted(obras["Ordem"]) == list(range(1, len(obras) + 1))
 
 
 def test_e2e_tranche_errada(tmp_path, capsys):
@@ -91,11 +130,12 @@ def test_e2e_tranche_errada(tmp_path, capsys):
 
 
 def test_e2e_sem_entrada(tmp_path, capsys):
-    # Sem Lote.xlsx: erro de usuario dizendo onde colocar o arquivo, nao traceback.
+    # Entrada/ so com o painel: erro de usuario dizendo o que falta, nao traceback.
     (tmp_path / "Entrada").mkdir()
     (tmp_path / "saida").mkdir()
+    escrever_painel(tmp_path / "Entrada" / "Painel de Monitoramento T.xlsx")
     assert executar(tmp_path) == 1
-    assert "Lote.xlsx" in capsys.readouterr().out
+    assert "Nenhuma planilha de amostras" in capsys.readouterr().out
 
 
 def test_e2e_odi_orfa_com_uc_aborta(tmp_path, capsys):
@@ -116,9 +156,9 @@ def test_e2e_odi_orfa_cons_zero_vira_pseudo_uc(tmp_path, capsys):
     # O fallback e' anunciado (nunca silencioso) e nomeia a ODI afetada.
     assert "pseudo-UC" in saida and "PA005" in saida
     # A ODI orfa aparece no detalhe com exatamente 1 UC (a pseudo-UC).
-    det = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Detalhe 1")
-    linha = det[det["ODI"] == "PA005"].iloc[0]
-    assert linha["Qtd UCs"] == 1
+    det = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Detalhe")
+    linha = det[(det["Amostra"] == 1) & (det["ODI"] == "PA005")].iloc[0]
+    assert linha["UCs"] == 1
 
 
 def test_e2e_resumo_aberto_no_excel(tmp_path, capsys, monkeypatch):
@@ -158,8 +198,8 @@ def test_e2e_tipo_contrato_muda_o_custo(tmp_path, monkeypatch):
         _base_contratos(raiz, monkeypatch,
                         {contrato: {"uf": "PA", "tipo_contrato": tipo, "vigente": "Andamento"}})
         assert executar(raiz, contrato=contrato) == 0
-        agg = pd.read_excel(raiz / "saida" / "Resumo_Custos.xlsx", sheet_name="Amostra 1")
-        return agg[agg["Estrato"].astype(str) == "TOTAL"].iloc[0]["Custo total (R$)"]
+        resumo = pd.read_excel(raiz / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
+        return resumo[resumo["Amostra"] == 1].iloc[0]["Custo total (R$)"]
 
     # Mesma geometria, so o tipo muda: MLA tem de sair mais caro.
     assert _total("ECM LPT-2026", "LPT") < _total("ECM MLA-2026", "MLA")
@@ -216,24 +256,47 @@ def test_e2e_painel_no_formato_anexo_v(tmp_path, capsys):
     # Diz de qual aba/linha leu (com duas linhas de cabecalho possiveis, isso precisa ser visivel).
     assert "cabecalho na linha 2" in saida
     # 5 ODIs x 2 UCs por amostra chegaram ate o motor de custo.
-    assert "5 ODIs / 10 UCs" in saida
+    assert "5 ODIs, 1 municipios, 10 UCs" in saida
     assert (tmp_path / "saida" / "Resumo_Custos.xlsx").exists()
 
 
-def test_e2e_lote_alternativo_na_entrada_gera_aviso(tmp_path, capsys):
-    # Estratos 4/5 esquecidos na Entrada/ sao ignorados - mas nunca em silencio.
+def test_e2e_estratificacoes_duplicadas_avisam(tmp_path, capsys):
+    # Duas planilhas declarando o mesmo N sao a mesma estratificacao: a segunda e'
+    # descartada para nao duplicar a linha do resumo, mas nunca em silencio.
     _monta_entrada(tmp_path)
-    escrever_lote(tmp_path / "Entrada" / "Estratos 5 - Python.xlsx", abas=(1,))
+    escrever_lote(tmp_path / "Entrada" / "Estratos 3 - Python.xlsx", abas=(1, 2))
     assert executar(tmp_path) == 0
-    assert "Estratos 5 - Python.xlsx" in capsys.readouterr().out
+    assert "IGNORADO" in capsys.readouterr().out
+    resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
+    assert len(resumo) == 2               # so uma estratificacao x 2 amostras
+
+
+def test_e2e_amostra_vazia_nao_derruba_o_pipeline(tmp_path):
+    # Uma aba 'Amostra K' sem nenhuma obra sorteada e' possivel (estratificacao apertada).
+    # Ela precisa virar uma linha de zeros no resumo, nunca um traceback.
+    _monta_entrada(tmp_path)
+    # Reescreve o Lote com a amostra 2 sem nenhum STATUS='Selecionado'.
+    caminho = tmp_path / "Entrada" / "Lote.xlsx"
+    cheia = pd.read_excel(caminho, sheet_name="Amostra 1")
+    vazia = cheia.assign(STATUS="")
+    with pd.ExcelWriter(caminho) as xls:
+        cheia.to_excel(xls, sheet_name="Amostra 1", index=False)
+        vazia.to_excel(xls, sheet_name="Amostra 2", index=False)
+    assert executar(tmp_path) == 0
+    resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
+    linha = resumo[resumo["Amostra"] == 2].iloc[0]
+    # Sem obras: zero geometria, zero dias de trabalho - mas o fixo de OS continua existindo.
+    assert linha["ODIs"] == 0 and linha["UCs"] == 0
+    assert linha["Roteiro (km estrada)"] == pytest.approx(0.0)
+    assert linha["Dias trabalho"] == 0
 
 
 def test_e2e_determinismo(tmp_path):
     # Determinismo (convencao do canonico): mesma entrada -> mesmos numeros, sempre.
     _monta_entrada(tmp_path)
     assert executar(tmp_path) == 0
-    primeiro = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Amostra 1")
+    primeiro = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
     # Roda de novo sobre a mesma Entrada/, sobrescrevendo as saidas.
     assert executar(tmp_path) == 0
-    segundo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Amostra 1")
+    segundo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
     pd.testing.assert_frame_equal(primeiro, segundo)

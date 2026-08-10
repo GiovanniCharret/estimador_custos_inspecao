@@ -23,6 +23,17 @@ x F6 — mapas HTML gerados com camadas por estrato e popup de custo; teste pass
 x F7 — e2e feliz + 8 bordas passam (16 testes); `planning/TESTES.md` escrito;
     status report `planning/html/STATUS_F7.html` gerado; `executar.bat` validado
     (sem entrada → "Lote.xlsx nao encontrado", exit 1, sem traceback).
+x F9 — reconstrução do modelo contra o benchmark da engenharia (2026-08-10). Critérios:
+    - o roteiro é UM itinerário (capital → todas as obras → capital), não ida-e-volta por
+      município: 1.529 km em vez de 10.521 km na amostra real;
+    - o custo fixo de escritório entra **uma vez por amostra**, nunca por estrato;
+    - dias arredondados para cima + 1 dia de mobilização (responde a pergunta P5 do gate);
+    - `TAMANHO_EQUIPE` é parâmetro: em 1 (G1 reafirmado), em 2 reproduz o benchmark ao centavo
+      (`test_reproduz_a_formula_do_benchmark_da_engenharia`);
+    - `Resumo_Custos.xlsx` tem 3 abas fixas (`Leia-me`/`Resumo`/`Detalhe`), sem abertura por
+      estrato, com TODAS as estratificações da `Entrada/` lado a lado;
+    - um `Mapa_Estratos_N.html` por estratificação, camada por amostra, roteiro desenhado;
+    - 68 testes passando e execução real com exit 0.
 x F8 — adequação ao formato REAL de entrada (2026-08-10). Critérios:
     - `ler_painel` lê o Anexo V (1ª linha mesclada → cabeçalho na 2ª) e traduz
       `Número ODI`/`Número da Unidade Consumidora` por `ALIAS_PAINEL`;
@@ -34,22 +45,31 @@ x F8 — adequação ao formato REAL de entrada (2026-08-10). Critérios:
 
 ---
 
-## Placar (2026-08-10)
+## Placar (2026-08-10, pós-F9)
 
-**48 testes passando. As 8 macrofases estão fechadas do lado do código, e o programa
-já rodou ponta a ponta com dados REAIS de uma tranche.**
+**68 testes passando. As 9 macrofases estão fechadas do lado do código, e o programa
+roda ponta a ponta com dados REAIS de uma tranche (3 estratificações × 3 amostras).**
+
+O que o programa entrega hoje para o contrato `ECO 037/2025` (equipe = 1, decisão G1):
+
+| Estratos | Amostra 1 | Amostra 2 | Amostra 3 | Benchmark eng. (Amostra 1, equipe 2) |
+| --- | --- | --- | --- | --- |
+| 3 | R$ 51.360 | R$ 51.360 | R$ 46.560 | R$ 99.360 |
+| 4 | R$ 51.360 | R$ 46.560 | R$ 46.560 | R$ 70.560 |
+| 5 | R$ 41.760 | R$ 41.760 | R$ 41.760 | R$ 89.760 |
 
 As 2 pendências restantes são de conferência humana com o olho — nenhuma depende de
 escrever mais código:
 
-1. F5 — comparar o `saida/Resumo_Custos.xlsx` gerado (contrato `ECO 037/2025`) com o
-   gabarito `minhas_notas/20260224_Tabela_Resumo_Estratos_Amostra.xlsx`.
-2. F6 — abrir `saida/Mapa_Amostra_1.html` no browser e ligar/desligar as camadas de estrato.
+1. F5 — conferir o `saida/Resumo_Custos.xlsx` contra o benchmark
+   `minhas_notas/Tabela_Resumo_Extratos_Amostra.xlsx` (aba `Resumo`). Lembrando: a diferença
+   de ~44% é **decisão** (equipe 1 × 2), não erro — com `TAMANHO_EQUIPE = 2.0` os números
+   caem na fórmula da engenharia.
+2. F6 — abrir `saida/Mapa_Estratos_3.html` no browser, ligar/desligar as camadas de amostra
+   e conferir se a linha do roteiro faz sentido geográfico.
 
-E uma **decisão de modelo** que os dados reais tornaram visível (não é bug): ~88% do custo
-da Amostra 1 é deslocamento, porque a decisão G3 faz uma ida-e-volta da capital **por
-município** e as 26 ODIs estão em 25 municípios. Vale confirmar se é assim que a inspeção
-acontece na prática, ou se convém encadear municípios numa viagem só.
+Pendência de **calibração** (aberta, não bloqueia): `VELOCIDADE_KMH` (45) e `FATOR_RODOVIARIO`
+(1,40) continuam sendo chutes da F1 e são os dois parâmetros que mais mexem no resultado.
 
 Roteiro em `planning/TESTES.md`, seções "Primeira execução com dados reais" e
 "Roteiro do teste manual".

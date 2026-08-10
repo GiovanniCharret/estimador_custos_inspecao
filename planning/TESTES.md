@@ -1,6 +1,6 @@
 # TESTES — mapa da suíte do estimador
 
-Atualizado em 2026-08-10 (F8 — primeira execução com dados reais). **48 testes, todos passando.**
+Atualizado em 2026-08-10 (F9 — reconstrução do modelo). **68 testes, todos passando.**
 
 Nenhum teste depende de `minhas_notas/` nem de `Entrada/` (decisão D6): as planilhas
 são geradas sinteticamente em `tmp_path` por `testes/fixtures.py`. Isso é o que permite
@@ -24,12 +24,12 @@ rodar a suíte numa máquina limpa, sem os dados reais da distribuidora.
 | Arquivo | Nº | Fase | O que cobre |
 | --- | --- | --- | --- |
 | `test_smoke.py` | 1 | F0 | ambiente: pandas/numpy/openpyxl/folium importam |
-| `test_io_amostras.py` | 20 | F2/F8 | achar entradas (ausente/ambígua), ler abas `Amostra K`, filtro `STATUS`, `Cons` ausente, detecção da aba do painel, bbox do Brasil, os **3 ramos da regra do órfão**, e o **formato real do Anexo V** (cabeçalho na 2ª linha, apelidos de coluna, ODI texto × numérica, município com acento, lote alternativo ignorado) |
-| `test_distancias.py` | 4 | F3 | haversine contra valor conhecido (Belém→Castanhal ≈ 62 km), ponto igual = 0, centroide/rota interna, ODI com 1 UC |
-| `test_custo.py` | 4 | F4 | fórmula por ODI com parâmetros redondos, rateio municipal da mobilização, LPT × MLA, agregação por estrato + fixo de OS, diária diluída |
-| `test_resumo.py` | 2 | F5 | abas geradas no `.xlsx` e `PermissionError` → mensagem amigável |
-| `test_mapas.py` | 1 | F6 | HTML gerado com `FeatureGroup` por estrato e popup da ODI |
-| `test_e2e.py` | 16 | F7/F8 | pipeline inteiro `Entrada/` → `saida/` (abaixo) |
+| `test_io_amostras.py` | 25 | F2/F8/F9 | descoberta de **N estratificações** na `Entrada/` (ordem, duplicata, N do Leia-me → nome → contagem), painel ausente/ambíguo, ler abas `Amostra K`, filtro `STATUS`, `Cons` ausente, bbox do Brasil, os **3 ramos da regra do órfão**, e o **formato real do Anexo V** (cabeçalho na 2ª linha, apelidos de coluna, ODI texto × numérica, município com acento) |
+| `test_distancias.py` | 9 | F3/F9 | haversine contra valor conhecido (Belém→Castanhal ≈ 62 km), ponto igual = 0, centroide/rota interna, ODI com 1 UC, e o **roteiro encadeado** (permutação completa, município não é revisitado, km fecha com trechos + volta, determinismo, amostra vazia) |
+| `test_custo.py` | 8 | F4/F9 | fórmula da amostra com parâmetros redondos, roteiro < ida-e-volta, **fixo independente do nº de estratos**, LPT × MLA, arredondamento de dias, `TAMANHO_EQUIPE`, **reprodução da fórmula do benchmark**, diária diluída |
+| `test_resumo.py` | 4 | F5/F9 | as 3 abas fixas, ordem por (estratificação, amostra), ordem do roteiro no detalhe, Leia-me com os parâmetros vigentes, `PermissionError` → mensagem amigável |
+| `test_mapas.py` | 2 | F6/F9 | camada por **amostra** (e não por estrato) lida do `LayerControl`, polilinha do roteiro, marcador da base, popup com a ordem da parada |
+| `test_e2e.py` | 19 | F7/F8/F9 | pipeline inteiro `Entrada/` → `saida/` (abaixo) |
 
 ## O que o e2e cobre (F7)
 
@@ -37,8 +37,12 @@ Caminho feliz e as bordas que o `DESIGN.md` §7 elegeu como os erros mais prová
 
 | Teste | Verifica |
 | --- | --- |
-| `test_e2e_feliz` | exit 0, aviso de contrato não informado, `Resumo_Custos.xlsx` + 1 mapa por amostra |
-| `test_e2e_total_bate_com_detalhe_mais_fixo` | **o invariante central do modelo** (ver abaixo) |
+| `test_e2e_feliz` | exit 0, aviso de contrato não informado, `Resumo_Custos.xlsx` + 1 mapa por estratificação |
+| `test_e2e_custo_e_por_amostra_nao_por_estrato` | **o invariante central do modelo** (ver abaixo) |
+| `test_e2e_varias_estratificacoes_numa_planilha_so` | Estratos 3 e 5 na `Entrada/` → 4 linhas na mesma aba `Resumo`, 2 mapas |
+| `test_e2e_roteiro_encadeado_derruba_a_quilometragem` | o roteiro gravado é menor que a soma das idas-e-voltas do modelo antigo |
+| `test_e2e_estratificacoes_duplicadas_avisam` | dois arquivos com o mesmo N → aviso e uma linha só |
+| `test_e2e_amostra_vazia_nao_derruba_o_pipeline` | aba `Amostra K` sem obra sorteada vira linha de zeros, não traceback |
 | `test_e2e_tranche_errada` | Painel de outra tranche → exit 1 com a mensagem específica |
 | `test_e2e_sem_entrada` | `Entrada/` vazia → exit 1 dizendo onde pôr o `Lote.xlsx` |
 | `test_e2e_odi_orfa_com_uc_aborta` | órfão com `Cons > 0` → aborta listando as ODIs |
@@ -54,23 +58,27 @@ Caminho feliz e as bordas que o `DESIGN.md` §7 elegeu como os erros mais prová
 | `test_e2e_lote_alternativo_na_entrada_gera_aviso` | `Estratos 5 - Python.xlsx` esquecido na `Entrada/` → aviso, nunca silêncio |
 | `test_e2e_determinismo` | rodar duas vezes na mesma entrada dá exatamente os mesmos números |
 
-### O invariante que quase virou bug
+### O invariante central e os dois testes que o amarram
 
-O `PLANO_IMPLEMENTACAO.md` (Task 8, Step 1) propunha assertar que o `TOTAL` da aba
-agregada é igual à soma da aba de detalhe, com tolerância de R$ 0,05. **Isso está errado
-e o teste teria falhado por R$ 38.880.**
+**O custo é por AMOSTRA.** O estrato não participa: ele identifica de onde a obra veio na
+estratificação e sobrevive só como coluna informativa. Dois testes seguram isso:
 
-O detalhe por ODI traz **só o custo de campo**; o custo fixo de escritório
-(`36h × R$360 = R$12.960`) entra **uma vez por estrato** em `agregar_por_estrato` e não
-pertence a nenhuma ODI. Na fixture (3 estratos) a diferença é exatamente `3 × 12.960`.
+- `test_e2e_custo_e_por_amostra_nao_por_estrato` — o fixo de escritório é o **mesmo valor
+  único** em toda linha do resumo (nunca `N × 12.960`), e `total == campo + fixo`, com
+  `campo == dias_faturados × equipe × jornada × tarifa`.
+- `test_custo_fixo_nao_depende_do_numero_de_estratos` — a MESMA geometria com rótulos de
+  estrato `[1,1,1]` e `[1,2,3]` tem de custar exatamente igual.
 
-O teste correto, implementado, checa as três relações reais:
+**E um teste amarra o motor ao benchmark da engenharia:**
+`test_reproduz_a_formula_do_benchmark_da_engenharia` roda com `TAMANHO_EQUIPE = 2` e os
+parâmetros reais de `config` e exige `custo == 12.960 + 9.600 × (dias + 1)`. Se alguém
+reintroduzir qualquer um dos três desvios da F9 (fixo por estrato, ida-e-volta por município,
+dias fracionários), esse teste cai.
 
-```
-TOTAL["Custo campo (R$)"]  ==  soma do detalhe          (tolerância de arredondamento)
-TOTAL["Custo fixo OS (R$)"] ==  n_estratos × 36h × R$360
-TOTAL["Custo total (R$)"]  ==  campo + fixo             e  >  soma do detalhe
-```
+> **História anterior, mantida como registro:** antes da F9 o resumo era agregado por estrato
+> e existia uma armadilha famosa — somar a coluna de custo do detalhe não dava o total da
+> amostra, porque o fixo entrava por estrato (diferença de R$ 38.880 na fixture de 3 estratos).
+> A F9 eliminou a armadilha na raiz: não há mais agregação por estrato nem custo por ODI.
 
 ## Primeira execução com dados reais (2026-08-10)
 
@@ -95,24 +103,48 @@ E dois defeitos latentes que só apareceriam mais tarde, também corrigidos:
 - **Município com acento de um lado só:** Lote `GURINHEM` × Painel `GURINHÉM`. A regra do órfão
   comparava só com `upper()/strip()` e acusaria "município sem nenhuma UC no Painel". Agora usa `_norm`.
 
-Sobra uma leitura para o humano, **de modelo e não de código**: os R$ 239.799 da Amostra 1 são
-~88% deslocamento (14.737 km de acesso), porque as 26 ODIs estão em 25 municípios distintos e a
-decisão G3 faz **uma ida-e-volta da capital por município**, sem encadear municípios numa viagem
-só. É o comportamento aprovado na F1, mas com dado real ele fica grande e visível.
+Sobrou uma leitura de **modelo**: os R$ 239.799 da Amostra 1 eram ~88% deslocamento (14.737 km),
+porque a implementação fazia uma ida-e-volta da capital por município. Isso foi corrigido na F9
+(abaixo).
+
+## Reconstrução F9 (2026-08-10) — calibração contra o benchmark da engenharia
+
+O humano apontou a superestimativa e forneceu o benchmark:
+`minhas_notas/Tabela_Resumo_Extratos_Amostra.xlsx`, aba `Resumo` — as 3 estratificações da
+PB 7ª Tranche com o custo estimado à mão. Regressão nos 3 pontos, **resíduo zero**:
+
+```
+custo = 12.960 + 9.600 × (dias + 1)      9.600 = 2 pessoas × 8h × R$600
+```
+
+Que é **exatamente** a fórmula já aprovada no `MODELO_CUSTO.md` da F1. Quem tinha desviado era
+o código, em três pontos que somavam +141% na amostra real:
+
+| Desvio | Correção | Testes que seguram |
+| --- | --- | --- |
+| fixo de R$12.960 por **estrato** | uma vez por **amostra** | `test_custo_fixo_nao_depende_do_numero_de_estratos`, `test_e2e_custo_e_por_amostra_nao_por_estrato` |
+| ida-e-volta da capital por **município** (10.521 km) | itinerário **único** encadeado (1.529 km) | `test_roteiro_*` (5), `test_e2e_roteiro_encadeado_derruba_a_quilometragem` |
+| horas fracionárias | dias inteiros + 1 de mobilização | `test_dias_arredondam_para_cima` |
+
+Resultado com `TAMANHO_EQUIPE = 2` (para comparar maçã com maçã): −9,7% / +27,2% / −21,4% por
+amostra, **−3,7% no agregado**. O erro por amostra é limite do benchmark, não do modelo — os dias
+da engenharia não seguem a geometria (a amostra de 5 estratos tem a rota mais curta e ganhou mais
+dias que a de 4). Em produção o parâmetro fica em **1** por decisão G1.
 
 ## Roteiro do teste manual (para as próximas tranches)
 
-1. Copiar para `Entrada/` o `Lote.xlsx` da tranche e o `*Painel de Monitoramento*.xlsx`
+1. Copiar para `Entrada/` **todas** as planilhas de estratificação da tranche
+   (`Lote.xlsx`, `Estratos 4 - Python.xlsx`, ...) e o `*Painel de Monitoramento*.xlsx`
    **do mesmo certame** (tranches diferentes → o programa aborta avisando).
 2. Duplo-clique em `executar.bat`.
 3. Informar o contrato **como está na base** (`ECO 037/2025`) — hífen no lugar da barra
    também serve. Enter usa os padrões `PA`/`LPT`.
-4. Conferir na tela: UF e tipo resolvidos, a aba/linha de cabeçalho que o Painel usou,
-   contagem de ODIs/UCs por amostra, avisos de coordenada descartada, pseudo-UC ou
-   lote alternativo ignorado.
-5. Conferir em `saida/`: `Resumo_Custos.xlsx` contra o gabarito
-   `minhas_notas/20260224_Tabela_Resumo_Estratos_Amostra.xlsx`, e abrir um
-   `Mapa_Amostra_K.html` no browser ligando/desligando as camadas de estrato.
+4. Conferir na tela: UF e tipo resolvidos, as estratificações encontradas, a aba/linha de
+   cabeçalho que o Painel usou, e a linha de cada amostra (ODIs, municípios, UCs, km, dias,
+   R$), mais avisos de coordenada descartada, pseudo-UC ou estratificação duplicada.
+5. Conferir em `saida/`: a aba `Resumo` do `Resumo_Custos.xlsx` contra o benchmark
+   `minhas_notas/Tabela_Resumo_Extratos_Amostra.xlsx`, e abrir um `Mapa_Estratos_N.html`
+   no browser ligando/desligando as camadas de amostra e seguindo a linha do roteiro.
 
 Sinais de que a entrada é que está errada, não o programa: `ERRO DE ENTRADA:` e `AVISO:`.
 Se aparecer **traceback**, é bug do programa — a planilha nunca deve produzir um.

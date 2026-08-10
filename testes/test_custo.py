@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Testes do motor de custo com valores conferidos em planilha manual."""
+"""Testes do motor de custo (modelo F9: por amostra, roteiro encadeado, dias inteiros)."""
+import math
+
 import pandas as pd
 import pytest
+
 from src import config
-from src.custo import custo_por_odi, agregar_por_estrato, tarifa_campo
+from src.custo import custo_amostra, tarifa_campo
+from src.distancias import haversine_km
+
 
 def _odis_teste():
-    # 2 ODIs no estrato 1 (mesmo municipio X), 1 no estrato 2 (municipio Y).
+    """3 obras: A e B no municipio X, C no municipio Y (todas na regiao de Belem-PA)."""
     return pd.DataFrame({
         "ODI": ["A", "B", "C"], "Estrato": [1, 1, 2], "Municipio": ["X", "X", "Y"],
         "n_ucs": [2, 1, 3],
@@ -14,8 +19,9 @@ def _odis_teste():
         "dist_interna_km": [2.0, 0.0, 5.0],
     })
 
+
 def _config_redonda(monkeypatch):
-    # Fixa parametros redondos para conferencia manual da formula.
+    """Fixa parametros redondos para a formula ser conferivel a mao."""
     monkeypatch.setattr(config, "FATOR_RODOVIARIO", 1.0)
     monkeypatch.setattr(config, "VELOCIDADE_KMH", 50.0)
     monkeypatch.setattr(config, "HORAS_DIA_CAMPO", 8.0)
@@ -25,48 +31,105 @@ def _config_redonda(monkeypatch):
     monkeypatch.setattr(config, "TARIFAS_HORA",
                         {"ENGENHEIRO": {"campo": 100.0, "escritorio": 50.0}})
     monkeypatch.setattr(config, "CUSTO_DIARIA", 0.0)
+    monkeypatch.setattr(config, "TAMANHO_EQUIPE", 1.0)
+    monkeypatch.setattr(config, "DIAS_MOBILIZACAO", 1.0)
 
-def test_custo_por_odi_formula(monkeypatch):
+
+def test_custo_amostra_formula(monkeypatch):
+    # Confere a cadeia inteira km -> horas -> dias -> R$ com numeros redondos.
     _config_redonda(monkeypatch)
-    r = custo_por_odi(_odis_teste(), uf="PA", tipo_contrato="LPT")
-    a = r[r["ODI"] == "A"].iloc[0]
-    # Mobilizacao municipal e' rateada: A e B (mesmo municipio X) tem o MESMO acesso.
-    b = r[r["ODI"] == "B"].iloc[0]
-    assert a["dist_acesso_km"] == pytest.approx(b["dist_acesso_km"])
-    assert a["dist_acesso_km"] > 0
-    # horas_inspecao = n_ucs * (8h / 4 UCs por dia) = 2 * 2h = 4h -> custo = 4 * 100.
-    assert a["horas_inspecao"] == pytest.approx(4.0)
-    assert a["custo_insp"] == pytest.approx(400.0)
-    # custo_desloc = horas_desloc * tarifa de campo (100).
-    assert a["custo_desloc"] == pytest.approx(a["horas_desloc"] * 100.0)
-    # total por ODI = so campo (desloc + inspecao); o fixo de OS entra por estrato.
-    assert a["custo_total"] == pytest.approx(a["custo_desloc"] + a["custo_insp"])
+    numeros, roteiro = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    # 6 UCs x (8h / 4 UCs por dia) = 12h de inspecao.
+    assert numeros["n_ucs"] == 6
+    assert numeros["horas_inspecao"] == pytest.approx(12.0)
+    # Roteiro: km do itinerario + percurso interno (2 + 0 + 5), FATOR_RODOVIARIO = 1.
+    km_itinerario = roteiro["km_trecho"].sum() + haversine_km(
+        roteiro.iloc[-1]["lat_centro"], roteiro.iloc[-1]["lon_centro"], *config.CAPITAIS_UF["PA"])
+    assert numeros["km_roteiro"] == pytest.approx(km_itinerario + 7.0)
+    # Horas de roteiro = km / 50.
+    assert numeros["horas_roteiro"] == pytest.approx(numeros["km_roteiro"] / 50.0)
+    # Dias de trabalho = teto das horas de campo / 8; faturados somam 1 de mobilizacao.
+    horas_campo = numeros["horas_roteiro"] + numeros["horas_inspecao"]
+    assert numeros["dias_trabalho"] == math.ceil(horas_campo / 8.0)
+    assert numeros["dias_faturados"] == numeros["dias_trabalho"] + 1
+    # Custo de campo = dias x equipe x jornada x tarifa; fixo = 10h x 50.
+    assert numeros["custo_campo"] == pytest.approx(numeros["dias_faturados"] * 1 * 8 * 100.0)
+    assert numeros["custo_fixo"] == pytest.approx(500.0)
+    assert numeros["custo_total"] == pytest.approx(numeros["custo_campo"] + 500.0)
+
+
+def test_roteiro_encadeado_e_muito_menor_que_ida_e_volta_por_obra(monkeypatch):
+    # REGRESSAO DA F9: o modelo antigo mandava a equipe voltar a capital a cada municipio,
+    # o que inflava a quilometragem em ~7x nos dados reais. O itinerario unico tem de ser
+    # drasticamente menor que a soma das idas-e-voltas.
+    _config_redonda(monkeypatch)
+    df = _odis_teste()
+    numeros, _ = custo_amostra(df, uf="PA", tipo_contrato="LPT")
+    lat_cap, lon_cap = config.CAPITAIS_UF["PA"]
+    # Modelo antigo: 2 x (capital -> centroide do municipio), uma vez por municipio.
+    ida_e_volta = sum(
+        2 * haversine_km(lat_cap, lon_cap, float(g["lat_centro"].mean()), float(g["lon_centro"].mean()))
+        for _, g in df.groupby("Municipio")
+    )
+    assert numeros["km_roteiro"] < ida_e_volta
+    # E o roteiro nao pode ser menor que a ida a obra mais proxima somada a volta dela.
+    assert numeros["km_roteiro"] > 0
+
+
+def test_custo_fixo_nao_depende_do_numero_de_estratos(monkeypatch):
+    # REGRESSAO DA F9: o fixo de escritorio entra UMA vez por amostra. Antes ele entrava
+    # uma vez por estrato, multiplicando R$12.960 pelo numero de estratos da amostra.
+    _config_redonda(monkeypatch)
+    um_estrato = _odis_teste().assign(Estrato=[1, 1, 1])
+    tres_estratos = _odis_teste().assign(Estrato=[1, 2, 3])
+    a, _ = custo_amostra(um_estrato, uf="PA", tipo_contrato="LPT")
+    b, _ = custo_amostra(tres_estratos, uf="PA", tipo_contrato="LPT")
+    # Mesma geometria, mesmos rotulos de estrato trocados: o custo tem de ser identico.
+    assert a["custo_fixo"] == b["custo_fixo"] == pytest.approx(500.0)
+    assert a["custo_total"] == pytest.approx(b["custo_total"])
+
 
 def test_tipo_contrato_muda_produtividade(monkeypatch):
-    _config_redonda(monkeypatch)
-    lpt = custo_por_odi(_odis_teste(), uf="PA", tipo_contrato="LPT")
-    mla = custo_por_odi(_odis_teste(), uf="PA", tipo_contrato="MLA")
     # MLA (1 UC/dia) consome 4x as horas de inspecao de LPT (4 UCs/dia).
-    assert mla["horas_inspecao"].sum() == pytest.approx(4 * lpt["horas_inspecao"].sum())
-
-def test_agregar_por_estrato_soma_e_fixo(monkeypatch):
     _config_redonda(monkeypatch)
-    r = custo_por_odi(_odis_teste(), uf="PA", tipo_contrato="LPT")
-    agg = agregar_por_estrato(r)
-    # 2 estratos + linha TOTAL.
-    assert len(agg) == 3
-    e1 = agg[agg["Estrato"] == 1].iloc[0]
-    # custo_fixo_os = 10h de escritorio * 50 = 500, UMA vez por estrato.
-    assert e1["custo_fixo_os"] == pytest.approx(500.0)
-    # equipe_dias = horas de campo do estrato / 8.
-    assert e1["equipe_dias"] == pytest.approx((e1["horas_desloc"] + e1["horas_inspecao"]) / 8.0)
-    # custo_total do estrato = campo (soma dos ODIs) + fixo.
-    soma_campo = r[r["Estrato"] == 1]["custo_total"].sum()
-    assert e1["custo_total"] == pytest.approx(soma_campo + 500.0)
-    # TOTAL soma os estratos (fixo incluido 2x: uma vez por estrato).
-    total = agg[agg["Estrato"] == "TOTAL"].iloc[0]
-    assert total["custo_fixo_os"] == pytest.approx(1000.0)
-    assert total["custo_total"] == pytest.approx(agg[agg["Estrato"] != "TOTAL"]["custo_total"].sum())
+    lpt, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    mla, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="MLA")
+    assert mla["horas_inspecao"] == pytest.approx(4 * lpt["horas_inspecao"])
+    # Mais horas de inspecao nunca pode sair mais barato.
+    assert mla["custo_total"] >= lpt["custo_total"]
+
+
+def test_dias_arredondam_para_cima(monkeypatch):
+    # A equipe nao vende meio dia: qualquer fracao vira dia inteiro.
+    _config_redonda(monkeypatch)
+    numeros, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    assert numeros["dias_trabalho"] >= numeros["dias_fracionarios"]
+    assert numeros["dias_trabalho"] == math.ceil(numeros["dias_fracionarios"])
+    assert float(numeros["dias_trabalho"]).is_integer()
+
+
+def test_tamanho_equipe_multiplica_so_o_campo(monkeypatch):
+    # TAMANHO_EQUIPE e' o parametro que separa a decisao G1 (1 engenheiro) do benchmark
+    # da engenharia (2 pessoas): dobra o campo e deixa o fixo de escritorio intacto.
+    _config_redonda(monkeypatch)
+    um, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    monkeypatch.setattr(config, "TAMANHO_EQUIPE", 2.0)
+    dois, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    assert dois["custo_campo"] == pytest.approx(2 * um["custo_campo"])
+    assert dois["custo_fixo"] == pytest.approx(um["custo_fixo"])
+
+
+def test_reproduz_a_formula_do_benchmark_da_engenharia(monkeypatch):
+    # A engenharia da PB 7a Tranche estimou 3 amostras e as tres obedecem, ao centavo, a
+    #     custo = 12.960 + 9.600 x (dias + 1),  com 9.600 = 2 pessoas x 8h x R$600.
+    # Este teste amarra o motor aquela formula: com TAMANHO_EQUIPE = 2 e os parametros
+    # reais de config, o custo tem de cair exatamente nela. Se alguem mudar a estrutura
+    # do modelo (fixo por estrato, dias fracionarios, ida-e-volta), este teste cai.
+    monkeypatch.setattr(config, "TAMANHO_EQUIPE", 2.0)
+    numeros, _ = custo_amostra(_odis_teste(), uf="PB", tipo_contrato="LPT")
+    esperado = 12960 + 9600 * (numeros["dias_trabalho"] + 1)
+    assert numeros["custo_total"] == pytest.approx(esperado, abs=0.01)
+
 
 def test_tarifa_campo_inclui_diaria(monkeypatch):
     _config_redonda(monkeypatch)

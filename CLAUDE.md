@@ -33,21 +33,20 @@ entre amostras, coordenadas e custos; uma ODI tem N UCs (unidades consumidoras).
 
 ## Estado atual (2026-08-10)
 
-**Fases F0–F8 completas e commitadas; 48 testes passando.** O pipeline roda ponta a ponta
-com **dados reais** (contrato `ECO 037/2025`, ENERGISA/PB): `executar.bat` → `_exec.ps1` →
-`src/estimar_custos.py` → `saida/`.
+**Fases F0–F9 completas; 68 testes passando.** O pipeline roda ponta a ponta com **dados reais**
+(contrato `ECO 037/2025`, ENERGISA/PB, 3 estratificações × 3 amostras):
+`executar.bat` → `_exec.ps1` → `src/estimar_custos.py` → `saida/`.
 
 O orquestrador expõe `executar(raiz, contrato=None) -> int` (0 sucesso / 1 erro de entrada),
 puro e sem stdin — o `__main__` é quem pergunta o contrato. Todo `EntradaInvalida` é
 convertido ali, e só ali, em mensagem + exit 1.
 
-**O que falta é conferência humana com o olho, não código:** comparar o `Resumo_Custos.xlsx`
-gerado com o gabarito de 24/02 (F5) e abrir um mapa no browser (F6). Ver
-`planning/definition of done.md` § Placar e `planning/TESTES.md`.
+Saída atual (`saida/`): **um** `Resumo_Custos.xlsx` com todas as estratificações + um
+`Mapa_Estratos_N.html` por estratificação.
 
-Pendência de **modelo**, aberta pelos dados reais: a decisão G3 faz uma ida-e-volta da capital
-por município; com 26 ODIs em 25 municípios, deslocamento vira ~88% do custo da amostra. Está
-correto conforme aprovado na F1, mas não foi confirmado contra a prática de campo.
+**O que falta é conferência humana com o olho, não código:** conferir o `Resumo_Custos.xlsx`
+contra o benchmark da engenharia (F5) e abrir um mapa no browser (F6). Ver
+`planning/definition of done.md` § Placar e `planning/TESTES.md`.
 
 Armadilha de leitura da saída: **somar a coluna de custo da aba `Detalhe K` não dá o custo da
 amostra** — o detalhe é só campo; o fixo de escritório entra por estrato. O número válido é a
@@ -90,33 +89,46 @@ Cada seta abaixo é um **contrato de dataframe** — mudar uma coluna quebra o m
 
 | Módulo | Entrada → Saída |
 | --- | --- |
-| `io_amostras.py` | `Entrada/` → `achar_entradas` (Lote.xlsx + 1 Painel) → `ler_amostras` `{k: df[ODI,Estrato,Municipio,Cons]}` · `ler_painel` `df[ODI,UC,Municipio,LATITUDE,LONGITUDE]` → `juntar_amostras_painel` `{k: df 1 linha por UC}` |
-| `distancias.py` | df de UCs → `resumo_por_odi` → **1 linha por ODI**: `n_ucs`, `lat_centro`, `lon_centro`, `dist_interna_km` (rota vizinho-mais-próximo, determinística) |
-| `config.py` | **todos** os números do modelo (G1–G5 do gate F1). Zero números mágicos fora daqui |
-| `custo.py` | `custo_por_odi(df, uf, tipo_contrato)` → colunas de custo de **campo**; `agregar_por_estrato` → 1 linha por estrato + `custo_fixo_os` + linha `TOTAL` |
-| `resumo.py` | `gravar_resumo({k: df por ODI}, caminho)` → `saida/Resumo_Custos.xlsx` (Leia-me + `Amostra K` agregado + `Detalhe K` por ODI). Recebe o **detalhe** e chama `agregar_por_estrato` por dentro — não passe agregados prontos |
-| `mapas.py` | `gravar_mapa(df_ucs, custos, caminho)` → `saida/Mapa_Amostra_K.html` (folium, FeatureGroup por estrato). Duas granularidades no mesmo call: `df_ucs` 1 linha/UC para os marcadores, `custos` 1 linha/ODI para o popup |
+| `io_amostras.py` | `Entrada/` → `achar_entradas` → `([(n_estratos, caminho), ...], painel)` (descobre **todas** as estratificações pelo conteúdo) · `ler_n_estratos` · `ler_amostras` `{k: df[ODI,Estrato,Municipio,Cons]}` · `ler_painel` `df[ODI,UC,Municipio,LATITUDE,LONGITUDE]` → `juntar_amostras_painel` `{k: df 1 linha por UC}` |
+| `distancias.py` | df de UCs → `resumo_por_odi` → **1 linha por ODI** (colunas fixas, mesmo vazio): `n_ucs`, `lat_centro`, `lon_centro`, `dist_interna_km` · `montar_roteiro(df_odis, lat0, lon0)` → `(df com ordem/km_trecho, km_total)` = **itinerário único** |
+| `config.py` | **todos** os números do modelo (G1–G5 do gate F1 + F9). Zero números mágicos fora daqui |
+| `custo.py` | `custo_amostra(df_odis, uf, tipo_contrato)` → `(dict com os números da AMOSTRA, df do roteiro)`. Um call por amostra — não há função por ODI nem por estrato |
+| `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, **números}, ...], caminho)` → `saida/Resumo_Custos.xlsx` com **3 abas fixas**: `Leia-me` + `Resumo` (1 linha por estratificação×amostra) + `Detalhe` (1 linha por obra, na ordem do roteiro) |
+| `mapas.py` | `gravar_mapa({k: (df_ucs, roteiro)}, lat0, lon0, caminho)` → `saida/Mapa_Estratos_N.html` (folium, FeatureGroup **por amostra**, polilinha do roteiro, marcador da base) |
 
 Detalhes que não se deduzem lendo um arquivo só:
 
 - **`custo.py` lê `config` na chamada, nunca no import** — é o que faz `monkeypatch.setattr(config, ...)`
   nos testes e o ajuste sem rebuild funcionarem. Não faça `from src.config import X`.
-- **Custo de ODI ≠ custo de estrato.** `custo_por_odi` devolve só o campo (deslocamento + inspeção);
-  o termo fixo de escritório (`HORAS_ESCRITORIO_POR_OS × tarifa_escritorio`) entra **uma vez por
-  estrato** em `agregar_por_estrato`. Somar `custo_total` das ODIs ≠ total do estrato.
-- **A mobilização é por MUNICÍPIO, não por ODI**: capital da UF → centroide municipal, ida e volta,
-  uma vez; mais saltos entre as ODIs do município. O rateio igual entre as ODIs do município é
-  **só para exibição** — o total do estrato não depende dele.
+- **O ESTRATO não entra no custo** (desde a F9). Ele identifica de onde a obra veio na
+  estratificação e sobrevive só como coluna informativa do `Detalhe` e do popup do mapa. O custo
+  é por **amostra**: um roteiro, um fixo de escritório.
+- **A equipe faz UMA viagem, não ida-e-volta por município.** `montar_roteiro` sai da capital,
+  escolhe o município mais próximo, varre **todas** as obras dele antes de sair, e só retorna à
+  capital no fim. A hierarquia município→obra é deliberada: uma rota gulosa direta sobre as obras
+  entraria e sairia do mesmo município. Nos dados reais isso é 1.529 km contra 10.521 km do
+  modelo antigo — a correção que motivou a F9.
+- **Dias são inteiros.** `math.ceil(horas_campo / HORAS_DIA_CAMPO) + DIAS_MOBILIZACAO`. A fração
+  fica exposta na coluna `Dias (fração)` para o humano conferir o arredondamento.
+- **`TAMANHO_EQUIPE` é o parâmetro que separa a decisão G1 do benchmark.** Vale `1.0` (G1: só
+  engenheiro), enquanto a engenharia usa `2`. Mudar para `2.0` reproduz o benchmark ao centavo —
+  é o que `test_reproduz_a_formula_do_benchmark_da_engenharia` amarra.
 - **Regra do órfão** (`juntar_amostras_painel`): ODI sorteada sem UC no painel aborta se `Cons > 0`;
   com `Cons == 0` (obra sem UC, ex.: reforço de rede) vira pseudo-UC no centroide do município,
   com aviso. A função **coleta todos os inválidos antes de abortar** e só aplica fallbacks depois
   de a amostra inteira passar — não imprima progresso que possa ser abortado depois.
 - **Interseção zero de ODIs** tem mensagem própria: é o sintoma de "Lote de uma tranche × Painel de outra".
-- **`dist_interna_km` troca de significado entre níveis**: por ODI é linha reta (`resumo_por_odi`);
-  no agregado por estrato é `dist_interna_corrigida_km` (já × `FATOR_RODOVIARIO`) renomeada de volta
-  para `dist_interna_km`. Mesmo nome, escala diferente — não compare os dois níveis direto.
-- **`custo.py` importa `_rota_vizinho_mais_proximo` (privada) de `distancias.py`**: a mesma rota gulosa
-  serve o percurso entre UCs de uma ODI e os saltos entre ODIs de um município. Renomeá-la quebra `custo.py`.
+- **Duas escalas de km convivem**: `dist_interna_km` e `km_trecho` são **linha reta**;
+  `km_roteiro` e `km_trecho_estrada` já vêm × `FATOR_RODOVIARIO`. O nome com `estrada` é a marca.
+- **`Entrada/` recebe VÁRIAS estratificações.** `achar_entradas` devolve uma lista: todo `.xlsx`
+  com abas `Amostra K` vira uma estratificação, com `N` lido do `Leia-me` → nome do arquivo →
+  contagem de estratos distintos (nessa ordem, a última com aviso). Dois arquivos com o mesmo `N`
+  → o segundo é descartado com aviso, para não duplicar linha no resumo.
+- **`ler_n_estratos` conta só as obras `Selecionado`**: a aba traz o lote inteiro, e as linhas
+  não sorteadas carregam rótulos de estrato que não existem na amostra.
+- **`resumo_por_odi` tem esquema fixo mesmo vazio.** Uma aba `Amostra K` sem obra sorteada é
+  possível; sem as colunas garantidas, o pandas devolve um df sem coluna nenhuma e o mapa quebra
+  (aconteceu). `mapas.py` também pula amostras sem obras.
 - **`ler_painel` para na PRIMEIRA combinação (aba × linha de cabeçalho)** que produza
   `odi` + `latitude` + `longitude` — a ordem das abas do painel importa. `ler_amostras`, por
   outro lado, processa todas as abas `Amostra K` que existirem.
@@ -140,16 +152,28 @@ Detalhes que não se deduzem lendo um arquivo só:
   Continua sendo casamento exato — verificado que as 113 chaves seguem únicas após a redução.
 - **`Cons` é opcional no Lote**: ausente vira `0`, o que joga *toda* ODI órfã na regra do fallback
   (pseudo-UC no centroide municipal) em vez do caminho de erro. Painel incompleto passa despercebido.
-- **A linha `TOTAL` soma `custo_fixo_os` de todos os estratos** (N estratos × 36h × tarifa), o que é o
-  comportamento correto — o fixo é por estrato, não por amostra.
 - **Memória de cálculo duplicada de propósito** no topo de `src/config.py` e `src/custo.py`: quem
   abrir qualquer um dos dois entende o custo sem ler mais nada. Mantenha as duas cópias em sincronia.
 
-## Modelo de custo (gate F1 aprovado em 2026-08-06)
+## Modelo de custo (gate F1 aprovado em 2026-08-06 · corrigido na F9 em 2026-08-10)
 
-`custo_estrato = 36h × R$360 (escritório, fixo)` + `horas_de_campo × R$600/h`, onde as horas de
-campo somam deslocamento (km em linha reta × `FATOR_RODOVIARIO` ÷ `VELOCIDADE_KMH`) e inspeção
-(`n_ucs × HORAS_DIA_CAMPO / UCS_POR_DIA[tipo]`; LPT 30 UCs/dia, MLA 3 UCs/dia).
+```
+custo_amostra = 36h × R$360 (escritório, 1× por AMOSTRA)
+              + dias_faturados × TAMANHO_EQUIPE × 8h × R$600/h
+
+dias_faturados = teto((horas_roteiro + horas_inspecao) / 8h) + DIAS_MOBILIZACAO
+horas_roteiro  = (km do itinerário único + percursos internos) × FATOR_RODOVIARIO ÷ VELOCIDADE_KMH
+horas_inspecao = n_ucs × 8h / UCS_POR_DIA[tipo]     (LPT 30/dia, MLA 3/dia)
+```
+
+**O benchmark da engenharia** (`minhas_notas/Tabela_Resumo_Extratos_Amostra.xlsx`, aba `Resumo`,
+PB 7ª Tranche) obedece a `12.960 + 9.600 × (dias+1)` com resíduo **zero** nos 3 pontos —
+9.600 = 2 pessoas × 8h × R$600. É esta mesma fórmula com `TAMANHO_EQUIPE = 2`.
+
+A F9 corrigiu três desvios da implementação em relação ao `MODELO_CUSTO.md` já aprovado
+(fixo por estrato em vez de por amostra; ida-e-volta por município em vez de itinerário único;
+horas fracionárias em vez de dias inteiros). Juntos, superestimavam a amostra real em **+141%**.
+A tabela do desvio está em `planning/MODELO_CUSTO.md` § "CORREÇÃO F9".
 
 Decisões G1–G5 (equipe = ENGENHEIRO; diárias 0 pois a tarifa já embute; base de partida = capital
 da UF do contrato; velocidade/fator rodoviário a calibrar; produtividade por tipo de contrato) estão
@@ -183,10 +207,12 @@ contrato informado. Dois cuidados:
 
 ## Insumos: `Entrada/` (runtime) vs `minhas_notas/` (pesquisa)
 
-O programa lê **só de `Entrada/`** — dois arquivos por convenção de nome (D7):
-`Lote.xlsx` (abas `Amostra K`, coluna `STATUS`) e um `*Painel de Monitoramento*.xlsx`
-(a aba é detectada pelas colunas, não pelo nome; ver as regras de cabeçalho/apelido acima).
-Na prática o painel é o `Anexo V - Painel de Monitoramento preenchido - <CONTRATO>.xlsx`.
+O programa lê **só de `Entrada/`**:
+- **N planilhas de amostra** — qualquer `.xlsx` com abas `Amostra K` (`Lote.xlsx`,
+  `Estratos 4 - Python.xlsx`, ...). Todas são precificadas e comparadas no mesmo resumo.
+- **1 painel** — `*Painel de Monitoramento*.xlsx` por convenção de nome (D7); a aba é detectada
+  pelas colunas, não pelo nome (ver as regras de cabeçalho/apelido acima). Na prática é o
+  `Anexo V - Painel de Monitoramento preenchido - <CONTRATO>.xlsx`.
 `Entrada/` e `saida/` estão no `.gitignore` (conterão dados reais da distribuidora).
 
 `minhas_notas/` é material de **pesquisa**, nunca entrada de execução:
@@ -198,6 +224,7 @@ Na prática o painel é o `Anexo V - Painel de Monitoramento preenchido - <CONTR
 | `CalculoDistancias.xlsx` | referência **sugerida** de forma de cálculo (não canônica) |
 | `Formulário de Ordem de Serviço Equatorial-PA 4ª Tranche...xlsx` | fonte das tarifas (aba `Custos Inspeções`) |
 | `20260224_Tabela_Resumo_Estratos_Amostra.xlsx` | **gabarito do output** — cabeçalhos deslocados, ler com `header=None` |
+| `Tabela_Resumo_Extratos_Amostra.xlsx` | **benchmark de CUSTO** (aba `Resumo`, ler com `header=None`): as 3 estratificações da PB 7ª Tranche com o custo estimado à mão pela engenharia. É o alvo de calibração da F9 |
 | `Apresentação amostra COELBA 11a ....pptx` | gabarito visual — **apenas slides 3 e 4** |
 | `Lote.xlsx` | entrada do sistema amostral (formato legado: cabeçalho na linha 3, 2 últimas linhas são rodapé) |
 

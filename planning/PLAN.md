@@ -33,6 +33,8 @@ x F6 — `mapas.py`: `saida/Mapa_Amostra_K.html` (folium, camadas por estrato, p
 x F7 — Orquestrador + e2e (feliz e bordas) + `TESTES.md` + status report HTML — 2026-08-07
 x F8 — Adequação ao formato REAL de entrada (Anexo V do projeto irmão) após a 1ª execução
     com dados de verdade — 2026-08-10
+x F9 — Reconstrução do modelo contra o benchmark da engenharia: roteiro encadeado, custo por
+    amostra (não por estrato), dias inteiros, N estratificações numa planilha só — 2026-08-10
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -45,8 +47,16 @@ x F8 — Adequação ao formato REAL de entrada (Anexo V do projeto irmão) apó
 > ENERGISA/PB, 26 ODIs por amostra, 0 órfãos). **48 testes passando.**
 > Detalhes em `planning/TESTES.md` § "Primeira execução com dados reais".
 >
-> **Falta só conferência humana com o olho:** F5 (comparar o `Resumo_Custos.xlsx` com o
-> gabarito de 24/02) e F6 (abrir um mapa no browser) — ver `definition of done.md`.
+> **Nota de acompanhamento (2026-08-10, F9):** o humano apontou que o custo estava
+> superestimado e forneceu o benchmark da engenharia
+> (`minhas_notas/Tabela_Resumo_Extratos_Amostra.xlsx`, aba `Resumo`). A engenharia reversa
+> mostrou que o benchmark obedece **exatamente** à fórmula já aprovada no `MODELO_CUSTO.md`
+> da F1 — quem tinha desviado era o **código**, em três pontos (fixo por estrato, ida-e-volta
+> por município, horas fracionárias), somando **+141%** na amostra real. Reconstruído.
+> **68 testes passando.**
+>
+> **Falta só conferência humana com o olho:** F5 (conferir o `Resumo_Custos.xlsx` contra o
+> benchmark) e F6 (abrir um mapa no browser) — ver `definition of done.md`.
 
 ## Decisões e pendências
 
@@ -67,7 +77,16 @@ x F8 — Adequação ao formato REAL de entrada (Anexo V do projeto irmão) apó
   tabela de apelidos fixa, sem varredura de layout). Exigiu: cabeçalho na 2ª linha (1ª é faixa
   mesclada), `ALIAS_PAINEL` (`Número ODI`, `Número da Unidade Consumidora`), normalização da
   chave ODI (Lote texto × Painel número) e comparação de município sem acento.
-- **Pendência (modelo, aberta pelos dados reais):** a decisão G3 faz uma ida-e-volta da capital
-  **por município**; com 26 ODIs em 25 municípios isso vira ~88% do custo da amostra. Confirmar
-  com o humano se a inspeção real encadeia municípios numa viagem só (mudaria `custo.py`, não `config.py`).
+- **RESOLVIDO (F9, 2026-08-10):** a ida-e-volta por município foi substituída por um **itinerário
+  único** (`distancias.montar_roteiro`): capital → todas as obras, município a município e obra a
+  obra → capital, uma volta só. Nos dados reais: 1.529 km em vez de 10.521 km.
+- **G1 REAFIRMADO (2026-08-10):** o humano manteve equipe = 1 engenheiro, ciente de que o
+  benchmark da engenharia usa 2 e de que isso deixa a estimativa ~44% abaixo dele. Virou o
+  parâmetro `config.TAMANHO_EQUIPE = 1.0` — mudar para `2.0` reproduz o benchmark sem rebuild.
+- **P5 RESPONDIDA (F9):** os dias incluem **1 dia de mobilização** (`config.DIAS_MOBILIZACAO`),
+  que é o `+1` do benchmark, e são arredondados para cima (a equipe não vende meio dia).
+- **Pendência (calibração, aberta):** os dias da engenharia **não seguem a geometria** (a amostra
+  de 5 estratos tem a rota mais curta e ganhou mais dias que a de 4). O modelo acerta −3,7% no
+  agregado mas erra ±25% por amostra. `VELOCIDADE_KMH` e `FATOR_RODOVIARIO` (G4) seguem sendo
+  os dois chutes com maior efeito.
 - **Pendência (pós-plano):** escrever `planning/ADVERSARIAL_REVIEW.md` (D8).

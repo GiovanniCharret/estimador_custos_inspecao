@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.io_amostras import (EntradaInvalida, achar_entradas, ler_amostras,   # noqa: E402
                              ler_painel, juntar_amostras_painel)
 from src.distancias import resumo_por_odi                                     # noqa: E402
-from src.custo import custo_por_odi                                           # noqa: E402
+from src.custo import custo_amostra                                           # noqa: E402
 from src.resumo import gravar_resumo                                          # noqa: E402
 from src.mapas import gravar_mapa                                             # noqa: E402
 from src import config                                                        # noqa: E402
@@ -112,37 +112,50 @@ def executar(raiz, contrato=None):
     E' o unico lugar que converte EntradaInvalida em mensagem + codigo 1: erro de DADOS
     nao vira traceback: bug de programa continua estourando normalmente.
 
-    Logica: Entrada (raiz, contrato) -> Fase 1: resolve UF/tipo -> Fase 2: localiza e le
-    as duas planilhas -> Fase 3: junta por ODI (orfaos/tranche errada abortam aqui)
-    -> Fase 4: por amostra, reduz a ODI e calcula o custo -> Fase 5: grava resumo e
-    mapas -> Saida: 0 (sucesso) ou 1 (erro de entrada).
+    Logica: Entrada (raiz, contrato) -> Fase 1: resolve UF/tipo -> Fase 2: localiza as
+    planilhas (uma por estratificacao) e le o painel uma unica vez -> Fase 3: por
+    estratificacao, junta por ODI (orfaos/tranche errada abortam aqui) e precifica cada
+    amostra -> Fase 4: grava a planilha unica de resumo e um mapa por estratificacao
+    -> Saida: 0 (sucesso) ou 1 (erro de entrada).
     """
     # Normaliza para Path: o chamador pode passar str (ex.: do .bat) ou Path (dos testes).
     raiz = Path(raiz)
     try:
-        # Fase 1: UF (base de partida do deslocamento) e tipo (produtividade da inspecao).
+        # Fase 1: UF (base de partida do roteiro) e tipo (produtividade da inspecao).
         uf, tipo = _resolver_contrato(raiz, contrato)
-        # Fase 2: localiza os dois arquivos por convencao de nome (D7) e le cada um.
-        lote, painel = achar_entradas(raiz / "Entrada")
-        print(f"Lendo amostras : {lote.name}")
-        amostras = ler_amostras(lote)
+        # Fase 2: descobre TODAS as estratificacoes da pasta + o painel de coordenadas.
+        lotes, painel = achar_entradas(raiz / "Entrada")
         print(f"Lendo painel   : {painel.name}")
+        # O painel serve a todas as estratificacoes - lido uma vez so.
         ucs = ler_painel(painel)
-        # Fase 3: juncao validada por ODI - aqui morrem tranche errada e ODI orfa com Cons>0.
-        juntas = juntar_amostras_painel(amostras, ucs)
-        # Fase 4: uma passada por amostra; resumo_por_odi reduz UC -> ODI, custo_por_odi precifica.
-        custos = {}
-        for k, df_ucs in juntas.items():
-            print(f"Amostra {k}: {df_ucs['ODI'].nunique()} ODIs / {len(df_ucs)} UCs")
-            custos[k] = custo_por_odi(resumo_por_odi(df_ucs), uf=uf, tipo_contrato=tipo)
-        # Fase 5: garante a pasta de saida e grava os dois produtos (tabela + mapas).
+        print(f"Estratificacoes: {', '.join(f'{n} estratos ({c.name})' for n, c in lotes)}")
+        # Fase 3: uma passada por estratificacao; dentro dela, uma por amostra.
+        resultados = []
+        mapas = {}
+        for n_estratos, caminho in lotes:
+            amostras = ler_amostras(caminho)
+            # Juncao validada por ODI - aqui morrem tranche errada e ODI orfa com Cons>0.
+            juntas = juntar_amostras_painel(amostras, ucs)
+            mapas[n_estratos] = {}
+            for k, df_ucs in sorted(juntas.items()):
+                # resumo_por_odi reduz UC -> ODI; custo_amostra monta o roteiro e precifica.
+                numeros, roteiro = custo_amostra(resumo_por_odi(df_ucs), uf=uf, tipo_contrato=tipo)
+                print(f"  {n_estratos} estratos / amostra {k}: {numeros['n_odis']} ODIs, "
+                      f"{numeros['n_municipios']} municipios, {numeros['n_ucs']} UCs, "
+                      f"{numeros['km_roteiro']:,.0f} km, {numeros['dias_faturados']:g} dias "
+                      f"-> R$ {numeros['custo_total']:,.2f}")
+                # Guarda os numeros (para o resumo) e as duas granularidades (para o mapa).
+                resultados.append({"n_estratos": n_estratos, "amostra": k, "roteiro": roteiro, **numeros})
+                mapas[n_estratos][k] = (df_ucs, roteiro)
+        # Fase 4: garante a pasta de saida e grava os dois produtos (uma tabela + um mapa por N).
         saida = raiz / "saida"
         saida.mkdir(exist_ok=True)
-        # A tabela-resumo recebe o DETALHE por ODI e agrega por dentro (contrato de resumo.py).
-        gravar_resumo(custos, saida / "Resumo_Custos.xlsx")
-        # Um mapa por amostra: UCs (para os pontos) + custos por ODI (para o popup).
-        for k, df_ucs in juntas.items():
-            gravar_mapa(df_ucs, custos[k], saida / f"Mapa_Amostra_{k}.html")
+        # Uma planilha so, com todas as estratificacoes lado a lado (decisao do humano na F9).
+        gravar_resumo(resultados, saida / "Resumo_Custos.xlsx")
+        # A capital e' a origem do roteiro desenhado no mapa.
+        lat_cap, lon_cap = config.CAPITAIS_UF[uf]
+        for n_estratos, por_amostra in mapas.items():
+            gravar_mapa(por_amostra, lat_cap, lon_cap, saida / f"Mapa_Estratos_{n_estratos}.html")
         print(f"OK: saidas gravadas em {saida}")
         # Saida: sucesso.
         return 0

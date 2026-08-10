@@ -611,3 +611,50 @@ do contrato (`minhas_notas/base_contratos.json`, 113 contratos/23 UFs) · G4 vel
 45 km/h e fator 1,40 mantidos como parâmetros a calibrar · G5 produtividade por tipo:
 LPT = 30 UCs/dia, MLA = 3 UCs/dia (substitui o HORAS_POR_UC único calibrado em b.7).
 Regra do órfão: ODI sem coordenada aborta só se Cons>0; Cons=0 → aviso + centroide municipal.
+
+---
+
+## CORREÇÃO F9 (2026-08-10) — o código tinha desviado deste documento
+
+A engenharia forneceu um benchmark novo: `minhas_notas/Tabela_Resumo_Extratos_Amostra.xlsx`,
+aba `Resumo` — as três estratificações da **PB 7ª Tranche (ECO 037/2025)** com o custo
+estimado à mão. Regressão linear nos três pontos, resíduo **zero**:
+
+| Estratos | Dias | Equipe | Custo real | `12.960 + 4.800 × equipes × (dias+1)` |
+|---|---|---|---|---|
+| 5 | 7 | 2 | 89.760 | 89.760 |
+| 4 | 5 | 2 | 70.560 | 70.560 |
+| 3 | 8 | 2 | 99.360 | 99.360 |
+
+**É exatamente a fórmula deste documento** (§ sumário executivo, item 1 e o bloco
+"DE ONDE VEM O PREÇO": `CUSTO = 12.960 + 4.800 × equipe-dias`, com o fixo entrando
+"UMA VEZ por amostra, nunca por obra"). O `+1` nos dias é a **mobilização** — a resposta
+à pergunta **P5**, que ficara em aberto no gate.
+
+O que desviou foi a **implementação** (F4), em três pontos:
+
+| # | O documento aprovado dizia | O código fazia | Efeito nos dados reais |
+|---|---|---|---|
+| 1 | fixo de R$ 12.960 **uma vez por amostra** | uma vez por **estrato** | +R$ 25.920 numa amostra de 3 estratos |
+| 2 | "a equipe **NÃO volta à base a cada obra**" (Fase 2) | ida e volta da capital **por município** | 10.521 km em vez de 1.529 km (**7×**) |
+| 3 | "dias = arredonda para cima(horas / 8)" (Fase 6) | horas fracionárias direto em R$ | dias fracionários, sem mobilização |
+
+Somados, faziam a Amostra 1 da PB custar R$ 239.799 contra R$ 99.360 da engenharia (**+141%**).
+
+**Correções aplicadas** (`src/config.py`, `src/custo.py`, `src/distancias.py`):
+
+- `montar_roteiro` monta **um itinerário único** — capital → todas as obras (município a
+  município, obra a obra) → capital, uma volta só. Substitui a ida-e-volta por município.
+- `HORAS_ESCRITORIO_POR_OS` passa a entrar **uma vez por amostra**; o estrato deixa de
+  participar do custo e vira coluna informativa do detalhe.
+- Dias arredondados para cima + `DIAS_MOBILIZACAO = 1` (responde P5).
+- `TAMANHO_EQUIPE` vira parâmetro. Fica em **1** (decisão G1 reafirmada pelo humano em
+  2026-08-10), enquanto o benchmark usa 2 — a estimativa sai ~44% abaixo dele **por decisão**,
+  não por erro. Mudar para `2.0` reproduz o benchmark sem tocar em código.
+
+**Margem honesta contra o benchmark** (com `TAMANHO_EQUIPE = 2`, para comparar maçã com maçã):
+−9,7% / +27,2% / −21,4% por amostra; **−3,7% no agregado**. O erro por amostra não é do
+modelo: os dias da engenharia **não seguem a geometria** (a amostra de 5 estratos tem a rota
+mais curta — 1.456 km — e ganhou 7 dias; a de 4 estratos tem a rota mais longa e ganhou 5).
+Isso confirma o diagnóstico de b.1: os dias vinham de julgamento. Nenhum modelo determinístico
+reproduz 8/5/7 — e é justamente esse julgamento que este projeto substitui.
