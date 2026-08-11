@@ -32,10 +32,10 @@ Get-ChildItem "src\*.py" | ForEach-Object {
 # 3) A base de contratos: o programa precisa dela para resolver UF e tipo do contrato.
 #    O caminho e' o mesmo do repositorio (config.ARQUIVO_BASE_CONTRATOS) para nao haver
 #    divergencia entre o que roda aqui e o que roda na maquina do usuario.
-$BaseContratos = "minhas_notas\base_contratos.json"
+$BaseContratos = "dados\base_contratos.json"
 if (Test-Path $BaseContratos) {
-    New-Item -ItemType Directory -Path (Join-Path $Destino "minhas_notas") -Force | Out-Null
-    Copy-Item $BaseContratos -Destination (Join-Path $Destino "minhas_notas")
+    New-Item -ItemType Directory -Path (Join-Path $Destino "dados") -Force | Out-Null
+    Copy-Item $BaseContratos -Destination (Join-Path $Destino "dados")
     Write-Host "  + $BaseContratos"
 } else {
     Write-Host "  ! $BaseContratos nao encontrado - o pacote so vai funcionar sem informar contrato"

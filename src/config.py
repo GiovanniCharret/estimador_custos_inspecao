@@ -108,5 +108,8 @@ CAPITAIS_UF = {
 # UF usada quando o contrato nao e' informado.
 UF_PADRAO = "PA"
 # Caminho (relativo a raiz do projeto) da base de contratos: chave = contrato,
-# campos uf / tipo_contrato / vigente. Fonte: minhas_notas/base_contratos.json.
-ARQUIVO_BASE_CONTRATOS = "minhas_notas/base_contratos.json"
+# campos uf / tipo_contrato / vigente.
+# Mora em dados/ e nao em minhas_notas/ porque e' INSUMO DE EXECUCAO, nao material de
+# pesquisa: o programa nao roda sem ele e ele viaja no pacote enviado aos usuarios -
+# uma pasta chamada "minhas_notas" nao faz sentido na maquina de quem recebe.
+ARQUIVO_BASE_CONTRATOS = "dados/base_contratos.json"

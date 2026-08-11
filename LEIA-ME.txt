@@ -89,6 +89,6 @@ O QUE VAI NESTA PASTA
   _exec.ps1           prepara o ambiente e chama o programa
   requirements.txt    lista de bibliotecas
   src\                o programa
-  minhas_notas\       base de contratos (UF e tipo de cada contrato)
+  dados\              base de contratos (UF e tipo de cada contrato)
   Entrada\            onde voce poe as planilhas
   saida\              onde os resultados aparecem

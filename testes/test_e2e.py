@@ -46,7 +46,7 @@ def _base_contratos(raiz, monkeypatch, contratos):
     Logica: Entrada (raiz, monkeypatch, dict de contratos) -> Fase 1: grava o JSON
     -> Fase 2: aponta config.ARQUIVO_BASE_CONTRATOS para ele -> Saida: nada.
     """
-    # Fase 1: JSON no mesmo formato do minhas_notas/base_contratos.json real.
+    # Fase 1: JSON no mesmo formato do dados/base_contratos.json real.
     (raiz / "base_contratos.json").write_text(json.dumps(contratos), encoding="utf-8")
     # Fase 2: caminho relativo a raiz (o orquestrador resolve com raiz / ARQUIVO_BASE_CONTRATOS).
     monkeypatch.setattr(config, "ARQUIVO_BASE_CONTRATOS", "base_contratos.json")

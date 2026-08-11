@@ -218,14 +218,17 @@ da UF do contrato; velocidade/fator rodoviário a calibrar; produtividade por ti
 em `planning/PLAN.md` e derivadas em `planning/MODELO_CUSTO.md`. **Cada decisão é um parâmetro em
 `config.py`** — mudar o modelo é mudar `config.py`, não `custo.py`.
 
-`config.ARQUIVO_BASE_CONTRATOS` aponta para `minhas_notas/base_contratos.json` (113 contratos,
+`config.ARQUIVO_BASE_CONTRATOS` aponta para **`dados/base_contratos.json`** (113 contratos,
 23 UFs; chave = nome do contrato, valores `uf`/`tipo_contrato` ∈ {LPT, MLA}/`vigente` ∈
-{Andamento, Encerramento, Encerrado}) — a F7 depende dele para resolver UF e tipo a partir do
-contrato informado. Dois cuidados:
+{Andamento, Encerramento, Encerrado}) — a resolução de contrato depende dele para achar UF e tipo.
+Três cuidados:
 
+- **`dados/` é insumo de EXECUÇÃO, não pesquisa.** O arquivo morava em `minhas_notas/` até
+  2026-08-11; saiu de lá porque o programa não roda sem ele e ele viaja no pacote enviado aos
+  usuários — uma pasta "minhas_notas" não faz sentido na máquina de quem recebe.
 - O arquivo é **untracked mas NÃO está no `.gitignore`**: um `git add -A` o commitaria. Use
   `git add` explícito, ou ignore-o antes.
-- O valor é uma **string relativa**, não um `Path`. A F7 precisa resolvê-lo contra `RAIZ`
+- O valor é uma **string relativa**, não um `Path`. O orquestrador resolve contra `RAIZ`
   (não contra o cwd), senão `executar.bat` quebra quando chamado de outro diretório.
 
 ## Governança e documentação
@@ -243,9 +246,17 @@ contrato informado. Dois cuidados:
 - `suporte_contexto/` — contexto de apoio/bugfix; **hoje vazio**. Ainda não escritos:
   `planning/ADVERSARIAL_REVIEW.md` (D8), `planning/TESTES.md`.
 
-## Insumos: `Entrada/` (runtime) vs `minhas_notas/` (pesquisa)
+## Insumos: `Entrada/` + `dados/` (runtime) vs `minhas_notas/` (pesquisa)
 
-O programa lê **só de `Entrada/`**:
+As três pastas de insumo, e a diferença entre elas:
+
+| Pasta | Papel | Vai no pacote do usuário? |
+| --- | --- | --- |
+| `Entrada/` | planilhas que o usuário deposita a cada execução | sim, vazia |
+| `dados/` | insumo fixo do programa (`base_contratos.json`) | sim, com o arquivo |
+| `minhas_notas/` | material de **pesquisa**, nunca lido em execução | não |
+
+O programa lê **só de `Entrada/`** (e de `dados/` para resolver o contrato):
 - **N planilhas de amostra** — qualquer `.xlsx` com abas `Amostra K` (`Lote.xlsx`,
   `Estratos 4 - Python.xlsx`, ...). Todas são precificadas e comparadas no mesmo resumo.
 - **1 arquivo de coordenadas** — nome contendo **`Anexo V`** (`io_amostras.PADRAO_ARQUIVO_COORDENADAS`,
@@ -260,7 +271,6 @@ O programa lê **só de `Entrada/`**:
 | Arquivo | Papel |
 | --- | --- |
 | `Coordenadas_UCs_7ªTR_PA.xlsx` | exemplo do formato de coordenadas (aba `Base_UC`) |
-| `base_contratos.json` | UF/tipo/vigência por contrato — consumido pela F7 via `config` |
 | `CalculoDistancias.xlsx` | referência **sugerida** de forma de cálculo (não canônica) |
 | `Formulário de Ordem de Serviço Equatorial-PA 4ª Tranche...xlsx` | fonte das tarifas (aba `Custos Inspeções`) |
 | `20260224_Tabela_Resumo_Estratos_Amostra.xlsx` | **gabarito do output** — cabeçalhos deslocados, ler com `header=None` |

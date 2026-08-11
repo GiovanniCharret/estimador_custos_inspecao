@@ -607,7 +607,7 @@ uma unidade consumidora (medidor, padrão, ramal, foto, formulário)? ⚠
 
 Registradas em `PLAN.md` (G1–G5); todas viram parâmetros em `src/config.py`:
 G1 equipe = só engenheiro · G2 sem diárias (tarifa embute) · G3 base = capital da UF
-do contrato (`minhas_notas/base_contratos.json`, 113 contratos/23 UFs) · G4 velocidade
+do contrato (`dados/base_contratos.json`, 113 contratos/23 UFs) · G4 velocidade
 45 km/h e fator 1,40 mantidos como parâmetros a calibrar · G5 produtividade por tipo:
 LPT = 30 UCs/dia, MLA = 3 UCs/dia (substitui o HORAS_POR_UC único calibrado em b.7).
 Regra do órfão: ODI sem coordenada aborta só se Cons>0; Cons=0 → aviso + centroide municipal.
