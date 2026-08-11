@@ -41,6 +41,8 @@ x F11 — Mapa com a divisão real das obras entre equipes e painel de radio por
     equipes (`dividir_roteiro` + `GroupedLayerControl`) — 2026-08-10
 x F12 — Convenção `Anexo V`, chave de junção alternativa (MLA casa pela UC) e pacote
     autoinstalável para os usuários de teste (`_exec.ps1` + `empacotar.ps1`) — 2026-08-11
+x F13 — Chave de junção **declarada** pelo tipo do contrato (`CHAVE_JUNCAO_POR_TIPO`),
+    em vez de descoberta por tentativa-e-erro — 2026-08-11
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -105,11 +107,16 @@ x F12 — Convenção `Anexo V`, chave de junção alternativa (MLA casa pela UC
 - **D7 REVISADO (F12, 2026-08-11):** o arquivo de coordenadas é localizado por **`Anexo V`**
   (antes: `Painel de Monitoramento`). `Anexo V` é o rótulo do anexo no contrato — estável entre
   tranches e o que o usuário reconhece. Parâmetro `io_amostras.PADRAO_ARQUIVO_COORDENADAS`.
-- **Descoberta (F12):** a chave de junção **muda com o tipo de contrato**. Em LPT o `ODI` do Lote
-  casa com `Número ODI` do Anexo V; em **MLA** (fotovoltaico individual) cada obra *é* uma UC e o
-  `ODI` do Lote traz o número da UC. Na 3ª Tranche RO (`ECM 022/2025`) 862 de 862 obras casam pela
-  UC e nenhuma pela ODI — o programa acusava "tranche errada" em dados válidos. Agora tenta a
-  chave alternativa antes de abortar, com aviso.
+- **G6 — GAP SEMÂNTICO DO LEGADO (F12/F13, decisão do humano em 2026-08-11):** a chave de junção
+  **muda com o tipo de contrato**. Em LPT o `ODI` do Lote casa com `Número ODI` do Anexo V; em
+  **MLA** cada obra é um sistema individual e o legado, sem número de ODI próprio, reaproveitou a
+  coluna para guardar o **número da UC** — que casa com `Número da Unidade Consumidora`. Na 3ª
+  Tranche RO (`ECM 022/2025`) 862 de 862 obras casam pela UC e nenhuma pela ODI; o programa
+  acusava "tranche errada" em dados válidos.
+  Vira o parâmetro `config.CHAVE_JUNCAO_POR_TIPO = {"LPT": "ODI", "MLA": "UC"}`. A escolha é
+  **declarada**, não adivinhada: uma heurística de tentativa-e-erro casaria pela linha errada em
+  silêncio se um número de UC coincidisse com um de ODI. A verificação contra os dados fica só
+  como rede de segurança (contrato não informado / tipo errado na base), e aí emite `AVISO`.
 - **Distribuição (F12):** `empacotar.ps1` monta `distribuicao/EstimadorCustos{,.zip}` com o mínimo
   para rodar. O `_exec.ps1` instala uv + Python 3.12 + bibliotecas na primeira execução (fallback
   para o Python do sistema). Exige internet; `distribuicao/` está no `.gitignore`.

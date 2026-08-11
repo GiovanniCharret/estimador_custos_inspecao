@@ -2,7 +2,10 @@
 """Leitura e validacao das entradas do estimador (Lote de amostras + Painel de coordenadas)."""
 from pathlib import Path
 import re
+
 import pandas as pd
+
+from src import config
 
 # Bounding box aproximada do Brasil: coordenada fora daqui e' erro de digitacao/projecao.
 BBOX_BRASIL = {"lat_min": -34.0, "lat_max": 5.5, "lon_min": -74.0, "lon_max": -34.0}
@@ -328,8 +331,72 @@ def ler_painel(caminho):
     return ucs[validas].reset_index(drop=True)
 
 
-def juntar_amostras_painel(amostras, ucs):
-    """Junta cada amostra com as UCs do painel pela chave ODI, validando o casamento.
+def escolher_chave_juncao(amostras, ucs, tipo_contrato=None):
+    """Decide com QUAL coluna do Anexo V a coluna 'ODI' do Lote deve casar.
+
+    Por que existe: ha um GAP SEMANTICO no sistema legado que gera o Lote. A coluna se
+    chama 'ODI' nos dois tipos de contrato, mas o que ela guarda muda:
+      - LPT: numero da ODI mesmo (uma ODI agrupa varias UCs);
+      - MLA: numero da UNIDADE CONSUMIDORA. Cada obra e' um sistema fotovoltaico
+        individual, entao o legado nunca criou numero de ODI proprio e reaproveitou a
+        coluna. No Anexo V esse numero mora em 'Numero da Unidade Consumidora'.
+    Sem esta funcao o programa juntava pela coluna errada e acusava "tranche errada" em
+    dados validos (3a Tranche RO, ECM 022/2025: 862 de 862 obras casam pela UC, nenhuma
+    pela ODI, com Lote e Anexo V comprovadamente do mesmo certame).
+
+    A escolha e' DECLARADA (vem do tipo do contrato, em config.CHAVE_JUNCAO_POR_TIPO) e
+    nao adivinhada. Isso importa: se algum numero de UC coincidisse por acaso com um
+    numero de ODI, uma heuristica de tentativa-e-erro casaria pela chave errada em
+    silencio. A verificacao contra os dados so entra como REDE DE SEGURANCA, para o caso
+    de o contrato nao ter sido informado ou de a planilha fugir do padrao do seu tipo.
+
+    Logica: Entrada (amostras, ucs, tipo) -> Fase 1: le a chave declarada para o tipo
+    -> Fase 2: monta a ordem de tentativa (declarada primeiro, a outra como reserva)
+    -> Fase 3: fica com a primeira que tenha alguma obra em comum -> Fase 4: avisa se a
+    escolhida nao foi a declarada, ou aborta se nenhuma casar -> Saida: (df de UCs
+    re-chaveado, nome da coluna escolhida).
+    """
+    # Fase 1: a chave declarada para este tipo de contrato (LPT -> ODI, MLA -> UC).
+    # Le config na chamada, nunca no import, como o resto do projeto.
+    declarada = config.CHAVE_JUNCAO_POR_TIPO.get(str(tipo_contrato).upper().strip(), "ODI")
+    # As duas colunas do Anexo V que podem servir de chave.
+    candidatas = {"ODI": set(ucs["ODI"]), "UC": set(ucs["UC"])}
+    obras = set().union(*[set(df["ODI"]) for df in amostras.values()])
+    # Fase 2: tenta a declarada primeiro; a outra so como rede de seguranca.
+    ordem = [declarada] + [nome for nome in ("ODI", "UC") if nome != declarada]
+    # Fase 3: a primeira coluna com alguma obra em comum vence.
+    escolhida = next((nome for nome in ordem if obras & candidatas[nome]), None)
+    # Fase 4a: amostra legitimamente VAZIA (aba sem obra sorteada) tambem nao casa com
+    # nada - nao ha o que decidir e acusa-la de tranche errada seria erro falso.
+    if not obras:
+        return ucs, declarada
+    # Fase 4b: nenhuma das duas colunas casa - agora sim os arquivos sao de certames diferentes.
+    if escolhida is None:
+        raise EntradaInvalida(
+            "Nenhuma obra das amostras existe no Anexo V, nem pelo numero da ODI nem "
+            "pelo numero da UC:\nos arquivos parecem ser de tranche/UF diferentes.\n"
+            "Confira se as planilhas de amostra e o Anexo V sao do MESMO certame."
+        )
+    # Fase 4c: comunica a decisao. Quando a chave e' a declarada, e' so informacao; quando
+    # a declarada falhou e a reserva salvou, e' AVISO - alguma premissa esta errada
+    # (contrato nao informado, tipo errado na base, ou planilha fora do padrao do tipo).
+    if escolhida == "UC" and declarada == "UC":
+        print("Contrato MLA: a coluna 'ODI' do Lote guarda numeros de UC; juntando pelo "
+              "'Numero da Unidade Consumidora' do Anexo V.")
+    elif escolhida != declarada:
+        print(f"AVISO: pelo tipo do contrato a juncao deveria ser pela coluna '{declarada}', "
+              f"mas nenhuma obra casou por ela. Casaram pela coluna '{escolhida}' - usando "
+              f"essa. Confira se o contrato informado corresponde a estas planilhas.")
+    # Re-chaveia o painel quando a chave escolhida nao e' a ODI: a UC passa a ser a chave
+    # de juncao, e cada obra fica com exatamente uma UC.
+    if escolhida != "ODI":
+        ucs = ucs.assign(ODI=ucs[escolhida])
+    # Saida: painel pronto para o merge + qual coluna acabou valendo.
+    return ucs, escolhida
+
+
+def juntar_amostras_painel(amostras, ucs, tipo_contrato=None):
+    """Junta cada amostra com as UCs do painel, validando o casamento.
 
     Por que existe: e' o detector do erro 'amostra de uma tranche x painel de outra'
     (intersecao zero) e de ODIs orfaos - os dois erros de dados mais provaveis. Tambem
@@ -337,42 +404,20 @@ def juntar_amostras_painel(amostras, ucs):
     quando a obra tem UC esperada (Cons > 0), mas vira uma pseudo-UC no centroide do
     municipio quando a obra nao tem UC nenhuma (Cons == 0, ex.: reforco de rede).
 
-    Logica: Entrada (amostras, ucs) -> Fase 1: intersecao global de ODIs (zero = tranche
-    errada) -> Fase 2: por amostra, classifica cada ODI orfao SEM efeitos colaterais
+    Logica: Entrada (amostras, ucs, tipo do contrato) -> Fase 1: escolhe a coluna de
+    juncao pelo tipo do contrato (ver escolher_chave_juncao; tranche errada aborta ali)
+    -> Fase 2: por amostra, classifica cada ODI orfao SEM efeitos colaterais
     (Cons>0 vira candidato a erro; Cons==0 vira candidato a pseudo-UC, ou candidato a
     erro se o municipio tambem nao tem UC no painel) -> Fase 3: se houver qualquer
     candidato a erro, aborta listando TODOS de uma vez (nada de aviso parcial nem de
     parar no primeiro) -> Fase 4: so entao aplica os fallbacks validos (imprime os
-    avisos e monta as pseudo-UCs) -> Fase 5: merge por ODI dos nao-orfaos + concatena
-    as pseudo-UCs -> Saida: dict {k: df} com uma linha por UC (real ou pseudo) de ODI
+    avisos e monta as pseudo-UCs) -> Fase 5: merge dos nao-orfaos + concatena
+    as pseudo-UCs -> Saida: dict {k: df} com uma linha por UC (real ou pseudo) de obra
     sorteada.
     """
-    # Fase 1: casa a chave. O 'odis_amostras and' e' essencial: uma amostra legitimamente
-    # VAZIA (aba sem obra sorteada) tambem tem intersecao zero, e acusa-la seria erro falso.
+    # Fase 1: qual coluna do Anexo V casa com o 'ODI' do Lote depende do TIPO do contrato.
+    ucs, _chave = escolher_chave_juncao(amostras, ucs, tipo_contrato)
     odis_painel = set(ucs["ODI"])
-    odis_amostras = set().union(*[set(df["ODI"]) for df in amostras.values()])
-    if odis_amostras and not odis_amostras & odis_painel:
-        # Chave alternativa: em contrato MLA (sistema fotovoltaico individual) cada obra do
-        # Lote E' uma unidade consumidora, e a coluna 'ODI' do Lote traz o NUMERO DA UC -
-        # que no Anexo V mora em 'Numero da Unidade Consumidora', nao em 'Numero ODI'.
-        # Verificado na 3a Tranche RO (ECM 022/2025): 862 de 862 obras casam pela UC e
-        # nenhuma pela ODI, com Lote e Anexo V sendo comprovadamente do mesmo certame.
-        # So tentamos isso DEPOIS que a chave normal falhou, entao nenhum caso que ja
-        # funcionava muda de comportamento.
-        if odis_amostras & set(ucs["UC"]):
-            print("AVISO: as obras do Lote nao casam pelo 'Numero ODI' do Anexo V, mas casam "
-                  "pelo 'Numero da Unidade Consumidora' (tipico de contrato MLA, em que cada "
-                  "obra e' uma UC individual). Usando a UC como chave de juncao.")
-            # Re-chaveia o painel: a UC passa a ser a chave, e cada obra fica com 1 UC.
-            ucs = ucs.assign(ODI=ucs["UC"])
-            odis_painel = set(ucs["ODI"])
-        else:
-            # Nenhuma das duas chaves casa: agora sim os arquivos sao de certames diferentes.
-            raise EntradaInvalida(
-                "Nenhuma obra das amostras existe no Anexo V, nem pelo numero da ODI nem "
-                "pelo numero da UC:\nos arquivos parecem ser de tranche/UF diferentes.\n"
-                "Confira se as planilhas de amostra e o Anexo V sao do MESMO certame."
-            )
     juntas = {}
     for k, df in amostras.items():
         # Fase 2: ODIs sorteadas sem nenhuma UC no painel = orfaos; classifica cada um SEM

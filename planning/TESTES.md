@@ -1,6 +1,6 @@
 # TESTES — mapa da suíte do estimador
 
-Atualizado em 2026-08-11 (F12 — `Anexo V`, chave MLA e pacote). **83 testes, todos passando.**
+Atualizado em 2026-08-11 (F13 — chave de junção declarada). **86 testes, todos passando.**
 
 Nenhum teste depende de `minhas_notas/` nem de `Entrada/` (decisão D6): as planilhas
 são geradas sinteticamente em `tmp_path` por `testes/fixtures.py`. Isso é o que permite
@@ -24,7 +24,7 @@ rodar a suíte numa máquina limpa, sem os dados reais da distribuidora.
 | Arquivo | Nº | Fase | O que cobre |
 | --- | --- | --- | --- |
 | `test_smoke.py` | 1 | F0 | ambiente: pandas/numpy/openpyxl/folium importam |
-| `test_io_amostras.py` | 26 | F2/F8/F9/F12 | a **chave alternativa da UC** (contrato MLA), o erro de `Anexo V` ausente listando os arquivos presentes, descoberta de **N estratificações** na `Entrada/` (ordem, duplicata, N do Leia-me → nome → contagem), painel ausente/ambíguo, ler abas `Amostra K`, filtro `STATUS`, `Cons` ausente, bbox do Brasil, os **3 ramos da regra do órfão**, e o **formato real do Anexo V** (cabeçalho na 2ª linha, apelidos de coluna, ODI texto × numérica, município com acento) |
+| `test_io_amostras.py` | 29 | F2/F8/F9/F12/F13 | a **chave de junção por tipo de contrato** (ver abaixo), o erro de `Anexo V` ausente listando os arquivos presentes, descoberta de **N estratificações** na `Entrada/` (ordem, duplicata, N do Leia-me → nome → contagem), painel ausente/ambíguo, ler abas `Amostra K`, filtro `STATUS`, `Cons` ausente, bbox do Brasil, os **3 ramos da regra do órfão**, e o **formato real do Anexo V** (cabeçalho na 2ª linha, apelidos de coluna, ODI texto × numérica, município com acento) |
 | `test_distancias.py` | 14 | F3/F9/F11 | haversine contra valor conhecido (Belém→Castanhal ≈ 62 km), ponto igual = 0, centroide/rota interna, ODI com 1 UC, o **roteiro encadeado** (permutação completa, município não é revisitado, km fecha com trechos + volta, determinismo, amostra vazia) e a **divisão entre equipes** (toda obra tem dono, dividir soma mais km, 1 equipe = roteiro inteiro, mais equipes que obras, determinismo) |
 | `test_custo.py` | 10 | F4/F9/F10 | fórmula da amostra com parâmetros redondos, roteiro < ida-e-volta, **fixo independente do nº de estratos**, LPT × MLA, arredondamento de dias, **dobrar a equipe = metade dos dias e não metade do custo**, **cenários de prazo**, **reprodução da fórmula do benchmark**, diária diluída |
 | `test_resumo.py` | 5 | F5/F9/F10 | as 4 abas fixas, ordem por estratificação, aba `Cenarios` casando com o `Resumo`, ordem do roteiro no detalhe, Leia-me com os parâmetros vigentes, `PermissionError` → mensagem amigável |
@@ -157,6 +157,34 @@ Se aparecer **traceback**, é bug do programa — a planilha nunca deve produzir
 
 Ruído conhecido e inofensivo: `UserWarning: Data Validation extension is not supported`
 (o openpyxl não entende as listas suspensas do Anexo V; ele só as descarta na leitura).
+
+## O painel ambíguo — o teste que separa decisão de palpite
+
+O gap semântico do legado (em MLA a coluna `ODI` do Lote guarda número de **UC**) poderia ser
+resolvido de dois jeitos: adivinhando (tenta a ODI, se falhar tenta a UC) ou **declarando**
+(a chave vem do tipo do contrato). Os dois funcionam nos dados reais — e é por isso que o
+teste precisa de um caso construído.
+
+`_painel_ambiguo` monta um Anexo V em que a ODI de uma linha é o número de UC de **outra**:
+
+```
+Linha A: ODI 7001, UC 5001, latitude -7.12
+Linha B: ODI 5001, UC 9001, latitude -7.13
+```
+
+Uma obra do Lote com `ODI = 5001` casa com as **duas** — na linha B pela ODI, na linha A pela UC.
+Quem adivinha casa pela primeira que funcionar e precifica a obra errada em silêncio.
+
+Dois testes usam esse mesmo painel e o mesmo Lote, mudando só o tipo do contrato:
+
+| Teste | `tipo_contrato` | Linha esperada |
+| --- | --- | --- |
+| `test_juntar_mla_casa_pela_uc_por_decisao_e_nao_por_tentativa` | `MLA` | A (`-7.12`) |
+| `test_juntar_lpt_casa_pela_odi_no_mesmo_painel_ambiguo` | `LPT` | B (`-7.13`) |
+
+E mais dois cobrem a rede de segurança: `test_juntar_avisa_quando_a_chave_declarada_falha`
+(tipo declarado errado → casa pela outra coluna, **com AVISO**) e
+`test_juntar_sem_contrato_informado_ainda_acha_a_chave` (usuário apertou Enter).
 
 ## Parâmetros nos testes
 

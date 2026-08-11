@@ -33,7 +33,7 @@ entre amostras, coordenadas e custos; uma ODI tem N UCs (unidades consumidoras).
 
 ## Estado atual (2026-08-10)
 
-**Fases F0–F12 completas; 83 testes passando.** O pipeline roda ponta a ponta com **dados reais**
+**Fases F0–F13 completas; 86 testes passando.** O pipeline roda ponta a ponta com **dados reais**
 de duas tranches de tipos diferentes — `ECO 037/2025` (ENERGISA/PB, LPT, 3 estratificações) e
 `ECM 022/2025` (ENERGISA/RO, MLA, 4 estratificações):
 `executar.bat` → `_exec.ps1` → `src/estimar_custos.py` → `saida/`.
@@ -143,12 +143,17 @@ Detalhes que não se deduzem lendo um arquivo só:
   a aba pedida é pulada com aviso; se nenhuma tiver, é `EntradaInvalida`.
 - **Interseção zero de ODIs só é "tranche errada" se a amostra tiver obras.** Uma aba
   `Amostra K` legitimamente vazia também dá interseção zero — acusá-la seria erro falso.
-- **Há DUAS chaves de junção possíveis, e a segunda é o caso MLA.** Em contrato LPT o `ODI` do
-  Lote casa com `Número ODI` do Anexo V (1 ODI → N UCs). Em contrato **MLA** (fotovoltaico
-  individual) cada obra *é* uma UC, e o `ODI` do Lote traz o **número da UC** — casa com
-  `Número da Unidade Consumidora`. `juntar_amostras_painel` tenta a chave normal e, só se der
-  zero, tenta a UC (com AVISO), antes de acusar tranche errada. Verificado na 3ª Tranche RO
-  (`ECM 022/2025`): 862 de 862 casam pela UC, nenhuma pela ODI.
+- **A chave de junção é DECLARADA pelo tipo do contrato, não adivinhada** —
+  `config.CHAVE_JUNCAO_POR_TIPO = {"LPT": "ODI", "MLA": "UC"}`, aplicada por
+  `escolher_chave_juncao`. Existe um **gap semântico do sistema legado**: a coluna do Lote se
+  chama `ODI` nos dois tipos, mas em **MLA** ela guarda o **número da UC** (cada obra é um
+  sistema individual; o legado nunca criou número de ODI próprio e reaproveitou a coluna).
+  Verificado na 3ª Tranche RO (`ECM 022/2025`): 862 de 862 casam pela UC, nenhuma pela ODI.
+  Por isso `juntar_amostras_painel` recebe `tipo_contrato`.
+- **Por que declarada e não por tentativa-e-erro:** se um número de UC coincidir com um número
+  de ODI, uma heurística casaria pela linha errada **em silêncio**. A verificação contra os
+  dados fica só como rede de segurança (contrato não informado, ou tipo errado na base) — e aí
+  sai `AVISO`. Os dois testes que provam isso usam o MESMO painel ambíguo com tipos diferentes.
 - **`ler_painel` normaliza a UC com `_norm_odi`**, não só a ODI — é o que permite a chave
   alternativa acima funcionar quando os formatos numéricos diferem entre as planilhas.
 - **Regra do órfão** (`juntar_amostras_painel`): ODI sorteada sem UC no painel aborta se `Cons > 0`;

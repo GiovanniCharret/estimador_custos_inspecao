@@ -23,6 +23,14 @@ x F6 — mapas HTML gerados com camadas por estrato e popup de custo; teste pass
 x F7 — e2e feliz + 8 bordas passam (16 testes); `planning/TESTES.md` escrito;
     status report `planning/html/STATUS_F7.html` gerado; `executar.bat` validado
     (sem entrada → "Lote.xlsx nao encontrado", exit 1, sem traceback).
+x F13 — chave de junção declarada pelo tipo do contrato (2026-08-11). Critérios:
+    - `config.CHAVE_JUNCAO_POR_TIPO` (`LPT`→`ODI`, `MLA`→`UC`) decide a coluna do Anexo V
+      **antes** de olhar os dados, e `juntar_amostras_painel` recebe `tipo_contrato`;
+    - num painel **ambíguo** (a ODI de uma linha é a UC de outra) o mesmo Lote cai em linhas
+      diferentes conforme o tipo — é o que prova que quem decide é o contrato, não o acaso;
+    - contrato MLA imprime explicação (não é aviso de falha); a chave declarada falhando
+      cai na reserva **com AVISO**, porque aí alguma premissa está errada;
+    - 86 testes passando e a tranche RO (`ECM 022/2025`) rodando ponta a ponta.
 x F12 — convenção `Anexo V`, chave MLA e pacote para os testadores (2026-08-11). Critérios:
     - o arquivo de coordenadas é localizado por `Anexo V`, e o erro de "não encontrado"
       lista os arquivos que existem na pasta (para o usuário ver que o nome está errado);
@@ -72,9 +80,9 @@ x F8 — adequação ao formato REAL de entrada (2026-08-10). Critérios:
 
 ---
 
-## Placar (2026-08-11, pós-F12)
+## Placar (2026-08-11, pós-F13)
 
-**83 testes passando. As 12 macrofases estão fechadas do lado do código, e o programa
+**86 testes passando. As 13 macrofases estão fechadas do lado do código, e o programa
 roda ponta a ponta com dados REAIS de duas tranches de tipos diferentes** — `ECO 037/2025`
 (PB, LPT) e `ECM 022/2025` (RO, MLA) — **inclusive a partir do pacote de distribuição
 numa pasta limpa, sem Python instalado.**

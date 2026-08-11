@@ -72,6 +72,18 @@ UCS_POR_DIA = {"LPT": 30.0, "MLA": 3.0}
 # Tipo usado quando o contrato nao e' informado/encontrado.
 TIPO_CONTRATO_PADRAO = "LPT"
 
+# --- Chave de juncao entre o Lote e o Anexo V, por tipo de contrato ---
+# GAP SEMANTICO DO SISTEMA LEGADO: a coluna do Lote se chama 'ODI' nos dois tipos de
+# contrato, mas o que ela GUARDA muda:
+#   LPT -> numero da ODI mesmo. Uma ODI agrupa varias UCs.
+#   MLA -> numero da UNIDADE CONSUMIDORA. Cada obra e' um sistema individual, entao o
+#          sistema legado que gera o Lote nunca criou um numero de ODI proprio e reaproveitou
+#          a coluna. No Anexo V esse numero mora em 'Numero da Unidade Consumidora'.
+# Sem esta tabela o programa juntaria pela coluna errada e acusaria "tranche errada" em
+# dados perfeitamente validos (verificado na 3a Tranche RO, ECM 022/2025).
+# Valores possiveis: "ODI" (casa com 'Numero ODI') e "UC" (casa com 'Numero da UC').
+CHAVE_JUNCAO_POR_TIPO = {"LPT": "ODI", "MLA": "UC"}
+
 # --- Deslocamento (decisao G4: parametros a calibrar, ajustaveis sem rebuild) ---
 # Converte distancia geodesica (linha reta) em distancia rodoviaria. FONTE: chute F1.
 FATOR_RODOVIARIO = 1.40

@@ -141,12 +141,10 @@ def test_juntar_erro_odi_orfao(tmp_path):
     with pytest.raises(EntradaInvalida, match="PA004"):
         juntar_amostras_painel(amostras, ucs)
 
-def test_juntar_casa_pela_UC_quando_a_odi_nao_casa(tmp_path, capsys):
-    # Contrato MLA (sistema fotovoltaico individual): cada obra do Lote E' uma UC, e a
-    # coluna 'ODI' do Lote traz o NUMERO DA UC - que no Anexo V mora em 'Numero da Unidade
-    # Consumidora', nao em 'Numero ODI'. Verificado na 3a Tranche RO (ECM 022/2025), em que
-    # 862 de 862 obras casam pela UC e nenhuma pela ODI. Sem esta chave alternativa o
-    # programa acusava "tranche errada" em dados perfeitamente validos.
+def test_juntar_sem_contrato_informado_ainda_acha_a_chave(tmp_path, capsys):
+    # Sem contrato informado (o usuario apertou Enter) nao ha tipo para declarar a chave,
+    # entao vale o padrao ODI. Um Lote de contrato MLA cairia em "tranche errada" - a rede
+    # de seguranca precisa salvar a execucao, avisando.
     # A fixture gera UC = 4600000 + i*10 + j; com 1 UC por ODI, sao 4600000/4600010/4600020.
     escrever_painel_anexo_v(tmp_path / "Anexo V.xlsx", odis=[9001, 9002, 9003], ucs_por_odi=1)
     escrever_lote(tmp_path / "Lote.xlsx", abas=(1,), odis=["4600000", "4600010", "4600020"],
@@ -160,7 +158,69 @@ def test_juntar_casa_pela_UC_quando_a_odi_nao_casa(tmp_path, capsys):
     assert len(juntas[1]) == 3
     assert set(juntas[1]["ODI"]) == {"4600000", "4600010", "4600020"}
     # E o desvio de chave e' anunciado (limitacao nunca silenciosa).
-    assert "Numero da Unidade Consumidora" in capsys.readouterr().out
+    assert "AVISO" in capsys.readouterr().out
+
+
+def _painel_ambiguo(caminho):
+    """Painel em que a ODI de uma linha e' o numero de UC de OUTRA.
+
+    Por que existe: e' o unico cenario que distingue a regra DECLARADA (pelo tipo do
+    contrato) de uma heuristica de tentativa-e-erro. Com as duas chaves casando, quem
+    adivinha casa pela primeira que funcionar - e pode casar pela linha errada em silencio.
+
+    Linha A: ODI 7001, UC 5001, latitude -7.12
+    Linha B: ODI 5001, UC 9001, latitude -7.13
+    Uma obra do Lote com 'ODI' = 5001 cai na linha B se a chave for a ODI, e na linha A
+    se a chave for a UC.
+    """
+    escrever_painel_anexo_v(caminho, odis=[7001, 5001], ucs_por_odi=1,
+                            numeros_uc=[5001, 9001])
+
+
+def test_juntar_mla_casa_pela_uc_por_decisao_e_nao_por_tentativa(tmp_path, capsys):
+    # GAP SEMANTICO DO LEGADO: em contrato MLA a coluna 'ODI' do Lote guarda numeros de UC.
+    # Com o tipo do contrato declarado, a juncao TEM de ir pela UC mesmo quando a coluna
+    # ODI do Anexo V tambem casaria - senao o programa precificaria a obra errada calado.
+    _painel_ambiguo(tmp_path / "Anexo V.xlsx")
+    escrever_lote(tmp_path / "Lote.xlsx", abas=(1,), odis=["5001"],
+                  municipios={"5001": "GURINHEM"})
+    amostras = ler_amostras(tmp_path / "Lote.xlsx")
+    ucs = ler_painel(tmp_path / "Anexo V.xlsx")
+    juntas = juntar_amostras_painel(amostras, ucs, tipo_contrato="MLA")
+    # Casou pela UC: a linha A (latitude -7.12), nao a linha B.
+    assert len(juntas[1]) == 1
+    assert juntas[1].iloc[0]["LATITUDE"] == pytest.approx(-7.12)
+    # E diz que fez isso, sem chamar de erro - e' o comportamento esperado do tipo.
+    saida = capsys.readouterr().out
+    assert "Contrato MLA" in saida and "AVISO" not in saida
+
+
+def test_juntar_lpt_casa_pela_odi_no_mesmo_painel_ambiguo(tmp_path):
+    # O par do teste acima: mesmo painel, mesmo Lote, tipo diferente -> linha diferente.
+    # E' o que prova que quem decide e' o TIPO DO CONTRATO, nao o acaso dos dados.
+    _painel_ambiguo(tmp_path / "Anexo V.xlsx")
+    escrever_lote(tmp_path / "Lote.xlsx", abas=(1,), odis=["5001"],
+                  municipios={"5001": "GURINHEM"})
+    amostras = ler_amostras(tmp_path / "Lote.xlsx")
+    ucs = ler_painel(tmp_path / "Anexo V.xlsx")
+    juntas = juntar_amostras_painel(amostras, ucs, tipo_contrato="LPT")
+    # Casou pela ODI: a linha B (latitude -7.13).
+    assert juntas[1].iloc[0]["LATITUDE"] == pytest.approx(-7.13)
+
+
+def test_juntar_avisa_quando_a_chave_declarada_falha(tmp_path, capsys):
+    # Contrato declarado LPT mas as obras so casam pela UC: a rede de seguranca salva a
+    # execucao, mas avisando - alguma premissa esta errada (contrato informado errado,
+    # tipo errado na base, ou planilha fora do padrao do seu tipo).
+    escrever_painel_anexo_v(tmp_path / "Anexo V.xlsx", odis=[9001, 9002, 9003], ucs_por_odi=1)
+    escrever_lote(tmp_path / "Lote.xlsx", abas=(1,), odis=["4600000", "4600010", "4600020"],
+                  municipios={o: "GURINHEM" for o in ["4600000", "4600010", "4600020"]})
+    amostras = ler_amostras(tmp_path / "Lote.xlsx")
+    ucs = ler_painel(tmp_path / "Anexo V.xlsx")
+    juntas = juntar_amostras_painel(amostras, ucs, tipo_contrato="LPT")
+    assert len(juntas[1]) == 3
+    saida = capsys.readouterr().out
+    assert "AVISO" in saida and "'ODI'" in saida and "'UC'" in saida
 
 
 def test_juntar_erro_intersecao_zero(tmp_path):

@@ -75,7 +75,8 @@ def escrever_painel(caminho, odis=ODIS, ucs_por_odi=2, municipio="BARCARENA"):
         pd.DataFrame(linhas).to_excel(xls, sheet_name="Base_UC", index=False)
 
 
-def escrever_painel_anexo_v(caminho, odis=ODIS_PAINEL_NUMERO, ucs_por_odi=2, municipio="GURINHÉM"):
+def escrever_painel_anexo_v(caminho, odis=ODIS_PAINEL_NUMERO, ucs_por_odi=2,
+                            municipio="GURINHÉM", numeros_uc=None):
     """Grava um Painel no formato REAL do 'Anexo V - Painel de Monitoramento'.
 
     Por que existe: o Painel real e' saida do projeto irmao (monitoramentolpt_producao_enbpar)
@@ -85,9 +86,13 @@ def escrever_painel_anexo_v(caminho, odis=ODIS_PAINEL_NUMERO, ucs_por_odi=2, mun
     de ODI/UC, e a ODI e' NUMERO (enquanto no Lote e' texto com zeros a esquerda). Reproduzir
     isso numa fixture e' o que impede a regressao sem depender de dados reais (D6).
 
-    Logica: Entrada (caminho, odis, ucs_por_odi, municipio) -> Fase 1: monta as UCs com os
-    cabecalhos por extenso -> Fase 2: grava a tabela a partir da SEGUNDA linha -> Fase 3:
-    escreve e mescla a faixa de grupo na primeira linha -> Saida: .xlsx gravado.
+    Logica: Entrada (caminho, odis, ucs_por_odi, municipio, numeros_uc) -> Fase 1: monta as
+    UCs com os cabecalhos por extenso -> Fase 2: grava a tabela a partir da SEGUNDA linha
+    -> Fase 3: escreve e mescla a faixa de grupo na primeira linha -> Saida: .xlsx gravado.
+
+    numeros_uc permite ditar os numeros de UC linha a linha (em vez do 4600000+i*10+j
+    automatico). E' o que torna possivel testar a chave de juncao do contrato MLA, em que a
+    UC e a ODI precisam apontar para linhas DIFERENTES para o teste provar alguma coisa.
     """
     linhas = []
     # Fase 1: ucs_por_odi UCs por ODI, com os nomes de coluna exatos do Anexo V.
@@ -96,7 +101,10 @@ def escrever_painel_anexo_v(caminho, odis=ODIS_PAINEL_NUMERO, ucs_por_odi=2, mun
             linhas.append({
                 "Distribuidora": "EPB",
                 "Número ODI": odi,
-                "Número da Unidade Consumidora": 4600000 + i * 10 + j,
+                # Numero ditado pelo chamador quando ele quer controlar a chave; senao,
+                # um numero automatico que so precisa ser unico.
+                "Número da Unidade Consumidora": (numeros_uc[len(linhas)] if numeros_uc
+                                                  else 4600000 + i * 10 + j),
                 "Município": municipio,
                 "UF": "PB",
                 # Coordenadas na Paraiba (dentro da bbox do Brasil).

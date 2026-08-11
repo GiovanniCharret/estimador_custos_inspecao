@@ -147,9 +147,11 @@ def executar(raiz, contrato=None, amostra=None):
                 print(f"AVISO: {caminho.name} nao tem aba 'Amostra {amostra}' "
                       f"(tem {sorted(amostras)}); estratificacao ignorada.")
                 continue
-            # Juncao validada por ODI - aqui morrem tranche errada e ODI orfa com Cons>0.
+            # Juncao validada - aqui morrem tranche errada e ODI orfa com Cons>0. O tipo do
+            # contrato entra porque ele decide COM QUAL coluna do Anexo V o 'ODI' do Lote
+            # casa (LPT pela ODI, MLA pela UC - ver escolher_chave_juncao).
             # So a amostra escolhida e' juntada: as reservas nem chegam a ser processadas.
-            juntas = juntar_amostras_painel({amostra: amostras[amostra]}, ucs)
+            juntas = juntar_amostras_painel({amostra: amostras[amostra]}, ucs, tipo_contrato=tipo)
             df_ucs = juntas[amostra]
             # resumo_por_odi reduz UC -> ODI; custo_amostra monta o roteiro e precifica.
             numeros, roteiro = custo_amostra(resumo_por_odi(df_ucs), uf=uf, tipo_contrato=tipo)
