@@ -226,8 +226,9 @@ Três cuidados:
 - **`dados/` é insumo de EXECUÇÃO, não pesquisa.** O arquivo morava em `minhas_notas/` até
   2026-08-11; saiu de lá porque o programa não roda sem ele e ele viaja no pacote enviado aos
   usuários — uma pasta "minhas_notas" não faz sentido na máquina de quem recebe.
-- O arquivo é **untracked mas NÃO está no `.gitignore`**: um `git add -A` o commitaria. Use
-  `git add` explícito, ou ignore-o antes.
+- O arquivo **é versionado** (entrou no repo em `15bc69e`) e contém 113 contratos reais com
+  valores. Está no git por decisão já tomada, não por acidente — e é o que permite o pacote
+  funcionar em outra máquina.
 - O valor é uma **string relativa**, não um `Path`. O orquestrador resolve contra `RAIZ`
   (não contra o cwd), senão `executar.bat` quebra quando chamado de outro diretório.
 
