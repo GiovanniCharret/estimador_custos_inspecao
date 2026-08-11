@@ -23,6 +23,17 @@ x F6 — mapas HTML gerados com camadas por estrato e popup de custo; teste pass
 x F7 — e2e feliz + 8 bordas passam (16 testes); `planning/TESTES.md` escrito;
     status report `planning/html/STATUS_F7.html` gerado; `executar.bat` validado
     (sem entrada → "Lote.xlsx nao encontrado", exit 1, sem traceback).
+x F12 — convenção `Anexo V`, chave MLA e pacote para os testadores (2026-08-11). Critérios:
+    - o arquivo de coordenadas é localizado por `Anexo V`, e o erro de "não encontrado"
+      lista os arquivos que existem na pasta (para o usuário ver que o nome está errado);
+    - contrato MLA casa pela UC quando não casa pela ODI, com aviso — antes o programa
+      recusava dados válidos dizendo "tranche errada" (verificado em `ECM 022/2025`);
+    - `_exec.ps1` prepara o ambiente sozinho numa máquina sem Python, com fallback para o
+      Python do sistema e mensagem acionável quando o proxy bloqueia;
+    - `empacotar.ps1` gera `distribuicao/EstimadorCustos{,.zip}` com o mínimo + `LEIA-ME.txt`;
+    - **validado**: pacote copiado para `C:\TesteEstimador` sem `.venv`, instalou-se sozinho
+      e rodou a tranche RO ponta a ponta (exit 0, 4 estratificações, planilha + 4 mapas);
+    - 83 testes passando.
 x F11 — mapa com as rotas por equipe (2026-08-10). Critérios:
     - `dividir_roteiro` reparte as obras entre N equipes em blocos geográficos contíguos
       (nenhuma obra sem dono, nenhum município partido) e roteia cada bloco da capital;
@@ -61,10 +72,21 @@ x F8 — adequação ao formato REAL de entrada (2026-08-10). Critérios:
 
 ---
 
-## Placar (2026-08-10, pós-F11)
+## Placar (2026-08-11, pós-F12)
 
-**82 testes passando. As 11 macrofases estão fechadas do lado do código, e o programa
-roda ponta a ponta com dados REAIS de uma tranche.**
+**83 testes passando. As 12 macrofases estão fechadas do lado do código, e o programa
+roda ponta a ponta com dados REAIS de duas tranches de tipos diferentes** — `ECO 037/2025`
+(PB, LPT) e `ECM 022/2025` (RO, MLA) — **inclusive a partir do pacote de distribuição
+numa pasta limpa, sem Python instalado.**
+
+O que a tranche RO (MLA, equipe = 1) entrega hoje, Amostra 1:
+
+| Estratos | Obras | Municípios | km | Dias | Custo |
+| --- | --- | --- | --- | --- | --- |
+| 3 | 45 | 13 | 3.433 | 26 | R$ 137.760 |
+| 4 | 22 | 9 | 2.802 | 17 | R$ 94.560 |
+| 5 | 15 | 9 | 2.902 | 15 | R$ 84.960 |
+| 6 | 12 | 8 | 2.313 | 12 | R$ 70.560 |
 
 O que o programa entrega hoje para o contrato `ECO 037/2025`, **Amostra 1**
 (equipe = 1, decisão G1):

@@ -1,0 +1,4 @@
+# Dependencias de DESENVOLVIMENTO: tudo o que o programa usa em execucao, mais a
+# ferramenta de teste. O pacote enviado aos usuarios leva so o requirements.txt.
+-r requirements.txt
+pytest

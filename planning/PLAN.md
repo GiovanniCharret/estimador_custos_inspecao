@@ -39,6 +39,8 @@ x F10 — Escolha da amostra (1/2/3, padrão 1) e aba `Cenarios` com prazos alte
     (dado o prazo, quantas equipes cabem) — 2026-08-10
 x F11 — Mapa com a divisão real das obras entre equipes e painel de radio por nº de
     equipes (`dividir_roteiro` + `GroupedLayerControl`) — 2026-08-10
+x F12 — Convenção `Anexo V`, chave de junção alternativa (MLA casa pela UC) e pacote
+    autoinstalável para os usuários de teste (`_exec.ps1` + `empacotar.ps1`) — 2026-08-11
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -100,6 +102,17 @@ x F11 — Mapa com a divisão real das obras entre equipes e painel de radio por
   cada equipe e pelo desperdício de arredondar para dia inteiro.
 - **Decisão (F10):** cada execução precifica **uma** amostra (1, 2 ou 3; padrão 1), porque 2 e 3
   são reservas da 1 e nunca são usadas ao mesmo tempo. `config.AMOSTRA_PADRAO`.
+- **D7 REVISADO (F12, 2026-08-11):** o arquivo de coordenadas é localizado por **`Anexo V`**
+  (antes: `Painel de Monitoramento`). `Anexo V` é o rótulo do anexo no contrato — estável entre
+  tranches e o que o usuário reconhece. Parâmetro `io_amostras.PADRAO_ARQUIVO_COORDENADAS`.
+- **Descoberta (F12):** a chave de junção **muda com o tipo de contrato**. Em LPT o `ODI` do Lote
+  casa com `Número ODI` do Anexo V; em **MLA** (fotovoltaico individual) cada obra *é* uma UC e o
+  `ODI` do Lote traz o número da UC. Na 3ª Tranche RO (`ECM 022/2025`) 862 de 862 obras casam pela
+  UC e nenhuma pela ODI — o programa acusava "tranche errada" em dados válidos. Agora tenta a
+  chave alternativa antes de abortar, com aviso.
+- **Distribuição (F12):** `empacotar.ps1` monta `distribuicao/EstimadorCustos{,.zip}` com o mínimo
+  para rodar. O `_exec.ps1` instala uv + Python 3.12 + bibliotecas na primeira execução (fallback
+  para o Python do sistema). Exige internet; `distribuicao/` está no `.gitignore`.
 - **Pendência aberta pela F11 — o custo de dividir não está no custo.** `dividir_roteiro`
   mediu a divisão real das obras entre equipes: 2 equipes rodam **+18% a +37%** mais km que
   uma, porque cada uma sai da capital e volta. A aba `Cenarios` ainda assume trabalho

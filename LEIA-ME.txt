@@ -1,0 +1,94 @@
+ESTIMADOR DE CUSTOS DE INSPECAO DAS AMOSTRAS
+============================================
+
+O que faz: le as amostras sorteadas pelo sistema amostral e o Anexo V com as
+coordenadas, e estima quanto custa inspecionar cada estratificacao. Produz uma
+planilha de custos e um mapa por estratificacao.
+
+
+COMO USAR
+---------
+
+1) Coloque na pasta "Entrada":
+
+   - As planilhas de amostra geradas pelo sistema amostral. Sao os arquivos
+     "Estratos N - Python.xlsx" (uma por numero de estratos) e/ou "Lote.xlsx".
+     Pode colocar todas de uma vez: o programa precifica cada uma e mostra as
+     opcoes lado a lado, para voce comparar.
+
+   - O arquivo de coordenadas. O nome precisa conter "Anexo V"
+     (ex.: "Anexo V preenchido - ECM 022-2025.xlsx"). So pode haver UM.
+
+   ATENCAO: os dois tem de ser do MESMO certame. Se forem de tranches
+   diferentes, o programa avisa e para.
+
+2) De duplo-clique em "executar.bat".
+
+3) Responda as duas perguntas:
+
+   - Contrato: digite como esta no contrato (ex.: ECM 022/2025). Hifen no lugar
+     da barra tambem serve. E' dele que saem o estado de partida da equipe e o
+     tipo (LPT ou MLA), que muda a produtividade da inspecao.
+     Se apertar Enter, o programa usa os valores padrao e AVISA na tela.
+
+   - Amostra: 1, 2 ou 3. A 1 e' a principal; 2 e 3 sao as reservas.
+     Enter escolhe a 1.
+
+4) Confira o que aparece na tela: contrato resolvido, estratificacoes
+   encontradas, e uma linha por estratificacao com obras, municipios, UCs,
+   quilometragem, dias e custo.
+
+5) Os resultados ficam na pasta "saida":
+
+   - Resumo_Custos.xlsx
+       Leia-me   : a memoria de calculo e os parametros usados.
+       Resumo    : uma linha por estratificacao. E' o numero que vale.
+       Cenarios  : e se o prazo fosse outro? Quantas equipes cabem em cada prazo.
+       Detalhe   : uma linha por obra, na ordem do roteiro da equipe.
+
+   - Mapa_Estratos_N.html (um por estratificacao)
+       Abra no navegador. O painel "Equipes em campo" alterna entre 1 e 2
+       equipes; cada equipe tem sua cor e sua linha de roteiro. O numero de km
+       no rotulo mostra quanto se roda a mais ao dividir o trabalho.
+
+
+PRIMEIRA EXECUCAO
+-----------------
+
+Na primeira vez o programa baixa e instala o que precisa (Python e bibliotecas)
+dentro da propria pasta. Leva alguns minutos e EXIGE ACESSO A INTERNET.
+Nada e' instalado no Windows: tudo fica na subpasta ".venv", aqui dentro.
+Da segunda vez em diante abre na hora.
+
+Se a preparacao falhar, a causa quase sempre e' proxy ou firewall corporativo.
+Peca ao suporte de TI a liberacao de:
+    https://astral.sh
+    https://pypi.org
+Ou a instalacao do Python 3.12 na maquina - o programa tambem sabe usar um
+Python ja instalado.
+
+
+SE DER ERRO
+-----------
+
+Mensagens que comecam com "ERRO DE ENTRADA:" sao problemas nos arquivos da
+pasta Entrada, e a mensagem diz o que corrigir. Mensagens que comecam com
+"AVISO:" nao impedem o calculo, mas valem uma conferida.
+
+Se aparecer um texto longo com "Traceback" no meio, isso e' defeito do
+programa, nao da planilha: mande a tela inteira para quem enviou o pacote.
+
+Erro comum: "Nao consegui gravar ... Feche o arquivo no Excel". O programa nao
+consegue sobrescrever a planilha enquanto ela estiver aberta. Feche e rode de novo.
+
+
+O QUE VAI NESTA PASTA
+---------------------
+
+  executar.bat        o que voce clica
+  _exec.ps1           prepara o ambiente e chama o programa
+  requirements.txt    lista de bibliotecas
+  src\                o programa
+  minhas_notas\       base de contratos (UF e tipo de cada contrato)
+  Entrada\            onde voce poe as planilhas
+  saida\              onde os resultados aparecem

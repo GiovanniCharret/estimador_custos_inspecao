@@ -14,13 +14,13 @@ def _cria(pasta, *nomes):
         (pasta / n).write_bytes(b"")
 
 def test_acha_lote_e_painel(tmp_path):
-    # Caso feliz: uma planilha de amostras e um arquivo "Painel de Monitoramento".
+    # Caso feliz: uma planilha de amostras e um arquivo "Anexo V - Painel de Monitoramento".
     escrever_lote(tmp_path / "Lote.xlsx", abas=(1,))
-    escrever_painel(tmp_path / "2026 Painel de Monitoramento PA.xlsx")
+    escrever_painel(tmp_path / "Anexo V - Painel de Monitoramento preenchido - ECO 037-2025.xlsx")
     lotes, painel = achar_entradas(tmp_path)
     # O Lote.xlsx nao diz o N no nome nem tem Leia-me: cai na contagem de estratos (3).
     assert [c.name for _, c in lotes] == ["Lote.xlsx"]
-    assert "Painel de Monitoramento" in painel.name
+    assert "Anexo V" in painel.name
 
 def test_acha_varias_estratificacoes_ordenadas(tmp_path):
     # A Entrada/ recebe uma planilha por numero de estratos; TODAS devem ser precificadas,
@@ -28,7 +28,7 @@ def test_acha_varias_estratificacoes_ordenadas(tmp_path):
     escrever_lote(tmp_path / "Estratos 5 - Python.xlsx", abas=(1,))
     escrever_lote(tmp_path / "Estratos 3 - Python.xlsx", abas=(1,))
     escrever_lote(tmp_path / "Estratos 4 - Python.xlsx", abas=(1,))
-    escrever_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    escrever_painel(tmp_path / "Anexo V - Painel de Monitoramento.xlsx")
     lotes, _ = achar_entradas(tmp_path)
     assert [n for n, _ in lotes] == [3, 4, 5]
 
@@ -37,33 +37,38 @@ def test_estratificacoes_duplicadas_avisam_e_usam_uma(tmp_path, capsys):
     # linha no resumo. Descarta a segunda, mas nunca em silencio.
     escrever_lote(tmp_path / "Estratos 4 - Python.xlsx", abas=(1,))
     escrever_lote(tmp_path / "Estratos 4 - copia.xlsx", abas=(1,))
-    escrever_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    escrever_painel(tmp_path / "Anexo V - Painel de Monitoramento.xlsx")
     lotes, _ = achar_entradas(tmp_path)
     assert [n for n, _ in lotes] == [4]
     assert "IGNORADO" in capsys.readouterr().out
 
 def test_erro_sem_planilha_de_amostras(tmp_path):
     # So o painel na pasta: erro dizendo o que falta colocar.
-    escrever_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    escrever_painel(tmp_path / "Anexo V - Painel de Monitoramento.xlsx")
     with pytest.raises(EntradaInvalida, match="Nenhuma planilha de amostras"):
         achar_entradas(tmp_path)
 
 def test_painel_nao_e_confundido_com_planilha_de_amostras(tmp_path):
     # O painel tem abas proprias e nao pode virar candidato a lote.
     escrever_lote(tmp_path / "Lote.xlsx", abas=(1,))
-    escrever_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    escrever_painel(tmp_path / "Anexo V - Painel de Monitoramento.xlsx")
     lotes, painel = achar_entradas(tmp_path)
     assert painel not in [c for _, c in lotes]
 
-def test_erro_sem_painel(tmp_path):
+def test_erro_sem_painel_lista_o_que_ha_na_pasta(tmp_path):
+    # A convencao de nome mudou de 'Painel de Monitoramento' para 'Anexo V': o erro precisa
+    # dizer o nome esperado E listar os arquivos presentes, para o usuario ver que o dele
+    # so esta com o nome errado.
     escrever_lote(tmp_path / "Lote.xlsx", abas=(1,))
-    with pytest.raises(EntradaInvalida, match="Painel de Monitoramento"):
+    escrever_painel(tmp_path / "Painel de Monitoramento antigo.xlsx")
+    with pytest.raises(EntradaInvalida, match="Anexo V") as erro:
         achar_entradas(tmp_path)
+    assert "Painel de Monitoramento antigo.xlsx" in str(erro.value)
 
 def test_erro_dois_paineis(tmp_path):
     # Dois arquivos casando o padrao: aborta listando ambos.
     escrever_lote(tmp_path / "Lote.xlsx", abas=(1,))
-    _cria(tmp_path, "Painel de Monitoramento A.xlsx", "Painel de Monitoramento B.xlsx")
+    _cria(tmp_path, "Anexo V - Painel de Monitoramento A.xlsx", "Anexo V - Painel de Monitoramento B.xlsx")
     with pytest.raises(EntradaInvalida, match="A.xlsx"):
         achar_entradas(tmp_path)
 
@@ -112,19 +117,19 @@ def test_ler_amostras_sem_aba_amostra(tmp_path):
         ler_amostras(tmp_path / "Lote.xlsx")
 
 def test_ler_painel_detecta_aba_e_descarta_invalidas(tmp_path):
-    escrever_painel(tmp_path / "Painel de Monitoramento.xlsx")
-    ucs = ler_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    escrever_painel(tmp_path / "Anexo V - Painel de Monitoramento.xlsx")
+    ucs = ler_painel(tmp_path / "Anexo V - Painel de Monitoramento.xlsx")
     assert {"ODI", "UC", "LATITUDE", "LONGITUDE"} <= set(ucs.columns)
     assert len(ucs) == 10                                # 5 ODIs x 2 UCs
 
 def test_ler_painel_reporta_coordenada_fora_do_brasil(tmp_path):
-    escrever_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    escrever_painel(tmp_path / "Anexo V - Painel de Monitoramento.xlsx")
     # Corrompe uma UC com longitude positiva (fora da bbox do Brasil).
-    df = pd.read_excel(tmp_path / "Painel de Monitoramento.xlsx", sheet_name="Base_UC")
+    df = pd.read_excel(tmp_path / "Anexo V - Painel de Monitoramento.xlsx", sheet_name="Base_UC")
     df.loc[0, "LONGITUDE"] = 48.65
-    with pd.ExcelWriter(tmp_path / "Painel de Monitoramento.xlsx") as xls:
+    with pd.ExcelWriter(tmp_path / "Anexo V - Painel de Monitoramento.xlsx") as xls:
         df.to_excel(xls, sheet_name="Base_UC", index=False)
-    ucs = ler_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    ucs = ler_painel(tmp_path / "Anexo V - Painel de Monitoramento.xlsx")
     assert len(ucs) == 9                                 # UC invalida removida (com aviso impresso)
 
 def test_juntar_erro_odi_orfao(tmp_path):
@@ -135,6 +140,28 @@ def test_juntar_erro_odi_orfao(tmp_path):
     ucs = ler_painel(tmp_path / "Painel.xlsx")
     with pytest.raises(EntradaInvalida, match="PA004"):
         juntar_amostras_painel(amostras, ucs)
+
+def test_juntar_casa_pela_UC_quando_a_odi_nao_casa(tmp_path, capsys):
+    # Contrato MLA (sistema fotovoltaico individual): cada obra do Lote E' uma UC, e a
+    # coluna 'ODI' do Lote traz o NUMERO DA UC - que no Anexo V mora em 'Numero da Unidade
+    # Consumidora', nao em 'Numero ODI'. Verificado na 3a Tranche RO (ECM 022/2025), em que
+    # 862 de 862 obras casam pela UC e nenhuma pela ODI. Sem esta chave alternativa o
+    # programa acusava "tranche errada" em dados perfeitamente validos.
+    # A fixture gera UC = 4600000 + i*10 + j; com 1 UC por ODI, sao 4600000/4600010/4600020.
+    escrever_painel_anexo_v(tmp_path / "Anexo V.xlsx", odis=[9001, 9002, 9003], ucs_por_odi=1)
+    escrever_lote(tmp_path / "Lote.xlsx", abas=(1,), odis=["4600000", "4600010", "4600020"],
+                  municipios={o: "GURINHEM" for o in ["4600000", "4600010", "4600020"]})
+    amostras = ler_amostras(tmp_path / "Lote.xlsx")
+    ucs = ler_painel(tmp_path / "Anexo V.xlsx")
+    # As ODIs do painel (9001...) nao tem nada a ver com as do lote (4600000...).
+    assert not set(amostras[1]["ODI"]) & set(ucs["ODI"])
+    juntas = juntar_amostras_painel(amostras, ucs)
+    # Casou pela UC: 3 obras, uma UC cada.
+    assert len(juntas[1]) == 3
+    assert set(juntas[1]["ODI"]) == {"4600000", "4600010", "4600020"}
+    # E o desvio de chave e' anunciado (limitacao nunca silenciosa).
+    assert "Numero da Unidade Consumidora" in capsys.readouterr().out
+
 
 def test_juntar_erro_intersecao_zero(tmp_path):
     escrever_lote(tmp_path / "Lote.xlsx", abas=(1,))
@@ -172,8 +199,8 @@ def test_juntar_orfao_cons_zero_sem_uc_no_municipio_erro(tmp_path):
 
 def test_ler_painel_anexo_v_cabecalho_na_segunda_linha(tmp_path):
     # Formato real: faixa mesclada na linha 1, cabecalho na 2, colunas por extenso.
-    escrever_painel_anexo_v(tmp_path / "Painel de Monitoramento.xlsx")
-    ucs = ler_painel(tmp_path / "Painel de Monitoramento.xlsx")
+    escrever_painel_anexo_v(tmp_path / "Anexo V - Painel de Monitoramento.xlsx")
+    ucs = ler_painel(tmp_path / "Anexo V - Painel de Monitoramento.xlsx")
     assert {"ODI", "UC", "Municipio", "LATITUDE", "LONGITUDE"} <= set(ucs.columns)
     assert len(ucs) == 10                                # 5 ODIs x 2 UCs
     # 'Numero ODI' virou ODI, ja normalizada (sem zeros a esquerda, como texto).

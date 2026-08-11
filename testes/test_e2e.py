@@ -34,7 +34,7 @@ def _monta_entrada(raiz, odis_painel=ODIS, **kwargs_lote):
     # Fase 2: Lote com as amostras 1 e 2 (o pipeline processa as que existirem).
     escrever_lote(raiz / "Entrada" / "Lote.xlsx", abas=(1, 2), **kwargs_lote)
     # Fase 3: Painel com os ODIs pedidos (por padrao, os mesmos do Lote = caso feliz).
-    escrever_painel(raiz / "Entrada" / "Painel de Monitoramento T.xlsx", odis=odis_painel)
+    escrever_painel(raiz / "Entrada" / "Anexo V - Painel de Monitoramento T.xlsx", odis=odis_painel)
 
 
 def _base_contratos(raiz, monkeypatch, contratos):
@@ -180,7 +180,7 @@ def test_e2e_sem_entrada(tmp_path, capsys):
     # Entrada/ so com o painel: erro de usuario dizendo o que falta, nao traceback.
     (tmp_path / "Entrada").mkdir()
     (tmp_path / "saida").mkdir()
-    escrever_painel(tmp_path / "Entrada" / "Painel de Monitoramento T.xlsx")
+    escrever_painel(tmp_path / "Entrada" / "Anexo V - Painel de Monitoramento T.xlsx")
     assert executar(tmp_path) == 1
     assert "Nenhuma planilha de amostras" in capsys.readouterr().out
 
@@ -297,7 +297,7 @@ def test_e2e_painel_no_formato_anexo_v(tmp_path, capsys):
     (tmp_path / "Entrada").mkdir()
     escrever_lote(tmp_path / "Entrada" / "Lote.xlsx", abas=(1, 2), odis=ODIS_LOTE_TEXTO,
                   municipios={odi: "GURINHEM" for odi in ODIS_LOTE_TEXTO})
-    escrever_painel_anexo_v(tmp_path / "Entrada" / "Painel de Monitoramento T.xlsx")
+    escrever_painel_anexo_v(tmp_path / "Entrada" / "Anexo V - Painel de Monitoramento T.xlsx")
     assert executar(tmp_path) == 0
     saida = capsys.readouterr().out
     # Diz de qual aba/linha leu (com duas linhas de cabecalho possiveis, isso precisa ser visivel).

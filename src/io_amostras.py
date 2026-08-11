@@ -7,6 +7,13 @@ import pandas as pd
 # Bounding box aproximada do Brasil: coordenada fora daqui e' erro de digitacao/projecao.
 BBOX_BRASIL = {"lat_min": -34.0, "lat_max": 5.5, "lon_min": -74.0, "lon_max": -34.0}
 
+# Trecho que o nome do arquivo de coordenadas precisa conter (convencao D7).
+# O arquivo real e' o "Anexo V - Painel de Monitoramento preenchido - <CONTRATO>.xlsx",
+# saida do projeto irmao monitoramentolpt_producao_enbpar. Exigimos "Anexo V" (e nao
+# "Painel de Monitoramento") porque e' o rotulo do anexo no contrato: estavel entre
+# tranches e o que o usuario reconhece.
+PADRAO_ARQUIVO_COORDENADAS = "Anexo V"
+
 # Apelidos de cabecalho do Painel: nome real (ja normalizado por _norm) -> nome interno.
 # Por que existe: o Painel real e' o "Anexo V - Painel de Monitoramento", saida do projeto
 # irmao (monitoramentolpt_producao_enbpar), cujos cabecalhos sao PETREOS - 'Numero ODI' e
@@ -51,24 +58,33 @@ def achar_entradas(pasta):
     pelo CONTEUDO (ter abas 'Amostra K') em vez de por um nome fixo evita que uma
     estratificacao seja ignorada em silencio so por causa do nome do arquivo.
 
-    Logica: Entrada (pasta) -> Fase 1: acha o painel por nome (D7) e exige exatamente 1
-    -> Fase 2: varre os demais .xlsx e fica com os que tem aba 'Amostra K' -> Fase 3:
+    Logica: Entrada (pasta) -> Fase 1: acha o arquivo de coordenadas pelo nome (contendo
+    PADRAO_ARQUIVO_COORDENADAS, D7) e exige exatamente 1 -> Fase 2: varre os demais .xlsx
+    e fica com os que tem aba 'Amostra K' -> Fase 3:
     descobre o numero de estratos de cada um e descarta duplicatas com aviso -> Saida:
     (lista de (n_estratos, caminho) ordenada por n, caminho do painel).
     """
     pasta = Path(pasta)
     # Fase 1: o painel e' localizado por nome contendo o padrao (D7), ignorando temporarios (~$).
-    paineis = [p for p in pasta.glob("*Painel de Monitoramento*.xlsx") if not p.name.startswith("~$")]
-    # Nenhum painel: aborta explicando a convencao de nome.
+    paineis = [p for p in pasta.glob(f"*{PADRAO_ARQUIVO_COORDENADAS}*.xlsx")
+               if not p.name.startswith("~$")]
+    # Nenhum painel: aborta explicando a convencao de nome e listando o que ha na pasta,
+    # que e' o que permite ao usuario ver que o arquivo dele so tem o nome errado.
     if not paineis:
+        presentes = sorted(p.name for p in pasta.glob("*.xlsx") if not p.name.startswith("~$"))
         raise EntradaInvalida(
             f"Arquivo de coordenadas nao encontrado.\n"
-            f"Coloque em {pasta}\\ um .xlsx cujo nome contenha 'Painel de Monitoramento'."
+            f"Coloque em {pasta}\\ um .xlsx cujo nome contenha "
+            f"'{PADRAO_ARQUIVO_COORDENADAS}'.\n"
+            f"Arquivos que existem hoje nessa pasta: {presentes or 'nenhum'}"
         )
     # Mais de um painel: ambiguidade - aborta listando para o usuario remover o excedente.
     if len(paineis) > 1:
         nomes = "\n  - ".join(p.name for p in paineis)
-        raise EntradaInvalida(f"Mais de um Painel de Monitoramento em {pasta}:\n  - {nomes}\nDeixe apenas um.")
+        raise EntradaInvalida(
+            f"Mais de um arquivo '{PADRAO_ARQUIVO_COORDENADAS}' em {pasta}:\n  - {nomes}\n"
+            f"Deixe apenas um."
+        )
     painel = paineis[0]
     # Fase 2: candidato a planilha de amostra = qualquer .xlsx (menos o painel) com aba 'Amostra K'.
     candidatos = []
@@ -292,7 +308,10 @@ def ler_painel(caminho):
     ucs = pd.DataFrame({
         # Mesma normalizacao aplicada no Lote: e' o que faz a chave casar entre as duas planilhas.
         "ODI": df[colmap["odi"]].map(_norm_odi),
-        "UC": df[colmap["uc"]].astype(str).str.strip() if "uc" in colmap else df.index.astype(str),
+        # A UC passa pela MESMA normalizacao da ODI porque ela tambem e' chave de juncao:
+        # em contrato MLA (sistema individual) cada obra do Lote e' uma UC, e o 'ODI' do
+        # Lote casa com o numero da UC do Anexo V (ver juntar_amostras_painel).
+        "UC": df[colmap["uc"]].map(_norm_odi) if "uc" in colmap else df.index.astype(str),
         "Municipio": df[colmap["municipio"]].astype(str).str.strip() if "municipio" in colmap else "",
         "LATITUDE": pd.to_numeric(df[colmap["latitude"]], errors="coerce"),
         "LONGITUDE": pd.to_numeric(df[colmap["longitude"]], errors="coerce"),
@@ -328,16 +347,32 @@ def juntar_amostras_painel(amostras, ucs):
     as pseudo-UCs -> Saida: dict {k: df} com uma linha por UC (real ou pseudo) de ODI
     sorteada.
     """
-    # Fase 1: intersecao zero indica arquivos de tranches diferentes - mensagem especifica.
-    # O 'odis_amostras and' e' essencial: uma amostra legitimamente VAZIA (aba sem obra
-    # sorteada) tambem tem intersecao zero, e acusa-la de tranche errada seria um erro falso.
+    # Fase 1: casa a chave. O 'odis_amostras and' e' essencial: uma amostra legitimamente
+    # VAZIA (aba sem obra sorteada) tambem tem intersecao zero, e acusa-la seria erro falso.
     odis_painel = set(ucs["ODI"])
     odis_amostras = set().union(*[set(df["ODI"]) for df in amostras.values()])
     if odis_amostras and not odis_amostras & odis_painel:
-        raise EntradaInvalida(
-            "Nenhuma ODI das amostras existe no Painel: os arquivos parecem ser de "
-            "tranche/UF diferentes.\nConfira se Lote.xlsx e o Painel sao do MESMO certame."
-        )
+        # Chave alternativa: em contrato MLA (sistema fotovoltaico individual) cada obra do
+        # Lote E' uma unidade consumidora, e a coluna 'ODI' do Lote traz o NUMERO DA UC -
+        # que no Anexo V mora em 'Numero da Unidade Consumidora', nao em 'Numero ODI'.
+        # Verificado na 3a Tranche RO (ECM 022/2025): 862 de 862 obras casam pela UC e
+        # nenhuma pela ODI, com Lote e Anexo V sendo comprovadamente do mesmo certame.
+        # So tentamos isso DEPOIS que a chave normal falhou, entao nenhum caso que ja
+        # funcionava muda de comportamento.
+        if odis_amostras & set(ucs["UC"]):
+            print("AVISO: as obras do Lote nao casam pelo 'Numero ODI' do Anexo V, mas casam "
+                  "pelo 'Numero da Unidade Consumidora' (tipico de contrato MLA, em que cada "
+                  "obra e' uma UC individual). Usando a UC como chave de juncao.")
+            # Re-chaveia o painel: a UC passa a ser a chave, e cada obra fica com 1 UC.
+            ucs = ucs.assign(ODI=ucs["UC"])
+            odis_painel = set(ucs["ODI"])
+        else:
+            # Nenhuma das duas chaves casa: agora sim os arquivos sao de certames diferentes.
+            raise EntradaInvalida(
+                "Nenhuma obra das amostras existe no Anexo V, nem pelo numero da ODI nem "
+                "pelo numero da UC:\nos arquivos parecem ser de tranche/UF diferentes.\n"
+                "Confira se as planilhas de amostra e o Anexo V sao do MESMO certame."
+            )
     juntas = {}
     for k, df in amostras.items():
         # Fase 2: ODIs sorteadas sem nenhuma UC no painel = orfaos; classifica cada um SEM

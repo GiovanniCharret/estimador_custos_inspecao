@@ -1,5 +1,6 @@
-﻿pandas
+# Dependencias de EXECUCAO - e' este arquivo que vai no pacote para os usuarios.
+# Para desenvolver (roda a suite de testes), use requirements-dev.txt.
+pandas
 numpy
 openpyxl
 folium>=0.14          # GroupedLayerControl (radio de equipes no mapa) so existe a partir da 0.14
-pytest

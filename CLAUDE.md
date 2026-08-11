@@ -33,9 +33,14 @@ entre amostras, coordenadas e custos; uma ODI tem N UCs (unidades consumidoras).
 
 ## Estado atual (2026-08-10)
 
-**Fases F0–F11 completas; 82 testes passando.** O pipeline roda ponta a ponta com **dados reais**
-(contrato `ECO 037/2025`, ENERGISA/PB, 3 estratificações):
+**Fases F0–F12 completas; 83 testes passando.** O pipeline roda ponta a ponta com **dados reais**
+de duas tranches de tipos diferentes — `ECO 037/2025` (ENERGISA/PB, LPT, 3 estratificações) e
+`ECM 022/2025` (ENERGISA/RO, MLA, 4 estratificações):
 `executar.bat` → `_exec.ps1` → `src/estimar_custos.py` → `saida/`.
+
+**`_exec.ps1` é autossuficiente:** na primeira execução instala uv + Python 3.12 + bibliotecas
+dentro da própria pasta (`.venv`), com fallback para o Python do sistema. É o que permite mandar
+`distribuicao/EstimadorCustos.zip` (gerado por `empacotar.ps1`) para uma máquina limpa.
 
 O orquestrador expõe `executar(raiz, contrato=None, amostra=None) -> int` (0 sucesso / 1 erro de
 entrada), puro e sem stdin — o `__main__` é quem pergunta contrato **e amostra**. Todo
@@ -63,7 +68,8 @@ R$ 38.880); o teste corrigido está em `test_e2e_total_bate_com_detalhe_mais_fix
 Windows + PowerShell. Gerenciador **`uv` (Astral)**, Python **3.12** (mesma versão do canônico).
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\instalar.ps1   # setup unico (uv + venv + deps)
+powershell -ExecutionPolicy Bypass -File .\instalar.ps1   # setup de DEV (uv + venv + requirements-dev)
+powershell -ExecutionPolicy Bypass -File .\empacotar.ps1  # monta distribuicao/EstimadorCustos{,.zip}
 .venv\Scripts\python.exe -m pytest testes -v              # suite completa
 .venv\Scripts\python.exe -m pytest testes/test_custo.py -v            # um arquivo
 .venv\Scripts\python.exe -m pytest testes/test_custo.py::test_custo_por_odi_formula -v  # um teste
@@ -137,6 +143,14 @@ Detalhes que não se deduzem lendo um arquivo só:
   a aba pedida é pulada com aviso; se nenhuma tiver, é `EntradaInvalida`.
 - **Interseção zero de ODIs só é "tranche errada" se a amostra tiver obras.** Uma aba
   `Amostra K` legitimamente vazia também dá interseção zero — acusá-la seria erro falso.
+- **Há DUAS chaves de junção possíveis, e a segunda é o caso MLA.** Em contrato LPT o `ODI` do
+  Lote casa com `Número ODI` do Anexo V (1 ODI → N UCs). Em contrato **MLA** (fotovoltaico
+  individual) cada obra *é* uma UC, e o `ODI` do Lote traz o **número da UC** — casa com
+  `Número da Unidade Consumidora`. `juntar_amostras_painel` tenta a chave normal e, só se der
+  zero, tenta a UC (com AVISO), antes de acusar tranche errada. Verificado na 3ª Tranche RO
+  (`ECM 022/2025`): 862 de 862 casam pela UC, nenhuma pela ODI.
+- **`ler_painel` normaliza a UC com `_norm_odi`**, não só a ODI — é o que permite a chave
+  alternativa acima funcionar quando os formatos numéricos diferem entre as planilhas.
 - **Regra do órfão** (`juntar_amostras_painel`): ODI sorteada sem UC no painel aborta se `Cons > 0`;
   com `Cons == 0` (obra sem UC, ex.: reforço de rede) vira pseudo-UC no centroide do município,
   com aviso. A função **coleta todos os inválidos antes de abortar** e só aplica fallbacks depois
@@ -234,9 +248,11 @@ contrato informado. Dois cuidados:
 O programa lê **só de `Entrada/`**:
 - **N planilhas de amostra** — qualquer `.xlsx` com abas `Amostra K` (`Lote.xlsx`,
   `Estratos 4 - Python.xlsx`, ...). Todas são precificadas e comparadas no mesmo resumo.
-- **1 painel** — `*Painel de Monitoramento*.xlsx` por convenção de nome (D7); a aba é detectada
-  pelas colunas, não pelo nome (ver as regras de cabeçalho/apelido acima). Na prática é o
-  `Anexo V - Painel de Monitoramento preenchido - <CONTRATO>.xlsx`.
+- **1 arquivo de coordenadas** — nome contendo **`Anexo V`** (`io_amostras.PADRAO_ARQUIVO_COORDENADAS`,
+  convenção D7); a aba é detectada pelas colunas, não pelo nome (ver as regras de cabeçalho/apelido
+  acima). Na prática é o `Anexo V preenchido - <CONTRATO>.xlsx`. O padrão era
+  `Painel de Monitoramento` até 2026-08-11 — mudou porque `Anexo V` é o rótulo do anexo no contrato,
+  estável entre tranches e reconhecível pelo usuário.
 `Entrada/` e `saida/` estão no `.gitignore` (conterão dados reais da distribuidora).
 
 `minhas_notas/` é material de **pesquisa**, nunca entrada de execução:
