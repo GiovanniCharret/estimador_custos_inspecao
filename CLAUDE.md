@@ -107,7 +107,8 @@ Detalhes que não se deduzem lendo um arquivo só:
 - **`custo.py` lê `config` na chamada, nunca no import** — é o que faz `monkeypatch.setattr(config, ...)`
   nos testes e o ajuste sem rebuild funcionarem. Não faça `from src.config import X`.
 - **O ESTRATO não entra no custo** (desde a F9). Ele identifica de onde a obra veio na
-  estratificação e sobrevive só como coluna informativa do `Detalhe` e do popup do mapa. O custo
+  estratificação e sobrevive só como coluna informativa do `Detalhe` — saiu do popup do mapa em
+  2026-08-12 (poluía sem agregar: em campo a equipe não decide nada com essa informação). O custo
   é por **amostra**: um roteiro, um fixo de escritório.
 - **A equipe faz UMA viagem, não ida-e-volta por município.** `montar_roteiro` sai da capital,
   escolhe o município mais próximo, varre **todas** as obras dele antes de sair, e só retorna à

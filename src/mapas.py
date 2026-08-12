@@ -72,8 +72,7 @@ def gravar_mapa(df_ucs, roteiros_por_equipes, lat_origem, lon_origem, caminho):
                     popup=folium.Popup(
                         f"<b>Equipe {i + 1} - parada {dados.get('ordem', '?')}</b><br>"
                         f"ODI {uc['ODI']}<br>{dados.get('Municipio', '')}<br>"
-                        f"{dados.get('n_ucs', '?')} UC(s) na obra<br>"
-                        f"Estrato {uc['Estrato']}",
+                        f"{dados.get('n_ucs', '?')} UC(s) na obra",
                         max_width=250),
                 ).add_to(grupo)
         grupo.add_to(mapa)
