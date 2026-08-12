@@ -11,7 +11,21 @@ Set-Location -Path $PSScriptRoot
 $Destino = Join-Path $PSScriptRoot "distribuicao\EstimadorCustos"
 
 # Comeca do zero para nao carregar sobra de um empacotamento anterior.
-if (Test-Path $Destino) { Remove-Item $Destino -Recurse -Force }
+# A limpeza PODE FALHAR: basta o usuario ter aberto no Excel um Resumo_Custos.xlsx gerado
+# por um teste dentro do proprio pacote. Se falhar e o script seguir em frente, o zip sai
+# com dados reais da distribuidora dentro - por isso aqui e' abortar, nao avisar.
+if (Test-Path $Destino) {
+    Remove-Item $Destino -Recurse -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path $Destino) {
+    $Presos = Get-ChildItem $Destino -Recurse -File | ForEach-Object { $_.FullName }
+    Write-Host ""
+    Write-Host "ERRO: nao consegui limpar $Destino." -ForegroundColor Red
+    Write-Host "Algum arquivo esta aberto (tipicamente um .xlsx no Excel). Feche e rode de novo."
+    Write-Host "Ficaram:"
+    $Presos | ForEach-Object { Write-Host "  $_" }
+    exit 1
+}
 New-Item -ItemType Directory -Path $Destino -Force | Out-Null
 
 Write-Host "Montando $Destino"
@@ -52,11 +66,33 @@ foreach ($pasta in @("Entrada", "saida")) {
 Copy-Item "LEIA-ME.txt" -Destination $Destino
 Write-Host "  + LEIA-ME.txt"
 
-# 6) Zip ao lado da pasta, que e' o que se manda por e-mail.
+# 6) Conferencia de vazamento: Entrada/ e saida/ do pacote so podem ter o .gitkeep.
+#    Sao as duas pastas que recebem dados REAIS da distribuidora quando alguem testa o
+#    pacote no lugar; mandar isso para um terceiro seria vazamento, nao inconveniencia.
+foreach ($pasta in @("Entrada", "saida")) {
+    $Sujeira = Get-ChildItem (Join-Path $Destino $pasta) -Recurse -File |
+               Where-Object { $_.Name -ne ".gitkeep" }
+    if ($Sujeira) {
+        Write-Host ""
+        Write-Host "ERRO: $pasta\ do pacote nao esta vazia:" -ForegroundColor Red
+        $Sujeira | ForEach-Object { Write-Host "  $($_.Name)" }
+        exit 1
+    }
+}
+
+# 7) Zip ao lado da pasta, que e' o que se manda por e-mail. Compress-Archive falha SEM
+#    parar o script (erro nao-terminante), entao a existencia do arquivo e' conferida
+#    depois - ja aconteceu de o script dizer "Pronto" sem ter gerado zip nenhum.
 $Zip = Join-Path $PSScriptRoot "distribuicao\EstimadorCustos.zip"
 if (Test-Path $Zip) { Remove-Item $Zip -Force }
-Compress-Archive -Path $Destino -DestinationPath $Zip
+Compress-Archive -Path $Destino -DestinationPath $Zip -ErrorAction SilentlyContinue
+if (-not (Test-Path $Zip)) {
+    Write-Host ""
+    Write-Host "ERRO: a pasta foi montada, mas o zip nao foi gerado." -ForegroundColor Red
+    Write-Host "Cheque se algum arquivo do pacote esta aberto e rode de novo."
+    exit 1
+}
 Write-Host ""
 Write-Host "Pronto:"
 Write-Host "  pasta: $Destino"
-Write-Host "  zip  : $Zip"
+Write-Host "  zip  : $Zip ($([math]::Round((Get-Item $Zip).Length / 1KB)) KB)"
