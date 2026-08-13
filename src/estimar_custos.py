@@ -48,6 +48,32 @@ def _chave_contrato(texto):
     return re.sub(r"[\s\-/]+", " ", s).strip()
 
 
+def _tipo_pelo_prefixo(nome_do_contrato):
+    """Deduz o tipo de obra do PREFIXO do contrato (regra do humano).
+
+    Por que existe: o 'Tipo de obra' que a Ordem de Servico pede - e que decide horas de
+    escritorio, produtividade da inspecao e a coluna de juncao do Anexo V - esta no proprio
+    nome do contrato. A regra e' binaria e foi declarada pelo humano em 2026-08-13:
+    'ECM' e' Geracao Descentralizada (MLA); qualquer outro prefixo (ECO, ECFS, ECOT, ...)
+    e' Extensao de Redes (LPT).
+
+    Por que o prefixo e nao o campo da base: a base e' cadastro e pode ter erro - foi o
+    caso de 'ECM 001/2020', gravado como LPT. O nome do contrato e' o proprio documento.
+
+    Logica: Entrada (nome do contrato) -> Fase 1: reduz a chave canonica (a mesma de
+    _chave_contrato, para 'ECM-001/2020' e 'ecm 001 2020' caírem no mesmo lugar) ->
+    Fase 2: compara o primeiro token com o prefixo de Geracao -> Saida: 'MLA' ou 'LPT'.
+    """
+    # Fase 1: mesma normalizacao do casamento de contrato (caixa alta, separadores unificados).
+    chave = _chave_contrato(nome_do_contrato)
+    # Fase 2: so o PRIMEIRO token conta - 'ECMX 01/2020' nao e' ECM, e 'ECM-001/2020' e'.
+    primeiro = chave.split()[0] if chave.split() else ""
+    if primeiro == config.PREFIXO_GERACAO_DESCENTRALIZADA:
+        return "MLA"
+    # Saida: todo o resto e' Extensao de Redes.
+    return "LPT"
+
+
 def _resolver_contrato(raiz, contrato):
     """Resolve (uf, tipo_contrato) a partir do contrato informado (decisoes G3/G5).
 
@@ -55,10 +81,14 @@ def _resolver_contrato(raiz, contrato):
     da inspecao (LPT 30 UCs/dia x MLA 3 UCs/dia) dependem do contrato. Concentrar a
     resolucao aqui deixa executar() testavel sem stdin e sem base real.
 
+    A UF vem da base (so ela tem esse dado). O TIPO vem do PREFIXO do contrato, por regra
+    do humano - ver _tipo_pelo_prefixo. O campo 'tipo_contrato' da base sobrou como
+    conferencia: se discordar do prefixo, sai AVISO e o prefixo vence.
+
     Logica: Entrada (raiz, contrato ou None) -> Fase 1: sem contrato, usa os padroes de
     config com AVISO -> Fase 2: carrega a base de contratos (caminho relativo a raiz)
-    -> Fase 3: busca a chave exata; ausente = erro com sugestoes parecidas -> Saida:
-    tupla (uf, tipo_contrato).
+    -> Fase 3: busca a chave exata; ausente = erro com sugestoes parecidas -> Fase 4:
+    tipo pelo prefixo, com aviso se o cadastro discordar -> Saida: tupla (uf, tipo).
     """
     # Fase 1: sem contrato informado, cai nos padroes de config - mas nunca em silencio.
     if not contrato:
@@ -97,11 +127,21 @@ def _resolver_contrato(raiz, contrato):
     # Nome como esta gravado na base (pode diferir do digitado no separador).
     nome_na_base = indice[procurado]
     dados = base[nome_na_base]
+    # O tipo de obra vem do PREFIXO do contrato, nao do cadastro (regra do humano). A base
+    # segue sendo lida e conferida: divergencia e' erro de cadastro e sai como AVISO, para
+    # o humano corrigir o JSON - escolher em silencio esconderia o defeito nos dois lados.
+    tipo = _tipo_pelo_prefixo(nome_na_base)
+    cadastrado = dados.get("tipo_contrato")
     # Imprime o que foi resolvido: o usuario confere UF/tipo antes de confiar nos numeros.
-    print(f"Contrato {nome_na_base}: UF={dados['uf']}, tipo={dados['tipo_contrato']}, "
+    print(f"Contrato {nome_na_base}: UF={dados['uf']}, tipo={tipo}, "
           f"vigente={dados.get('vigente', '?')}")
+    if cadastrado and cadastrado != tipo:
+        print(f"AVISO: a base de contratos diz tipo_contrato='{cadastrado}' para "
+              f"{nome_na_base}, mas o prefixo do contrato indica '{tipo}'. Usando '{tipo}' "
+              f"(o nome do contrato manda). Convem corrigir "
+              f"{config.ARQUIVO_BASE_CONTRATOS}.")
     # Saida: os dois parametros que o motor de custo precisa do contrato.
-    return dados["uf"], dados["tipo_contrato"]
+    return dados["uf"], tipo
 
 
 def executar(raiz, contrato=None, amostra=None):

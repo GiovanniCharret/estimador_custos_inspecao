@@ -124,12 +124,14 @@ Detalhes que não se deduzem lendo um arquivo só:
   formulário. As tarifas também são tabeladas por tipo, mas só o **técnico** muda
   (Eletrotécnico 593/250 no LPT × Técnico 513,22/273,22 no MLA); o engenheiro é 600/360 nos dois,
   então com `PERFIL_EQUIPE = ENGENHEIRO` isso não altera número nenhum hoje.
-- **A regra ECO/ECM do usuário e o `tipo_contrato` da base dizem o mesmo, mas a base cobre mais.**
-  O humano descreve o tipo de obra pelo prefixo do contrato (`ECO` = Extensão, `ECM` = Geração).
-  O código usa `tipo_contrato` (LPT/MLA) de `base_contratos.json`, que é equivalente e cobre os
-  **113** contratos — inclusive os prefixos `ECFS` (28) e `ECOT` (16), que a regra não menciona e
-  são todos LPT. Há **uma** divergência conhecida: `ECM 001/2020` (Equatorial PA, 1ª Tranche,
-  encerrado) está na base como `LPT`. Não foi alterada — é dado do humano, não do código.
+- **O TIPO vem do PREFIXO do contrato, não do cadastro** (regra do humano, 2026-08-13):
+  `_tipo_pelo_prefixo` em `estimar_custos.py` — primeiro token igual a
+  `config.PREFIXO_GERACAO_DESCENTRALIZADA` (`ECM`) → **MLA/Geração**; **qualquer outro**
+  (`ECO`, `ECFS`, `ECOT`, ...) → **LPT/Extensão**. O campo `tipo_contrato` da base continua sendo
+  lido, mas só como **conferência**: se discordar, sai `AVISO` e o prefixo vence. O motivo é de
+  autoridade — o nome do contrato é o próprio documento, o JSON é cadastro e pode ter erro de
+  digitação. Aplicando a regra na base real: **112 de 113 batem**; a exceção é `ECM 001/2020`,
+  cadastrado como `LPT` (o humano vai corrigir o JSON). Da base só a **UF** é autoritativa.
 - **`N_EQUIPES` e `TAMANHO_EQUIPE` são grandezas DIFERENTES e não se somam.** `N_EQUIPES_PADRAO`
   (= 2 desde a F15) são equipes **independentes**: cada uma tem seu bloco de obras, sai da capital
   e volta — logo **N roteiros**. `TAMANHO_EQUIPE` (= 1) são as pessoas **dentro** de uma equipe;
@@ -260,8 +262,9 @@ em `planning/PLAN.md` e derivadas em `planning/MODELO_CUSTO.md`. **Cada decisão
 
 `config.ARQUIVO_BASE_CONTRATOS` aponta para **`dados/base_contratos.json`** (113 contratos,
 23 UFs; chave = nome do contrato, valores `uf`/`tipo_contrato` ∈ {LPT, MLA}/`vigente` ∈
-{Andamento, Encerramento, Encerrado}) — a resolução de contrato depende dele para achar UF e tipo.
-Três cuidados:
+{Andamento, Encerramento, Encerrado}) — a resolução de contrato depende dele para achar a **UF**.
+O `tipo_contrato` gravado ali **não é mais a fonte do tipo** (vem do prefixo, ver acima); ficou
+como conferência que gera `AVISO` quando discorda. Três cuidados:
 
 - **`dados/` é insumo de EXECUÇÃO, não pesquisa.** O arquivo morava em `minhas_notas/` até
   2026-08-11; saiu de lá porque o programa não roda sem ele e ele viaja no pacote enviado aos

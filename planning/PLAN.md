@@ -166,10 +166,17 @@ x F16 — **Horas de escritório por tipo de obra** (decisão G9): 36h no LPT, 2
   As tarifas também são tabeladas por tipo (`E3:F6`), mas só o técnico muda — o engenheiro é
   600/360 nos dois. `TARIFAS_HORA` passou a ser por tipo mesmo assim, para não guardar meia
   verdade; com `PERFIL_EQUIPE = ENGENHEIRO` (G1) nenhum número muda por isso.
-  **Chave usada:** `tipo_contrato` da base, e não o prefixo do nome. A regra que o humano deu
-  (`ECO`→Extensão, `ECM`→Geração) cobre 69 dos 113 contratos; os prefixos `ECFS` (28) e `ECOT`
-  (16) ficam de fora e são todos LPT na base. Divergência única a confirmar com o humano:
-  `ECM 001/2020` está na base como `LPT`.
+- **G10 — O TIPO VEM DO PREFIXO DO CONTRATO (decisão do humano em 2026-08-13):** a regra é
+  binária — **`ECM` → Geração Descentralizada (MLA); qualquer outro prefixo → Extensão de Redes
+  (LPT)**. Vale para `ECO`, `ECFS` e `ECOT` sem precisar citá-los. Implementada em
+  `estimar_custos._tipo_pelo_prefixo`, com `config.PREFIXO_GERACAO_DESCENTRALIZADA`.
+  **Por que o prefixo e não o cadastro:** o nome do contrato é o próprio documento; o
+  `base_contratos.json` é cadastro e pode ter erro de digitação. Foi assim que apareceu
+  `ECM 001/2020`, gravado como `LPT` — o humano confirmou que é erro e vai corrigir o JSON.
+  O campo `tipo_contrato` continua sendo lido como **conferência**: divergência sai como `AVISO`
+  e o prefixo vence, para o erro de cadastro aparecer em vez de ser escolhido em silêncio.
+  Aplicando a regra na base real: **112 de 113 contratos ficam iguais**. Da base, só a **UF**
+  segue sendo autoritativa.
 - **Cuidado que a G8 cria:** `N_EQUIPES` (quantas) e `TAMANHO_EQUIPE` (pessoas em cada) são
   grandezas distintas e ambas multiplicam o custo. O benchmark da engenharia é
   `TAMANHO_EQUIPE=2, N_EQUIPES=1` — uma dupla num roteiro só. Confundir os dois é o erro que a

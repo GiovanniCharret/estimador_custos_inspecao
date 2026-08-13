@@ -29,7 +29,7 @@ rodar a suíte numa máquina limpa, sem os dados reais da distribuidora.
 | `test_custo.py` | 20 | F4/F9/F10/F15/F16 | **horas de escritório por tipo de obra** (36h LPT × 24h MLA, amarradas contra a planilha fonte, sem monkeypatch), tarifa do técnico mudando com o tipo e a do engenheiro não, | fórmula da amostra com parâmetros redondos, roteiro < ida-e-volta, **fixo independente do nº de estratos**, LPT × MLA, arredondamento de dias, **dobrar a equipe (pessoas) = metade dos dias e não metade do custo**, **duas equipes rodam mais km e custam mais**, **prazo ditado pela equipe mais lenta**, detalhe com a equipe dona, a **grade equipes × prazo** (limites, ordem, monotonia do custo, linha `calculado`), o **descarte do inviável** e a prova de que ele **não roteia**, **reprodução da fórmula do benchmark**, diária diluída |
 | `test_resumo.py` | 5 | F5/F9/F10/F15 | as 4 abas fixas, `Equipes` × `Pessoas por equipe` como colunas distintas, a grade casando com o `Resumo`, equipe + ordem no detalhe, Leia-me com os parâmetros vigentes, `PermissionError` → mensagem amigável |
 | `test_mapas.py` | 4 | F6/F14 | um ponto por UC (obra de 3 UCs = 3 pontos), popup com ODI/município/nº de UCs, marcador da base, amostra vazia sem ponto — e um teste da **ausência**: nada de polilinha, parada ou radio de equipes |
-| `test_e2e.py` | 26 | F7/F8/F9/F10/F11/F15/F16 | pipeline inteiro `Entrada/` → `saida/` (abaixo) |
+| `test_e2e.py` | 28 | F7/F8/F9/F10/F11/F15/F16 | pipeline inteiro `Entrada/` → `saida/` (abaixo) |
 
 ## O que o e2e cobre (F7)
 
@@ -43,6 +43,8 @@ Caminho feliz e as bordas que o `DESIGN.md` §7 elegeu como os erros mais prová
 | `test_e2e_roteiro_encadeado_derruba_a_quilometragem` | o roteiro gravado é menor que a soma das idas-e-voltas do modelo antigo, mesmo já somando os roteiros das duas equipes do padrão |
 | `test_e2e_padrao_sao_duas_equipes_independentes` | a aba `Resumo` diz 2 equipes, `Equipes` e `Pessoas por equipe` não se confundem, e as duas equipes aparecem no `Detalhe` com cada obra tendo um dono só |
 | `test_e2e_tipo_de_obra_muda_as_horas_de_escritorio` | contrato MLA → 24h e R$ 8.640 de fixo na aba `Resumo`, e o `Leia-me` nomeando "Geração Descentralizada" com o desdobramento das etapas |
+| `test_e2e_tipo_vem_do_prefixo_do_contrato` | `ECM`→MLA e `ECO`/`ECFS`/`ECOT`→LPT, com a base **sem** o campo `tipo_contrato` — o prefixo basta |
+| `test_e2e_prefixo_vence_o_cadastro_mas_avisa` | o caso real `ECM 001/2020` (cadastrado como LPT): o prefixo vence, o aviso sai, e o custo usa mesmo as 24h |
 | `test_e2e_grade_de_cenarios_respeita_os_limites` | a grade fica dentro de 1–7 equipes e do teto de 20 dias, tem mais de um valor em cada eixo (é grade, não lista), o km cresce com o nº de equipes, e a linha `calculado` bate com o `Resumo` |
 | `test_e2e_estratificacoes_duplicadas_avisam` | dois arquivos com o mesmo N → aviso e uma linha só |
 | `test_e2e_escolha_da_amostra` | a amostra escolhida manda em `Resumo`, `Cenarios`, `Detalhe` e no mapa |

@@ -122,6 +122,16 @@ UCS_POR_DIA = {"LPT": 30.0, "MLA": 3.0}
 # Tipo usado quando o contrato nao e' informado/encontrado.
 TIPO_CONTRATO_PADRAO = "LPT"
 
+# --- Tipo de obra pelo PREFIXO do contrato (regra do humano, 2026-08-13) ---
+# O 'Tipo de obra' da Ordem de Servico sai do nome do contrato, e a regra e' binaria:
+#   comeca com ECM  -> Sistemas de Geracao Descentralizada  -> MLA
+#   qualquer outro  -> Extensao de Redes de Distribuicao    -> LPT  (ECO, ECFS, ECOT, ...)
+# E' o PREFIXO que manda, nao o campo 'tipo_contrato' da base: a base e' cadastro e pode
+# ter erro de digitacao (foi o caso de ECM 001/2020, cadastrado como LPT), enquanto o nome
+# do contrato e' o proprio documento. A base continua sendo conferida, e a divergencia sai
+# como AVISO em vez de escolher em silencio.
+PREFIXO_GERACAO_DESCENTRALIZADA = "ECM"
+
 # --- Chave de juncao entre o Lote e o Anexo V, por tipo de contrato ---
 # GAP SEMANTICO DO SISTEMA LEGADO: a coluna do Lote se chama 'ODI' nos dois tipos de
 # contrato, mas o que ela GUARDA muda:

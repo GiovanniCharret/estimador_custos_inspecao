@@ -311,6 +311,7 @@ def test_e2e_tipo_de_obra_muda_as_horas_de_escritorio(tmp_path, monkeypatch):
 def test_e2e_tipo_contrato_muda_o_custo(tmp_path, monkeypatch):
     # MLA (3 UCs/dia) e' muito mais caro que LPT (30 UCs/dia) para a MESMA amostra:
     # prova que o tipo resolvido pelo contrato chega de fato ao motor de custo.
+    # Os PREFIXOS e' que decidem o tipo (ECM = Geracao; o resto = Extensao).
     def _total(contrato, tipo):
         raiz = tmp_path / tipo
         raiz.mkdir()
@@ -322,7 +323,38 @@ def test_e2e_tipo_contrato_muda_o_custo(tmp_path, monkeypatch):
         return resumo[resumo["Amostra"] == 1].iloc[0]["Custo total (R$)"]
 
     # Mesma geometria, so o tipo muda: MLA tem de sair mais caro.
-    assert _total("ECM LPT-2026", "LPT") < _total("ECM MLA-2026", "MLA")
+    assert _total("ECO LPT-2026", "LPT") < _total("ECM MLA-2026", "MLA")
+
+
+def test_e2e_tipo_vem_do_prefixo_do_contrato(tmp_path, capsys, monkeypatch):
+    # REGRA DO HUMANO (2026-08-13): 'ECM' e' Geracao Descentralizada; qualquer outro
+    # prefixo e' Extensao de Redes. Vale para ECFS e ECOT, que a base tambem traz e que a
+    # regra nao cita nominalmente.
+    for prefixo, esperado in [("ECM", "MLA"), ("ECO", "LPT"), ("ECFS", "LPT"), ("ECOT", "LPT")]:
+        raiz = tmp_path / prefixo
+        raiz.mkdir()
+        _monta_entrada(raiz)
+        contrato = f"{prefixo} 001/2026"
+        # A base e' gravada SEM o campo tipo_contrato: o prefixo basta.
+        _base_contratos(raiz, monkeypatch, {contrato: {"uf": "PA", "vigente": "Andamento"}})
+        assert executar(raiz, contrato=contrato) == 0
+        assert f"tipo={esperado}" in capsys.readouterr().out
+
+
+def test_e2e_prefixo_vence_o_cadastro_mas_avisa(tmp_path, capsys, monkeypatch):
+    # Caso real encontrado na base: 'ECM 001/2020' esta cadastrado como LPT. O prefixo
+    # manda (o nome do contrato e' o documento; a base e' cadastro), mas a divergencia
+    # nao pode ser silenciosa - senao o erro de cadastro nunca e' corrigido.
+    _monta_entrada(tmp_path)
+    _base_contratos(tmp_path, monkeypatch,
+                    {"ECM 001/2020": {"uf": "PA", "tipo_contrato": "LPT", "vigente": "Encerrado"}})
+    assert executar(tmp_path, contrato="ECM 001/2020") == 0
+    saida = capsys.readouterr().out
+    assert "tipo=MLA" in saida
+    assert "AVISO" in saida and "tipo_contrato='LPT'" in saida
+    # E o custo usou MESMO o MLA: 24h de escritorio, nao as 36h da Extensao.
+    resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
+    assert set(resumo["Horas escritorio"]) == {24.0}
 
 
 def test_e2e_contrato_desconhecido(tmp_path, capsys, monkeypatch):

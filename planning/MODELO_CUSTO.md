@@ -790,3 +790,17 @@ o perfil.
 
 De quebra, `E2:F2` confirmam que a distinção `campo`/`escritorio` do `config.py` é exatamente a
 que o formulário chama de **com/sem deslocamento** (célula `O48` da OS).
+
+### De onde sai o tipo de obra
+
+Regra do humano, binária e no prefixo do contrato:
+
+| Prefixo | Tipo de obra | Interno |
+| --- | --- | --- |
+| `ECM` | Sistemas de Geração Descentralizada | MLA |
+| **qualquer outro** (`ECO`, `ECFS`, `ECOT`, ...) | Extensão de Redes de Distribuição | LPT |
+
+O `tipo_contrato` gravado em `base_contratos.json` **não** é mais a fonte: o nome do contrato é o
+documento, o JSON é cadastro e pode ter erro. Ele segue sendo lido como conferência e, se
+discordar, sai `AVISO` e o prefixo vence — foi assim que `ECM 001/2020` (cadastrado como `LPT`)
+apareceu. Aplicando a regra à base real, **112 dos 113 contratos ficam iguais**.

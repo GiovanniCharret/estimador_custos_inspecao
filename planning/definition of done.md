@@ -31,8 +31,12 @@ x F16 — horas de escritório por tipo de obra (2026-08-13). Critérios:
       nenhum número muda hoje) e `tarifa_campo`/`tarifa_escritorio` recebem o tipo;
     - a aba `Resumo` ganha a coluna `Horas escritorio` e o `Leia-me` nomeia o tipo de obra
       como o formulário o chama, com o desdobramento das etapas;
-    - 99 testes passando, com um teste que amarra as horas contra a planilha fonte (sem
-      monkeypatch) e outro que garante que a diferença de tarifa do técnico não se perca.
+    - o **tipo vem do prefixo do contrato** (`ECM` = Geração; qualquer outro = Extensão), e
+      o `tipo_contrato` da base virou conferência: se discordar, sai `AVISO` e o prefixo
+      vence — aplicado à base real, 112 dos 113 contratos ficam iguais;
+    - 101 testes passando, com um teste que amarra as horas contra a planilha fonte (sem
+      monkeypatch), um que garante que a diferença de tarifa do técnico não se perca, e um
+      que reproduz o caso real `ECM 001/2020` (cadastro errado → aviso, prefixo vence).
 x F15 — equipes independentes e grade de cenários (2026-08-13). Critérios:
     - o cálculo oficial assume `config.N_EQUIPES_PADRAO = 2` equipes **independentes**, e a
       aba `Resumo` traz `Equipes` e `Pessoas por equipe` como colunas distintas;
