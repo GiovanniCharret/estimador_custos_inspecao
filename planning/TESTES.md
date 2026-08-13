@@ -28,7 +28,7 @@ rodar a suíte numa máquina limpa, sem os dados reais da distribuidora.
 | `test_distancias.py` | 14 | F3/F9/F11 | haversine contra valor conhecido (Belém→Castanhal ≈ 62 km), ponto igual = 0, centroide/rota interna, ODI com 1 UC, o **roteiro encadeado** (permutação completa, município não é revisitado, km fecha com trechos + volta, determinismo, amostra vazia) e a **divisão entre equipes** (toda obra tem dono, dividir soma mais km, 1 equipe = roteiro inteiro, mais equipes que obras, determinismo) |
 | `test_custo.py` | 10 | F4/F9/F10 | fórmula da amostra com parâmetros redondos, roteiro < ida-e-volta, **fixo independente do nº de estratos**, LPT × MLA, arredondamento de dias, **dobrar a equipe = metade dos dias e não metade do custo**, **cenários de prazo**, **reprodução da fórmula do benchmark**, diária diluída |
 | `test_resumo.py` | 5 | F5/F9/F10 | as 4 abas fixas, ordem por estratificação, aba `Cenarios` casando com o `Resumo`, ordem do roteiro no detalhe, Leia-me com os parâmetros vigentes, `PermissionError` → mensagem amigável |
-| `test_mapas.py` | 4 | F6/F9/F11 | **radio por nº de equipes** (`GroupedLayerControl`) com o km no rótulo, uma polilinha por equipe, marcador da base, popup com equipe + ordem da parada, amostra vazia sem camada |
+| `test_mapas.py` | 4 | F6/F14 | um ponto por UC (obra de 3 UCs = 3 pontos), popup com ODI/município/nº de UCs, marcador da base, amostra vazia sem ponto — e um teste da **ausência**: nada de polilinha, parada ou radio de equipes |
 | `test_e2e.py` | 23 | F7/F8/F9/F10/F11 | pipeline inteiro `Entrada/` → `saida/` (abaixo) |
 
 ## O que o e2e cobre (F7)
@@ -43,7 +43,7 @@ Caminho feliz e as bordas que o `DESIGN.md` §7 elegeu como os erros mais prová
 | `test_e2e_roteiro_encadeado_derruba_a_quilometragem` | o roteiro gravado é menor que a soma das idas-e-voltas do modelo antigo |
 | `test_e2e_estratificacoes_duplicadas_avisam` | dois arquivos com o mesmo N → aviso e uma linha só |
 | `test_e2e_escolha_da_amostra` | a amostra escolhida manda em `Resumo`, `Cenarios`, `Detalhe` e no mapa |
-| `test_e2e_mapa_oferece_os_mesmos_cenarios_de_equipe_da_planilha` | o radio do mapa cobre exatamente os nºs de equipe da aba `Cenarios` — os dois artefatos não podem oferecer opções diferentes |
+| `test_e2e_mapa_localiza_as_obras_sem_propor_itinerario` | o mapa da execução inteira tem pontos e base, e **não** tem polilinha, parada nem radio — enquanto a aba `Cenarios` da planilha continua cheia (o que saiu foi o desenho, não o cálculo) |
 | `test_e2e_amostra_inexistente` | pedir a amostra 3 num lote com abas 1 e 2 → exit 1 com mensagem |
 | `test_e2e_amostra_faltando_em_uma_estratificacao` | estratificação sem a aba pedida é pulada com aviso; as outras seguem |
 | `test_e2e_amostra_vazia_nao_derruba_o_pipeline` | aba `Amostra K` sem obra sorteada vira linha de zeros e zero cenários, não traceback nem "tranche errada" |
@@ -149,8 +149,8 @@ dias que a de 4). Em produção o parâmetro fica em **1** por decisão G1.
    R$), mais avisos de coordenada descartada, pseudo-UC ou estratificação duplicada.
 5. Conferir em `saida/`: a aba `Resumo` do `Resumo_Custos.xlsx` contra o benchmark
    `minhas_notas/Tabela_Resumo_Extratos_Amostra.xlsx`, e abrir um `Mapa_Estratos_N.html`
-   no browser, alternando o radio "Equipes em campo" e seguindo a linha de cada equipe.
-   O km no rótulo do radio mostra quanto se roda a mais ao dividir o trabalho.
+   no browser para ver se os pontos caem onde as obras deveriam estar — município certo,
+   dentro da UF, nada no oceano. O mapa **não** desenha rota (F14): ele localiza as obras.
 
 Sinais de que a entrada é que está errada, não o programa: `ERRO DE ENTRADA:` e `AVISO:`.
 Se aparecer **traceback**, é bug do programa — a planilha nunca deve produzir um.

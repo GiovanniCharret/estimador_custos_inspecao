@@ -43,6 +43,8 @@ x F12 — Convenção `Anexo V`, chave de junção alternativa (MLA casa pela UC
     autoinstalável para os usuários de teste (`_exec.ps1` + `empacotar.ps1`) — 2026-08-11
 x F13 — Chave de junção **declarada** pelo tipo do contrato (`CHAVE_JUNCAO_POR_TIPO`),
     em vez de descoberta por tentativa-e-erro — 2026-08-11
+x F14 — Mapa reduzido a pontos: saíram a polilinha, a numeração das paradas e o radio de
+    equipes (decisão G7). O mapa localiza, não propõe itinerário — 2026-08-13
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -120,12 +122,22 @@ x F13 — Chave de junção **declarada** pelo tipo do contrato (`CHAVE_JUNCAO_P
 - **Distribuição (F12):** `empacotar.ps1` monta `distribuicao/EstimadorCustos{,.zip}` com o mínimo
   para rodar. O `_exec.ps1` instala uv + Python 3.12 + bibliotecas na primeira execução (fallback
   para o Python do sistema). Exige internet; `distribuicao/` está no `.gitignore`.
-- **Pendência aberta pela F11 — o custo de dividir não está no custo.** `dividir_roteiro`
-  mediu a divisão real das obras entre equipes: 2 equipes rodam **+18% a +37%** mais km que
-  uma, porque cada uma sai da capital e volta. A aba `Cenarios` ainda assume trabalho
-  perfeitamente divisível, então seus cenários multi-equipe são **otimistas**. O mapa mostra
-  o km real e o `Leia-me` avisa. Decidir se `cenarios_por_prazo` passa a usar a geometria real
-  (encareceria os cenários de prazo curto e daria consistência total entre mapa e planilha).
+- **G7 — O MAPA LOCALIZA, NÃO PROPÕE ITINERÁRIO (F14, decisão do humano em 2026-08-13):** saem do
+  mapa a polilinha do roteiro, a numeração das paradas e o radio por nº de equipes; fica um ponto
+  por UC, todos iguais, mais a base. O motivo é de leitura, não de código: a rota é **hipótese do
+  modelo** (gulosa, linha reta, sem estrada real) e estava desenhada com a mesma tinta dos fatos
+  (as coordenadas), o que a fazia parecer recomendação operacional. Sem rota não há o que
+  repartir entre equipes, então o radio saiu junto e `gravar_mapa` voltou a
+  `(df_ucs, lat0, lon0, caminho)`. O cálculo de custo **não muda** — `montar_roteiro` segue
+  intacto em `distancias.py`.
+- **Pendência aberta pela F11, agora sem vitrine (ver G7) — o custo de dividir não está no custo.**
+  `dividir_roteiro` mediu a divisão real das obras entre equipes: 2 equipes rodam **+18% a +37%**
+  mais km que uma, porque cada uma sai da capital e volta. A aba `Cenarios` ainda assume trabalho
+  perfeitamente divisível, então seus cenários multi-equipe são **otimistas**. Com a F14 o mapa
+  deixou de exibir esse km, e **só o aviso do `Leia-me` sobrou** — o que torna esta pendência mais
+  relevante, não menos. `dividir_roteiro` continua no código e testada só por causa dela; se a
+  decisão for não usar a geometria real em `cenarios_por_prazo`, a função vira candidata a
+  remoção.
 - **Correção (F10):** `dias_trabalho` passou a dividir por `TAMANHO_EQUIPE`, como a Fase 6 do
   `MODELO_CUSTO.md` sempre prescreveu. Era invisível com equipe = 1; com equipe = 2 o custo
   dobrava em vez de ficar aproximadamente estável.

@@ -23,6 +23,14 @@ x F6 — mapas HTML gerados com camadas por estrato e popup de custo; teste pass
 x F7 — e2e feliz + 8 bordas passam (16 testes); `planning/TESTES.md` escrito;
     status report `planning/html/STATUS_F7.html` gerado; `executar.bat` validado
     (sem entrada → "Lote.xlsx nao encontrado", exit 1, sem traceback).
+x F14 — mapa reduzido a pontos (2026-08-13). Critérios:
+    - `gravar_mapa(df_ucs, lat0, lon0, caminho)` — sem polilinha, sem número de parada,
+      sem `GroupedLayerControl` e sem cor por equipe; um ponto por UC e o marcador da base;
+    - o popup diz ODI, município e quantas UCs a obra tem — nada de ordem de visita;
+    - o cálculo de custo **não muda**: `montar_roteiro` segue alimentando `custo.py`, e o
+      `Resumo_Custos.xlsx` continua com as 4 abas e a aba `Cenarios` intacta;
+    - o `Leia-me` da planilha passa a dizer que o mapa não recomenda rota;
+    - 86 testes passando, com dois testes novos que provam a AUSÊNCIA de rota no HTML.
 x F13 — chave de junção declarada pelo tipo do contrato (2026-08-11). Critérios:
     - `config.CHAVE_JUNCAO_POR_TIPO` (`LPT`→`ODI`, `MLA`→`UC`) decide a coluna do Anexo V
       **antes** de olhar os dados, e `juntar_amostras_painel` recebe `tipo_contrato`;
@@ -119,7 +127,8 @@ Repare que **encurtar o prazo encarece** (o contrato paga por hora-profissional,
 equipe traz seu dia de mobilização) e que o custo **não é monótono**: 5 dias sai mais barato
 que 6, porque ambos precisam de 2 equipes e 5 dias é menos dia-equipe.
 
-E o mapa (F11) mostra o que a tabela ainda não cobra — dividir custa quilometragem:
+E o que a tabela ainda não cobra — dividir custa quilometragem (medido por `dividir_roteiro`;
+o mapa mostrava isso até a F14, hoje o número só existe aqui e no `Leia-me`):
 
 | Estratos | 1 equipe | 2 equipes | 3 equipes |
 | --- | --- | --- | --- |
@@ -128,7 +137,7 @@ E o mapa (F11) mostra o que a tabela ainda não cobra — dividir custa quilomet
 | 5 | 1.059 km | 1.301 km (+23%) | 1.832 km (+73%) |
 
 (km em linha reta, antes do fator rodoviário). Os cenários multi-equipe da aba `Cenarios`
-são portanto **otimistas** — está avisado no `Leia-me` da planilha e no rótulo do radio.
+são portanto **otimistas** — está avisado no `Leia-me` da planilha.
 
 As 2 pendências restantes são de conferência humana com o olho — nenhuma depende de
 escrever mais código:
@@ -137,8 +146,8 @@ escrever mais código:
    `minhas_notas/Tabela_Resumo_Extratos_Amostra.xlsx` (aba `Resumo`). Lembrando: a diferença
    de ~44% é **decisão** (equipe 1 × 2), não erro — com `TAMANHO_EQUIPE = 2.0` os números
    caem na fórmula da engenharia.
-2. F6 — abrir `saida/Mapa_Estratos_3.html` no browser, ligar/desligar as camadas de amostra
-   e conferir se a linha do roteiro faz sentido geográfico.
+2. F6 — abrir `saida/Mapa_Estratos_3.html` no browser e conferir se os pontos caem onde as
+   obras deveriam estar (município certo, dentro da UF, nada no oceano).
 
 Pendência de **calibração** (aberta, não bloqueia): `VELOCIDADE_KMH` (45) e `FATOR_RODOVIARIO`
 (1,40) continuam sendo chutes da F1 e são os dois parâmetros que mais mexem no resultado.

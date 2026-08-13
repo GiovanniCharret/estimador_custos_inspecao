@@ -100,7 +100,7 @@ Cada seta abaixo é um **contrato de dataframe** — mudar uma coluna quebra o m
 | `config.py` | **todos** os números do modelo (G1–G5 do gate F1 + F9). Zero números mágicos fora daqui |
 | `custo.py` | `custo_amostra(df_odis, uf, tipo_contrato)` → `(dict com os números da AMOSTRA, df do roteiro)`. Um call por amostra — não há função por ODI nem por estrato · `cenarios_por_prazo(numeros)` → prazos alternativos (o inverso: dado o prazo, quantas equipes cabem) |
 | `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, cenarios, **números}, ...], caminho)` → `saida/Resumo_Custos.xlsx` com **4 abas fixas**: `Leia-me` + `Resumo` (1 linha por estratificação) + `Cenarios` (prazos alternativos) + `Detalhe` (1 linha por obra, na ordem do roteiro) |
-| `mapas.py` | `gravar_mapa(df_ucs, {n_equipes: [(roteiro, km), ...]}, lat0, lon0, caminho)` → `saida/Mapa_Estratos_N.html` (folium; **radio por nº de equipes**, uma polilinha e uma cor por equipe, marcador da base) |
+| `mapas.py` | `gravar_mapa(df_ucs, lat0, lon0, caminho)` → `saida/Mapa_Estratos_N.html` (folium; **um ponto por UC**, todos iguais, mais o marcador da base. Sem rota, sem camadas) |
 
 Detalhes que não se deduzem lendo um arquivo só:
 
@@ -125,17 +125,20 @@ Detalhes que não se deduzem lendo um arquivo só:
   é o que `test_reproduz_a_formula_do_benchmark_da_engenharia` amarra.
 - **A aba `Cenarios` inverte o cálculo**: o prazo é dado e o nº de equipes se ajusta
   (`equipes = ceil(horas / (jornada × dias))`), varrendo `dias_calculado ± VARIACAO_DIAS_CENARIOS`.
-- **`Cenarios` (custo) e o mapa (geometria) discordam de propósito, e isso está documentado.**
-  A aba assume o trabalho **perfeitamente divisível** (N equipes rodam os mesmos km que uma);
-  `dividir_roteiro` faz a divisão real e mostra que 2 equipes rodam **+18% a +37%** mais nos
-  dados reais, porque cada uma sai da capital e volta. Os cenários multi-equipe são portanto
-  **otimistas** — dito no `Leia-me` da planilha e no rótulo do radio do mapa (que traz o km real).
-- **`dividir_roteiro` corta o itinerário em blocos CONTÍGUOS** equilibrados por km acumulado
-  (não por contagem de obras). Como `montar_roteiro` já ordena município a município, os blocos
-  saem geograficamente coerentes e nenhum município é partido entre duas equipes.
-- **O mapa usa `GroupedLayerControl`, não `LayerControl`.** Os cenários precisam ser
-  mutuamente exclusivos (radio), e `FeatureGroup(overlay=False)` os colocaria no mesmo grupo
-  do tile de fundo — trocar de cenário apagaria o mapa. Exige `folium>=0.14`.
+- **O mapa NÃO desenha itinerário** (desde 2026-08-13, decisão do humano). Ele marca um ponto por
+  UC, todos da mesma cor, mais a base. A rota gulosa continua existindo em `distancias.py` e
+  alimentando o custo — o que saiu foi o **desenho**: a linha era hipótese do modelo traçada com a
+  mesma tinta dos fatos (as coordenadas), e ninguém decidia nada com a ordem das paradas. Sem
+  rota não há o que repartir entre equipes, então o radio `GroupedLayerControl` saiu junto e o
+  mapa voltou a ter camada única.
+- **`dividir_roteiro` ficou órfã do pipeline** por causa dessa decisão — era o mapa quem a
+  chamava. Continua no código e testada porque é a **única medida** do quanto a aba `Cenarios` é
+  otimista: a aba assume o trabalho perfeitamente divisível (N equipes rodam os mesmos km que
+  uma), enquanto a divisão real mostra 2 equipes rodando **+18% a +37%** mais, já que cada uma
+  sai da capital e volta. O aviso sobrevive no `Leia-me` da planilha; a pendência de embutir esse
+  km no custo continua aberta no `PLAN.md`. Ela corta o itinerário em blocos **contíguos**
+  equilibrados por km acumulado (não por contagem de obras) — como `montar_roteiro` já ordena
+  município a município, nenhum município é partido entre duas equipes.
 - **O custo não é monótono no prazo** dentro da aba `Cenarios`: encurtar de 6 para 5 dias pode
   *baratear*, porque os dois cenários usam 2 equipes e 5 dias é menos dia-equipe que 6. A coluna
   `Ocupação da equipe` é o que torna isso legível.
@@ -171,8 +174,9 @@ Detalhes que não se deduzem lendo um arquivo só:
 - **`ler_n_estratos` conta só as obras `Selecionado`**: a aba traz o lote inteiro, e as linhas
   não sorteadas carregam rótulos de estrato que não existem na amostra.
 - **`resumo_por_odi` tem esquema fixo mesmo vazio.** Uma aba `Amostra K` sem obra sorteada é
-  possível; sem as colunas garantidas, o pandas devolve um df sem coluna nenhuma e o mapa quebra
-  (aconteceu). `mapas.py` também pula amostras sem obras.
+  possível; sem as colunas garantidas, o pandas devolve um df sem coluna nenhuma e o que consome
+  o roteiro quebra (aconteceu, no mapa da época). `mapas.py` hoje só centraliza na base e não
+  desenha ponto nenhum nesse caso.
 - **`ler_painel` para na PRIMEIRA combinação (aba × linha de cabeçalho)** que produza
   `odi` + `latitude` + `longitude` — a ordem das abas do painel importa. `ler_amostras`, por
   outro lado, processa todas as abas `Amostra K` que existirem.

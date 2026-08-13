@@ -135,12 +135,16 @@ def montar_roteiro(df_odis, lat_origem, lon_origem):
 def dividir_roteiro(df_odis, lat_origem, lon_origem, n_equipes):
     """Reparte as obras entre N equipes e devolve o roteiro de cada uma.
 
-    Por que existe: com mais de uma equipe a pergunta "por onde cada uma passa" so tem
-    resposta se o trabalho for de fato repartido. O custo (custo.py) trata o trabalho como
-    perfeitamente divisivel - uma aproximacao boa para R$, mas que nao desenha nada. Esta
-    funcao produz a divisao concreta que o mapa mostra, e de quebra revela o preco real de
-    dividir: cada equipe tem de sair da capital e voltar, entao a quilometragem SOMADA de
-    N equipes e' sempre maior que a de uma equipe so.
+    Por que existe: o custo (custo.py) trata o trabalho como perfeitamente divisivel - uma
+    aproximacao boa para R$, mas que esconde o preco real de dividir. Esta funcao faz a
+    divisao concreta e o revela: cada equipe tem de sair da capital e voltar, entao a
+    quilometragem SOMADA de N equipes e' sempre maior que a de uma equipe so (+18% a +37%
+    com duas equipes, nos dados reais).
+
+    ATENCAO - nao e' chamada pelo pipeline desde 2026-08-13, quando o mapa deixou de
+    desenhar rotas; era ele quem consumia essa divisao. Fica aqui, testada, porque e' a
+    unica medida que existe do quanto a aba 'Cenarios' e' otimista, e essa pendencia
+    (embutir o km real no custo multi-equipe) continua aberta no PLAN.md.
 
     Como divide: o itinerario de uma equipe ja sai em ordem geografica (montar_roteiro
     encadeia municipio a municipio), entao basta cortar essa ordem em N blocos CONTIGUOS -

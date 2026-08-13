@@ -6,7 +6,6 @@ provaveis do usuario final: tranche errada, entrada ausente, ODI orfa (nos dois
 ramos da regra do orfao) e Resumo_Custos.xlsx travado pelo Excel.
 """
 import json
-import re
 
 import pandas as pd
 import pytest
@@ -155,18 +154,21 @@ def test_e2e_roteiro_encadeado_derruba_a_quilometragem(tmp_path):
     assert sorted(obras["Ordem"]) == list(range(1, len(obras) + 1))
 
 
-def test_e2e_mapa_oferece_os_mesmos_cenarios_de_equipe_da_planilha(tmp_path):
-    # Mapa e planilha tem de falar das MESMAS opcoes: o radio do mapa cobre exatamente os
-    # numeros de equipe que a aba Cenarios chegou a propor.
+def test_e2e_mapa_localiza_as_obras_sem_propor_itinerario(tmp_path):
+    # O mapa gerado pela execucao inteira mostra ONDE estao as obras e mais nada: a rota
+    # e' hipotese do modelo e ficou restrita ao calculo de custo (decisao de 2026-08-13).
     _monta_entrada(tmp_path, municipios={odi: f"MUNICIPIO {i}" for i, odi in enumerate(ODIS)})
     assert executar(tmp_path) == 0
-    cenarios = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Cenarios")
-    equipes = sorted(set(cenarios[cenarios["Estratos"] == 3]["Equipes"]))
     html = (tmp_path / "saida" / "Mapa_Estratos_3.html").read_text(encoding="utf-8")
-    rotulos = re.findall(r"(\d+) equipes? - [\d,]+ km", html)
-    assert sorted({int(n) for n in rotulos}) == equipes
-    # E o painel e' de radio (um cenario por vez), com titulo proprio.
-    assert "Equipes em campo" in html and "groupedlayers" in html.lower()
+    # Os pontos e a base estao la...
+    assert "UC(s) na obra" in html and "Base da equipe" in html
+    # ...e nada de rota, parada ou radio de equipes.
+    assert "poly_line" not in html.lower() and "polyline" not in html.lower()
+    assert "parada" not in html.lower()
+    assert "Equipes em campo" not in html and "groupedlayers" not in html.lower()
+    # A planilha continua tendo os cenarios de equipe - o que saiu foi o desenho, nao o calculo.
+    cenarios = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Cenarios")
+    assert len(cenarios[cenarios["Estratos"] == 3]) > 0
 
 
 def test_e2e_tranche_errada(tmp_path, capsys):

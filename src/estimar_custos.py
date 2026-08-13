@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.io_amostras import (EntradaInvalida, achar_entradas, ler_amostras,   # noqa: E402
                              ler_painel, juntar_amostras_painel)
-from src.distancias import dividir_roteiro, resumo_por_odi                    # noqa: E402
+from src.distancias import resumo_por_odi                                     # noqa: E402
 from src.custo import cenarios_por_prazo, custo_amostra                       # noqa: E402
 from src.resumo import gravar_resumo                                          # noqa: E402
 from src.mapas import gravar_mapa                                             # noqa: E402
@@ -161,15 +161,10 @@ def executar(raiz, contrato=None, amostra=None):
                   f"{numeros['n_municipios']} municipios, {numeros['n_ucs']} UCs, "
                   f"{numeros['km_roteiro']:,.0f} km, {numeros['dias_faturados']:g} dias "
                   f"-> R$ {numeros['custo_total']:,.2f}")
-            # Divisao concreta das obras para o mapa, um cenario por numero de equipes que
-            # a aba Cenarios chegou a propor - assim mapa e planilha falam das mesmas opcoes.
-            equipes_possiveis = sorted({c["equipes"] for c in cenarios}) or [1]
-            rotas = {n: dividir_roteiro(resumo_por_odi(df_ucs), *config.CAPITAIS_UF[uf], n)
-                     for n in equipes_possiveis}
-            # Guarda os numeros (para o resumo) e as duas granularidades (para o mapa).
+            # Guarda os numeros (para o resumo) e as UCs (para o mapa, que so as localiza).
             resultados.append({"n_estratos": n_estratos, "amostra": amostra,
                                "roteiro": roteiro, "cenarios": cenarios, **numeros})
-            mapas[n_estratos] = (df_ucs, rotas)
+            mapas[n_estratos] = df_ucs
         # Nenhuma estratificacao tinha a amostra pedida: erro de entrada, nao saida vazia.
         if not resultados:
             raise EntradaInvalida(
@@ -181,10 +176,10 @@ def executar(raiz, contrato=None, amostra=None):
         saida.mkdir(exist_ok=True)
         # Uma planilha so, com todas as estratificacoes lado a lado (decisao do humano na F9).
         gravar_resumo(resultados, saida / "Resumo_Custos.xlsx")
-        # A capital e' a origem e o fim de todo roteiro desenhado no mapa.
+        # A capital entra no mapa como base da equipe (de onde ela parte), nao como obra.
         lat_cap, lon_cap = config.CAPITAIS_UF[uf]
-        for n_estratos, (df_ucs, rotas) in mapas.items():
-            gravar_mapa(df_ucs, rotas, lat_cap, lon_cap, saida / f"Mapa_Estratos_{n_estratos}.html")
+        for n_estratos, df_ucs in mapas.items():
+            gravar_mapa(df_ucs, lat_cap, lon_cap, saida / f"Mapa_Estratos_{n_estratos}.html")
         print(f"OK: saidas gravadas em {saida}")
         # Saida: sucesso.
         return 0

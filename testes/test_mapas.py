@@ -1,17 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Testes do mapa folium: radio de equipes, roteiro por equipe, base da equipe."""
-import re
-
+"""Testes do mapa folium: pontos das UCs, base da equipe, ausencia de rota."""
 import pandas as pd
 
 from src import config
-from src.distancias import dividir_roteiro, resumo_por_odi
 from src.mapas import gravar_mapa
-from testes.test_custo import _odis_teste
 
 
 def _ucs_teste():
-    """UCs correspondentes as obras de _odis_teste (2 para A, 1 para B, 3 para C)."""
+    """UCs de tres obras (2 para A, 1 para B, 3 para C), em dois municipios."""
     return pd.DataFrame({
         "ODI": ["A", "A", "B", "C", "C", "C"],
         "Estrato": [1, 1, 1, 2, 2, 2],
@@ -22,57 +18,42 @@ def _ucs_teste():
     })
 
 
-def _rotas(*quantidades_de_equipes):
-    """Monta o dict {n_equipes: [(roteiro, km), ...]} que gravar_mapa espera."""
-    return {n: dividir_roteiro(_odis_teste(), *config.CAPITAIS_UF["PA"], n)
-            for n in quantidades_de_equipes}
-
-
-def test_gravar_mapa_radio_por_numero_de_equipes(tmp_path):
-    # O painel oferece um cenario de equipes por vez (radio), nao a amostra.
+def test_gravar_mapa_marca_uma_uc_por_ponto(tmp_path):
+    # Cada UC vira um ponto - a obra com 3 UCs aparece 3 vezes, nao uma.
     destino = tmp_path / "Mapa_Estratos_3.html"
-    gravar_mapa(_ucs_teste(), _rotas(1, 2), *config.CAPITAIS_UF["PA"], destino)
+    gravar_mapa(_ucs_teste(), *config.CAPITAIS_UF["PA"], destino)
     html = destino.read_text(encoding="utf-8")
     assert destino.exists()
-    # GroupedLayerControl (radio proprio) e nao o LayerControl padrao, que misturaria
-    # os cenarios com o tile de fundo e apagaria o mapa ao trocar de cenario.
-    assert "groupedlayers" in html.lower()
-    assert "Equipes em campo" in html
-    # Um rotulo por cenario, com o km somado - e' o que revela o preco de dividir.
-    rotulos = re.findall(r"\d+ equipes? - [\d,]+ km", html)
-    assert len(rotulos) == 2
-    # A amostra nao e' mais camada (so uma e' precificada por execucao).
-    assert "Amostra 1" not in html
+    assert html.count("circle_marker") >= 6 or html.lower().count("circlemarker") >= 6
+    # O popup localiza a obra e diz o tamanho dela, sem nenhuma nocao de ordem.
+    assert "ODI A" in html and "3 UC(s) na obra" in html
 
 
-def test_gravar_mapa_desenha_roteiro_e_base(tmp_path):
-    # A polilinha e o marcador da capital tornam visivel "uma viagem so".
+def test_gravar_mapa_nao_desenha_rota(tmp_path):
+    # Decisao do humano (2026-08-13): o mapa localiza, nao propoe itinerario.
     destino = tmp_path / "Mapa_Estratos_3.html"
-    gravar_mapa(_ucs_teste(), _rotas(1), *config.CAPITAIS_UF["PA"], destino)
+    gravar_mapa(_ucs_teste(), *config.CAPITAIS_UF["PA"], destino)
     html = destino.read_text(encoding="utf-8")
-    assert "poly_line" in html.lower() or "polyline" in html.lower()
+    assert "poly_line" not in html.lower() and "polyline" not in html.lower()
+    assert "parada" not in html.lower()
+    # Sem rota nao ha o que dividir entre equipes: o radio saiu junto.
+    assert "Equipes em campo" not in html
+    assert "groupedlayers" not in html.lower()
+
+
+def test_gravar_mapa_marca_a_base_da_equipe(tmp_path):
+    # A capital continua no mapa: e' de onde a equipe parte, e nao e' obra.
+    destino = tmp_path / "Mapa_Estratos_3.html"
+    gravar_mapa(_ucs_teste(), *config.CAPITAIS_UF["PA"], destino)
+    html = destino.read_text(encoding="utf-8")
     assert "Base da equipe" in html
-    # O popup diz de qual equipe e' a parada e em que ordem ela cai.
-    assert "Equipe 1 - parada" in html and "ODI A" in html
-
-
-def test_gravar_mapa_duas_equipes_tem_duas_linhas(tmp_path):
-    # Com 2 equipes ha 2 polilinhas, cada uma com o seu tooltip de obras/km.
-    destino = tmp_path / "Mapa_Estratos_3.html"
-    gravar_mapa(_ucs_teste(), _rotas(2), *config.CAPITAIS_UF["PA"], destino)
-    html = destino.read_text(encoding="utf-8")
-    assert "Equipe 1:" in html and "Equipe 2:" in html
 
 
 def test_gravar_mapa_amostra_vazia(tmp_path):
-    # Amostra sem obra nenhuma: mapa so com a base, sem camadas e sem estourar.
-    vazio = resumo_por_odi(pd.DataFrame(columns=["ODI", "Estrato", "Municipio", "UC",
-                                                 "LATITUDE", "LONGITUDE"]))
+    # Amostra sem obra nenhuma: mapa so com a base, sem ponto e sem estourar.
     destino = tmp_path / "Mapa_Estratos_3.html"
-    gravar_mapa(_ucs_teste().iloc[0:0],
-                {1: dividir_roteiro(vazio, *config.CAPITAIS_UF["PA"], 1)},
-                *config.CAPITAIS_UF["PA"], destino)
+    gravar_mapa(_ucs_teste().iloc[0:0], *config.CAPITAIS_UF["PA"], destino)
     html = destino.read_text(encoding="utf-8")
     assert destino.exists()
     assert "Base da equipe" in html
-    assert "Equipes em campo" not in html
+    assert "UC(s) na obra" not in html
