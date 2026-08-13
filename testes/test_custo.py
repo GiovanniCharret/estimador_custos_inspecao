@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Testes do motor de custo (modelo F9: por amostra, roteiro encadeado, dias inteiros)."""
+"""Testes do motor de custo (modelo F15: N equipes independentes, grade equipes x prazo)."""
 import math
 
 import pandas as pd
 import pytest
 
 from src import config
-from src.custo import cenarios_por_prazo, custo_amostra, tarifa_campo
+from src import custo as modulo_custo
+from src.custo import custo_amostra, grade_cenarios, tarifa_campo
 from src.distancias import haversine_km
 
 
@@ -21,7 +22,11 @@ def _odis_teste():
 
 
 def _config_redonda(monkeypatch):
-    """Fixa parametros redondos para a formula ser conferivel a mao."""
+    """Fixa parametros redondos para a formula ser conferivel a mao.
+
+    N_EQUIPES_PADRAO cai para 1 aqui de proposito: com uma equipe so ha um roteiro, e a
+    conta fecha na mao. Os testes que tratam de DIVIDIR sobem esse numero explicitamente.
+    """
     monkeypatch.setattr(config, "FATOR_RODOVIARIO", 1.0)
     monkeypatch.setattr(config, "VELOCIDADE_KMH", 50.0)
     monkeypatch.setattr(config, "HORAS_DIA_CAMPO", 8.0)
@@ -33,18 +38,22 @@ def _config_redonda(monkeypatch):
     monkeypatch.setattr(config, "CUSTO_DIARIA", 0.0)
     monkeypatch.setattr(config, "TAMANHO_EQUIPE", 1.0)
     monkeypatch.setattr(config, "DIAS_MOBILIZACAO", 1.0)
+    monkeypatch.setattr(config, "N_EQUIPES_PADRAO", 1)
+    monkeypatch.setattr(config, "N_EQUIPES_MIN", 1)
+    monkeypatch.setattr(config, "N_EQUIPES_MAX", 3)
+    monkeypatch.setattr(config, "MAX_DIAS_POR_EQUIPE", 20)
 
 
 def test_custo_amostra_formula(monkeypatch):
     # Confere a cadeia inteira km -> horas -> dias -> R$ com numeros redondos.
     _config_redonda(monkeypatch)
-    numeros, roteiro = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    numeros, detalhe = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
     # 6 UCs x (8h / 4 UCs por dia) = 12h de inspecao.
     assert numeros["n_ucs"] == 6
     assert numeros["horas_inspecao"] == pytest.approx(12.0)
     # Roteiro: km do itinerario + percurso interno (2 + 0 + 5), FATOR_RODOVIARIO = 1.
-    km_itinerario = roteiro["km_trecho"].sum() + haversine_km(
-        roteiro.iloc[-1]["lat_centro"], roteiro.iloc[-1]["lon_centro"], *config.CAPITAIS_UF["PA"])
+    km_itinerario = detalhe["km_trecho"].sum() + haversine_km(
+        detalhe.iloc[-1]["lat_centro"], detalhe.iloc[-1]["lon_centro"], *config.CAPITAIS_UF["PA"])
     assert numeros["km_roteiro"] == pytest.approx(km_itinerario + 7.0)
     # Horas de roteiro = km / 50.
     assert numeros["horas_roteiro"] == pytest.approx(numeros["km_roteiro"] / 50.0)
@@ -52,8 +61,9 @@ def test_custo_amostra_formula(monkeypatch):
     horas_campo = numeros["horas_roteiro"] + numeros["horas_inspecao"]
     assert numeros["dias_trabalho"] == math.ceil(horas_campo / 8.0)
     assert numeros["dias_faturados"] == numeros["dias_trabalho"] + 1
-    # Custo de campo = dias x equipe x jornada x tarifa; fixo = 10h x 50.
-    assert numeros["custo_campo"] == pytest.approx(numeros["dias_faturados"] * 1 * 8 * 100.0)
+    # Custo de campo = equipes x pessoas x dias x jornada x tarifa; fixo = 10h x 50.
+    assert numeros["n_equipes"] == 1
+    assert numeros["custo_campo"] == pytest.approx(1 * 1 * numeros["dias_faturados"] * 8 * 100.0)
     assert numeros["custo_fixo"] == pytest.approx(500.0)
     assert numeros["custo_total"] == pytest.approx(numeros["custo_campo"] + 500.0)
 
@@ -109,64 +119,179 @@ def test_dias_arredondam_para_cima(monkeypatch):
 
 
 def test_dobrar_a_equipe_metade_dos_dias_e_nao_metade_do_custo(monkeypatch):
-    # Duas equipes fazem o MESMO trabalho na metade dos dias (Fase 6 do MODELO_CUSTO.md).
-    # O custo nao cai junto: o contrato paga por hora-profissional. Ele ate sobe um pouco,
-    # porque cada equipe carrega o seu dia de mobilizacao e o arredondamento para dia
-    # inteiro desperdica mais quanto mais equipes houver.
+    # PESSOAS dentro da MESMA equipe: uma dupla faz um roteiro so, na metade dos dias.
+    # O custo nao cai junto: o contrato paga por hora-profissional.
     _config_redonda(monkeypatch)
     um, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
     monkeypatch.setattr(config, "TAMANHO_EQUIPE", 2.0)
     dois, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
-    # Os dias por equipe caem (aproximadamente pela metade, com o teto por cima).
+    # Os dias caem (aproximadamente pela metade, com o teto por cima).
     assert dois["dias_trabalho"] == math.ceil(um["dias_fracionarios"] / 2)
     assert dois["dias_trabalho"] < um["dias_trabalho"]
-    # O custo de campo NAO cai - e' >= o de uma equipe so.
+    # Um roteiro so nos dois casos - a dupla viaja junta.
+    assert dois["km_roteiro"] == pytest.approx(um["km_roteiro"])
+    # O custo de campo NAO cai - e' >= o de uma pessoa so.
     assert dois["custo_campo"] >= um["custo_campo"]
     # O fixo de escritorio nao tem nada a ver com equipe.
     assert dois["custo_fixo"] == pytest.approx(um["custo_fixo"])
 
 
-def test_cenarios_por_prazo(monkeypatch):
-    # A aba Cenarios responde "e se eu precisar terminar antes?": o prazo e' dado e o
-    # numero de equipes se ajusta. A faixa e' centrada no prazo calculado.
+def test_duas_equipes_rodam_mais_km_e_custam_mais_que_uma(monkeypatch):
+    # O CORACAO DA F15: equipes independentes nao dividem o deslocamento, elas o
+    # DUPLICAM - cada uma sai da capital e volta. Antes da F15 o custo assumia trabalho
+    # perfeitamente divisivel e esse km extra nunca aparecia.
     _config_redonda(monkeypatch)
-    monkeypatch.setattr(config, "VARIACAO_DIAS_CENARIOS", 2)
-    numeros, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
-    cenarios = cenarios_por_prazo(numeros)
-    centro = numeros["dias_trabalho"]
-    # Faixa de 5 prazos (centro +- 2), em ordem crescente, sem descer abaixo de 1 dia.
-    assert [c["dias_trabalho"] for c in cenarios] == list(range(max(1, centro - 2), centro + 3))
-    assert all(c["dias_trabalho"] >= 1 and c["equipes"] >= 1 for c in cenarios)
-    # O cenario 'calculado' reproduz exatamente a linha oficial do Resumo.
-    base = [c for c in cenarios if c["cenario"] == "calculado"]
-    assert len(base) == 1
-    assert base[0]["custo_total"] == pytest.approx(numeros["custo_total"])
-    # Prazo mais curto exige equipe igual ou maior (nunca menor).
-    equipes = [c["equipes"] for c in cenarios]
-    assert equipes == sorted(equipes, reverse=True)
-    # Cada cenario fecha com a mesma formula do motor.
-    for c in cenarios:
+    uma, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT", n_equipes=1)
+    duas, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT", n_equipes=2)
+    # A inspecao e' a mesma (as mesmas UCs), mas o km somado cresce.
+    assert duas["horas_inspecao"] == pytest.approx(uma["horas_inspecao"])
+    assert duas["km_roteiro"] > uma["km_roteiro"]
+    # O prazo cai, o custo sobe.
+    assert duas["dias_trabalho"] <= uma["dias_trabalho"]
+    assert duas["custo_total"] > uma["custo_total"]
+    assert duas["n_equipes"] == 2
+
+
+def test_prazo_e_ditado_pela_equipe_mais_lenta(monkeypatch):
+    # O trabalho nao e' perfeitamente divisivel: se uma equipe pega um bloco mais pesado,
+    # e' ela quem define o prazo - as outras esperam (e sao faturadas do mesmo jeito).
+    _config_redonda(monkeypatch)
+    numeros, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT", n_equipes=2)
+    # As horas criticas sao as de UMA equipe, nunca a soma das duas.
+    assert numeros["horas_equipe_critica"] <= numeros["horas_roteiro"] + numeros["horas_inspecao"]
+    assert numeros["dias_trabalho"] == math.ceil(
+        numeros["horas_equipe_critica"] / (8.0 * config.TAMANHO_EQUIPE))
+
+
+def test_detalhe_diz_de_qual_equipe_e_cada_obra(monkeypatch):
+    # Com equipes independentes, saber QUEM pega o que e' parte do resultado.
+    _config_redonda(monkeypatch)
+    _, detalhe = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT", n_equipes=2)
+    # Nenhuma obra sem dono, nenhuma obra em duas equipes.
+    assert len(detalhe) == 3
+    assert sorted(detalhe["ODI"]) == ["A", "B", "C"]
+    assert set(detalhe["equipe"]) == {1, 2}
+
+
+def test_grade_varre_equipes_e_prazos(monkeypatch):
+    # A aba Cenarios e' uma GRADE: para cada numero de equipes, todos os prazos viaveis
+    # ate o teto. O prazo e' a entrada; a viabilidade e' quem filtra.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "N_EQUIPES_MAX", 3)
+    monkeypatch.setattr(config, "MAX_DIAS_POR_EQUIPE", 6)
+    linhas = grade_cenarios(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    assert linhas
+    # Nenhuma linha fora dos limites declarados.
+    assert all(1 <= c["n_equipes"] <= 3 for c in linhas)
+    assert all(1 <= c["dias_trabalho"] <= 6 for c in linhas)
+    # Ordenada por equipes e, dentro de cada bloco, por prazo crescente.
+    chaves = [(c["n_equipes"], c["dias_trabalho"]) for c in linhas]
+    assert chaves == sorted(chaves)
+    # Dentro de um mesmo numero de equipes, mais dias = mais caro (folga custa).
+    for n in {c["n_equipes"] for c in linhas}:
+        custos = [c["custo_total"] for c in linhas if c["n_equipes"] == n]
+        assert custos == sorted(custos)
+    # Cada linha fecha com a mesma formula do motor.
+    for c in linhas:
         assert c["custo_campo"] == pytest.approx(
-            c["equipes"] * c["dias_faturados"] * config.HORAS_DIA_CAMPO * 100.0)
+            c["n_equipes"] * config.TAMANHO_EQUIPE * c["dias_faturados"] * 8.0 * 100.0)
         assert c["custo_total"] == pytest.approx(c["custo_campo"] + c["custo_fixo"])
 
 
-def test_cenarios_de_amostra_vazia(monkeypatch):
-    # Amostra sem obra nenhuma nao tem prazo a explorar - lista vazia, nao divisao por zero.
+def test_grade_marca_a_linha_que_e_o_numero_oficial(monkeypatch):
+    # A grade e o Resumo tem de falar do mesmo caso: a linha 'calculado' e' o padrao de
+    # equipes no seu prazo minimo, e o custo dela bate com o da aba Resumo.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "N_EQUIPES_PADRAO", 2)
+    numeros, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    linhas = grade_cenarios(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    marcadas = [c for c in linhas if c["cenario"] == "calculado"]
+    assert len(marcadas) == 1
+    assert marcadas[0]["n_equipes"] == numeros["n_equipes"]
+    assert marcadas[0]["dias_trabalho"] == numeros["dias_trabalho"]
+    assert marcadas[0]["custo_total"] == pytest.approx(numeros["custo_total"])
+
+
+def test_grade_descarta_o_que_nao_cabe_no_teto_de_dias(monkeypatch):
+    # O caso do humano: 80 UCs de MLA a 3 UCs/dia sao 80 x 8/3 = 213h de inspecao, ou
+    # ~27 dias para UMA equipe - flagrantemente acima do teto de 20. Essa combinacao nao
+    # e' apresentada, e nem sequer e' calculada (ver o teste seguinte).
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 30.0, "MLA": 3.0})
+    monkeypatch.setattr(config, "N_EQUIPES_MAX", 7)
+    monkeypatch.setattr(config, "MAX_DIAS_POR_EQUIPE", 20)
+    # 8 obras vizinhas de 10 UCs cada = 80 UCs, com deslocamento pequeno.
+    oitenta = pd.DataFrame({
+        "ODI": [f"O{i}" for i in range(8)],
+        "Estrato": [1] * 8,
+        "Municipio": [f"M{i}" for i in range(8)],
+        "n_ucs": [10] * 8,
+        "lat_centro": [-1.50 - 0.02 * i for i in range(8)],
+        "lon_centro": [-48.55 - 0.02 * i for i in range(8)],
+        "dist_interna_km": [1.0] * 8,
+    })
+    linhas = grade_cenarios(oitenta, uf="PA", tipo_contrato="MLA")
+    # Uma equipe nao cabe; a grade comeca em duas ou mais.
+    assert 1 not in {c["n_equipes"] for c in linhas}
+    assert min(c["n_equipes"] for c in linhas) >= 2
+    # E nenhuma linha viola o teto.
+    assert all(c["dias_trabalho"] <= 20 for c in linhas)
+
+
+def test_grade_nem_roteia_a_combinacao_inviavel(monkeypatch):
+    # "Sequer calcule": quando nem as horas de INSPECAO cabem no teto, o numero de equipes
+    # e' descartado antes de rotear - rotear e' a parte cara. O contador prova que
+    # dividir_roteiro nao chega a ser chamado para 1 equipe.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 30.0, "MLA": 3.0})
+    monkeypatch.setattr(config, "N_EQUIPES_MAX", 3)
+    monkeypatch.setattr(config, "MAX_DIAS_POR_EQUIPE", 20)
+    chamadas = []
+    original = modulo_custo.dividir_roteiro
+
+    def espiao(df, lat, lon, n_equipes):
+        chamadas.append(n_equipes)
+        return original(df, lat, lon, n_equipes)
+
+    monkeypatch.setattr(modulo_custo, "dividir_roteiro", espiao)
+    oitenta = pd.DataFrame({
+        "ODI": [f"O{i}" for i in range(8)],
+        "Estrato": [1] * 8,
+        "Municipio": [f"M{i}" for i in range(8)],
+        "n_ucs": [10] * 8,
+        "lat_centro": [-1.50 - 0.02 * i for i in range(8)],
+        "lon_centro": [-48.55 - 0.02 * i for i in range(8)],
+        "dist_interna_km": [1.0] * 8,
+    })
+    grade_cenarios(oitenta, uf="PA", tipo_contrato="MLA")
+    # 213h de inspecao / (1 equipe x 8h) = 26,7 dias > 20: nem roteou.
+    assert 1 not in chamadas
+    # As viaveis, sim.
+    assert 2 in chamadas
+
+
+def test_grade_de_amostra_vazia(monkeypatch):
+    # Amostra sem obra nenhuma nao tem grade - lista vazia, nao divisao por zero.
     _config_redonda(monkeypatch)
     vazio = _odis_teste().iloc[0:0]
-    numeros, _ = custo_amostra(vazio, uf="PA", tipo_contrato="LPT")
-    assert cenarios_por_prazo(numeros) == []
+    assert grade_cenarios(vazio, uf="PA", tipo_contrato="LPT") == []
+
+
+def test_grade_nao_propoe_mais_equipes_que_obras(monkeypatch):
+    # 3 obras nao ocupam 7 equipes: alguma ficaria sem servico e seria faturada a toa.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "N_EQUIPES_MAX", 7)
+    linhas = grade_cenarios(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    assert max(c["n_equipes"] for c in linhas) <= 3
 
 
 def test_reproduz_a_formula_do_benchmark_da_engenharia(monkeypatch):
     # A engenharia da PB 7a Tranche estimou 3 amostras e as tres obedecem, ao centavo, a
     #     custo = 12.960 + 9.600 x (dias + 1),  com 9.600 = 2 pessoas x 8h x R$600.
-    # Este teste amarra o motor aquela formula: com TAMANHO_EQUIPE = 2 e os parametros
-    # reais de config, o custo tem de cair exatamente nela. Se alguem mudar a estrutura
-    # do modelo (fixo por estrato, dias fracionarios, ida-e-volta), este teste cai.
+    # Aquela e' UMA DUPLA em UM roteiro: TAMANHO_EQUIPE = 2 com N_EQUIPES = 1 - nao duas
+    # equipes independentes, que rodariam dois roteiros e custariam mais.
     monkeypatch.setattr(config, "TAMANHO_EQUIPE", 2.0)
-    numeros, _ = custo_amostra(_odis_teste(), uf="PB", tipo_contrato="LPT")
+    numeros, _ = custo_amostra(_odis_teste(), uf="PB", tipo_contrato="LPT", n_equipes=1)
     esperado = 12960 + 9600 * (numeros["dias_trabalho"] + 1)
     assert numeros["custo_total"] == pytest.approx(esperado, abs=0.01)
 

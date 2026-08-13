@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.io_amostras import (EntradaInvalida, achar_entradas, ler_amostras,   # noqa: E402
                              ler_painel, juntar_amostras_painel)
 from src.distancias import resumo_por_odi                                     # noqa: E402
-from src.custo import cenarios_por_prazo, custo_amostra                       # noqa: E402
+from src.custo import custo_amostra, grade_cenarios                           # noqa: E402
 from src.resumo import gravar_resumo                                          # noqa: E402
 from src.mapas import gravar_mapa                                             # noqa: E402
 from src import config                                                        # noqa: E402
@@ -153,14 +153,24 @@ def executar(raiz, contrato=None, amostra=None):
             # So a amostra escolhida e' juntada: as reservas nem chegam a ser processadas.
             juntas = juntar_amostras_painel({amostra: amostras[amostra]}, ucs, tipo_contrato=tipo)
             df_ucs = juntas[amostra]
-            # resumo_por_odi reduz UC -> ODI; custo_amostra monta o roteiro e precifica.
-            numeros, roteiro = custo_amostra(resumo_por_odi(df_ucs), uf=uf, tipo_contrato=tipo)
-            # Prazos alternativos (aba Cenarios): mesmo trabalho, mais equipes, menos dias.
-            cenarios = cenarios_por_prazo(numeros)
+            # resumo_por_odi reduz UC -> ODI; custo_amostra reparte entre as equipes,
+            # roteia cada uma a partir da capital e precifica.
+            odis = resumo_por_odi(df_ucs)
+            numeros, roteiro = custo_amostra(odis, uf=uf, tipo_contrato=tipo)
+            # Grade de combinacoes viaveis (aba Cenarios): quantas equipes x qual prazo.
+            cenarios = grade_cenarios(odis, uf=uf, tipo_contrato=tipo)
             print(f"  {n_estratos} estratos: {numeros['n_odis']} ODIs, "
                   f"{numeros['n_municipios']} municipios, {numeros['n_ucs']} UCs, "
-                  f"{numeros['km_roteiro']:,.0f} km, {numeros['dias_faturados']:g} dias "
-                  f"-> R$ {numeros['custo_total']:,.2f}")
+                  f"{numeros['n_equipes']:g} equipe(s), {numeros['km_roteiro']:,.0f} km, "
+                  f"{numeros['dias_faturados']:g} dias -> R$ {numeros['custo_total']:,.2f}")
+            # Amostra COM obras e sem nenhuma combinacao viavel: o silencio da aba
+            # Cenarios seria lido como "esqueceram", entao o motivo vai para a tela.
+            # Amostra vazia nao entra aqui - ali a aba vazia e' obvia, nao um mistero.
+            if numeros["n_odis"] and not cenarios:
+                print(f"AVISO: {n_estratos} estratos - nenhuma combinacao cabe em "
+                      f"{config.MAX_DIAS_POR_EQUIPE:g} dias por equipe com ate "
+                      f"{config.N_EQUIPES_MAX:g} equipes; a aba 'Cenarios' fica sem linhas "
+                      f"para esta estratificacao.")
             # Guarda os numeros (para o resumo) e as UCs (para o mapa, que so as localiza).
             resultados.append({"n_estratos": n_estratos, "amostra": amostra,
                                "roteiro": roteiro, "cenarios": cenarios, **numeros})

@@ -98,8 +98,8 @@ Cada seta abaixo é um **contrato de dataframe** — mudar uma coluna quebra o m
 | `io_amostras.py` | `Entrada/` → `achar_entradas` → `([(n_estratos, caminho), ...], painel)` (descobre **todas** as estratificações pelo conteúdo) · `ler_n_estratos` · `ler_amostras` `{k: df[ODI,Estrato,Municipio,Cons]}` · `ler_painel` `df[ODI,UC,Municipio,LATITUDE,LONGITUDE]` → `juntar_amostras_painel` `{k: df 1 linha por UC}` |
 | `distancias.py` | df de UCs → `resumo_por_odi` → **1 linha por ODI** (colunas fixas, mesmo vazio): `n_ucs`, `lat_centro`, `lon_centro`, `dist_interna_km` · `montar_roteiro(df_odis, lat0, lon0)` → `(df com ordem/km_trecho, km_total)` = **itinerário único** · `dividir_roteiro(..., n_equipes)` → `[(roteiro, km), ...]`, um por equipe |
 | `config.py` | **todos** os números do modelo (G1–G5 do gate F1 + F9). Zero números mágicos fora daqui |
-| `custo.py` | `custo_amostra(df_odis, uf, tipo_contrato)` → `(dict com os números da AMOSTRA, df do roteiro)`. Um call por amostra — não há função por ODI nem por estrato · `cenarios_por_prazo(numeros)` → prazos alternativos (o inverso: dado o prazo, quantas equipes cabem) |
-| `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, cenarios, **números}, ...], caminho)` → `saida/Resumo_Custos.xlsx` com **4 abas fixas**: `Leia-me` + `Resumo` (1 linha por estratificação) + `Cenarios` (prazos alternativos) + `Detalhe` (1 linha por obra, na ordem do roteiro) |
+| `custo.py` | `repartir_entre_equipes(df_odis, uf, tipo, n)` → lista com o campo de **cada equipe** (km, UCs, horas) · `custo_amostra(df_odis, uf, tipo_contrato, n_equipes=None)` → `(dict com os números da AMOSTRA, df do detalhe por obra com a coluna `equipe`)` · `grade_cenarios(df_odis, uf, tipo)` → **grade equipes × prazo**, só as combinações viáveis |
+| `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, cenarios, **números}, ...], caminho)` → `saida/Resumo_Custos.xlsx` com **4 abas fixas**: `Leia-me` + `Resumo` (1 linha por estratificação) + `Cenarios` (grade equipes × prazo) + `Detalhe` (1 linha por obra, com a equipe dona e a ordem dela) |
 | `mapas.py` | `gravar_mapa(df_ucs, lat0, lon0, caminho)` → `saida/Mapa_Estratos_N.html` (folium; **um ponto por UC**, todos iguais, mais o marcador da base. Sem rota, sem camadas) |
 
 Detalhes que não se deduzem lendo um arquivo só:
@@ -115,34 +115,42 @@ Detalhes que não se deduzem lendo um arquivo só:
   capital no fim. A hierarquia município→obra é deliberada: uma rota gulosa direta sobre as obras
   entraria e sairia do mesmo município. Nos dados reais isso é 1.529 km contra 10.521 km do
   modelo antigo — a correção que motivou a F9.
-- **Dias são inteiros e POR EQUIPE.** `ceil(horas_campo / (HORAS_DIA_CAMPO × TAMANHO_EQUIPE))
-  + DIAS_MOBILIZACAO`; o custo multiplica por `TAMANHO_EQUIPE` de novo, porque o contrato paga
-  por hora-**profissional**. Consequência que surpreende: **mais equipes não barateia — encarece**
-  (cada equipe traz seu dia de mobilização e o arredondamento desperdiça mais). A fração fica
-  exposta na coluna `Dias (fração)` para conferir o teto.
-- **`TAMANHO_EQUIPE` é o parâmetro que separa a decisão G1 do benchmark.** Vale `1.0` (G1: só
-  engenheiro), enquanto a engenharia usa `2`. Mudar para `2.0` reproduz o benchmark ao centavo —
-  é o que `test_reproduz_a_formula_do_benchmark_da_engenharia` amarra.
-- **A aba `Cenarios` inverte o cálculo**: o prazo é dado e o nº de equipes se ajusta
-  (`equipes = ceil(horas / (jornada × dias))`), varrendo `dias_calculado ± VARIACAO_DIAS_CENARIOS`.
+- **`N_EQUIPES` e `TAMANHO_EQUIPE` são grandezas DIFERENTES e não se somam.** `N_EQUIPES_PADRAO`
+  (= 2 desde a F15) são equipes **independentes**: cada uma tem seu bloco de obras, sai da capital
+  e volta — logo **N roteiros**. `TAMANHO_EQUIPE` (= 1) são as pessoas **dentro** de uma equipe;
+  uma dupla viaja junta, em **um** roteiro. Custo = `N_EQUIPES × TAMANHO_EQUIPE × dias × 8h ×
+  tarifa`. O benchmark da engenharia é `TAMANHO_EQUIPE=2, N_EQUIPES=1` (uma dupla, um roteiro) —
+  o padrão daqui tem a mesma mão de obra e custa **mais**, porque são dois roteiros.
+  Na planilha as duas viram colunas vizinhas: `Equipes` e `Pessoas por equipe`.
+- **O prazo é o da equipe MAIS LENTA**, não a média: `ceil(horas_da_crítica / (HORAS_DIA_CAMPO ×
+  TAMANHO_EQUIPE)) + DIAS_MOBILIZACAO`. Todas as equipes são faturadas por esse prazo — o
+  trabalho não é perfeitamente divisível, e quem sobra espera.
+- **Mais equipes não barateia — encarece**, agora por três motivos somados: o km extra de cada
+  ida-e-volta, o dia de mobilização de cada equipe, e o arredondamento para dia inteiro. Na
+  sondagem de 26 obras na PB: 1 equipe R$ 41.760 (1.220 km) → 2 equipes R$ 60.960 (1.663 km) →
+  3 equipes R$ 70.560 (2.010 km).
+- **A aba `Cenarios` é uma GRADE (equipes × prazo)**, não uma faixa de prazos. Varre
+  `N_EQUIPES_MIN..N_EQUIPES_MAX` (1 a 7) e, para cada, os prazos do mínimo viável até
+  `MAX_DIAS_POR_EQUIPE` (20). **Combinação inviável não aparece nem é calculada**: um pré-filtro
+  descarta pelo limite inferior (só horas de inspeção, divididas igualmente) *antes* de rotear,
+  que é a parte cara. Caso que motivou a regra: 80 UCs de MLA a 3 UCs/dia são 213h = 27 dias só
+  de inspeção para uma equipe — não há o que apresentar.
 - **O mapa NÃO desenha itinerário** (desde 2026-08-13, decisão do humano). Ele marca um ponto por
   UC, todos da mesma cor, mais a base. A rota gulosa continua existindo em `distancias.py` e
   alimentando o custo — o que saiu foi o **desenho**: a linha era hipótese do modelo traçada com a
   mesma tinta dos fatos (as coordenadas), e ninguém decidia nada com a ordem das paradas. Sem
   rota não há o que repartir entre equipes, então o radio `GroupedLayerControl` saiu junto e o
   mapa voltou a ter camada única.
-- **`dividir_roteiro` ficou órfã do pipeline** por causa dessa decisão — era o mapa quem a
-  chamava. **Não é código morto e não deve ser removida:** (a) é a única medida do quanto a aba
-  `Cenarios` é otimista — a aba assume o trabalho perfeitamente divisível, enquanto a divisão
-  real mostra 2 equipes rodando **+18% a +37%** mais, já que cada uma sai da capital e volta
-  (aviso sobrevive no `Leia-me`; embutir esse km no custo é pendência aberta no `PLAN.md`); e
-  (b) **o roteiro desenhado volta numa fase operacional**, voltada a quem vai a campo — a F14
-  tirou a rota do produto *gerencial*, não do escopo. Ela corta o itinerário em blocos
-  **contíguos** equilibrados por km acumulado (não por contagem de obras) — como `montar_roteiro`
-  já ordena município a município, nenhum município é partido entre duas equipes.
-- **O custo não é monótono no prazo** dentro da aba `Cenarios`: encurtar de 6 para 5 dias pode
-  *baratear*, porque os dois cenários usam 2 equipes e 5 dias é menos dia-equipe que 6. A coluna
-  `Ocupação da equipe` é o que torna isso legível.
+- **`dividir_roteiro` voltou a ser o coração do cálculo na F15.** Ficou órfã na F14 (era o mapa
+  quem a chamava) e agora é `custo.repartir_entre_equipes` quem a usa — o km de dividir deixou de
+  ser ressalva no `Leia-me` e entrou no número. Ela corta o itinerário em blocos **contíguos**
+  equilibrados por km acumulado (não por contagem de obras); como `montar_roteiro` já ordena
+  município a município, nenhum município é partido entre duas equipes. Segue valendo que **o
+  roteiro desenhado volta numa fase operacional** — a F14 tirou a rota do produto *gerencial*,
+  não do escopo.
+- **Dentro de um mesmo nº de equipes, mais dias custa mais** (folga = dias faturados a mais), e
+  isso é monótono na grade da F15 — a não-monotonicidade da versão anterior era artefato de o nº
+  de equipes se ajustar sozinho ao prazo. A coluna `Ocupação da equipe` mostra o desperdício.
 - **Só UMA amostra é precificada por execução** (a 2 e a 3 são reservas da 1). `executar(raiz,
   contrato, amostra)` — o `__main__` pergunta, padrão `config.AMOSTRA_PADRAO`. Estratificação sem
   a aba pedida é pulada com aviso; se nenhuma tiver, é `EntradaInvalida`.
@@ -204,20 +212,25 @@ Detalhes que não se deduzem lendo um arquivo só:
 - **Memória de cálculo duplicada de propósito** no topo de `src/config.py` e `src/custo.py`: quem
   abrir qualquer um dos dois entende o custo sem ler mais nada. Mantenha as duas cópias em sincronia.
 
-## Modelo de custo (gate F1 aprovado em 2026-08-06 · corrigido na F9 em 2026-08-10)
+## Modelo de custo (gate F1 aprovado em 2026-08-06 · corrigido na F9 · N equipes na F15)
 
 ```
 custo_amostra = 36h × R$360 (escritório, 1× por AMOSTRA)
-              + TAMANHO_EQUIPE × dias_faturados × 8h × R$600/h
+              + N_EQUIPES × TAMANHO_EQUIPE × dias_faturados × 8h × R$600/h
 
-dias_faturados = teto((horas_roteiro + horas_inspecao) / (8h × TAMANHO_EQUIPE)) + DIAS_MOBILIZACAO
-horas_roteiro  = (km do itinerário único + percursos internos) × FATOR_RODOVIARIO ÷ VELOCIDADE_KMH
-horas_inspecao = n_ucs × 8h / UCS_POR_DIA[tipo]     (LPT 30/dia, MLA 3/dia)
+dias_faturados = teto(horas da equipe MAIS LENTA / (8h × TAMANHO_EQUIPE)) + DIAS_MOBILIZACAO
+
+por equipe (o itinerário é cortado em N blocos contíguos, cada um roteado da capital):
+  horas_campo    = horas_roteiro + horas_inspecao
+  horas_roteiro  = (km do bloco + percursos internos) × FATOR_RODOVIARIO ÷ VELOCIDADE_KMH
+  horas_inspecao = n_ucs do bloco × 8h / UCS_POR_DIA[tipo]   (LPT 30/dia, MLA 3/dia)
 ```
 
 **O benchmark da engenharia** (`minhas_notas/Tabela_Resumo_Extratos_Amostra.xlsx`, aba `Resumo`,
 PB 7ª Tranche) obedece a `12.960 + 9.600 × (dias+1)` com resíduo **zero** nos 3 pontos —
-9.600 = 2 pessoas × 8h × R$600. É esta mesma fórmula com `TAMANHO_EQUIPE = 2`.
+9.600 = 2 pessoas × 8h × R$600. É esta fórmula com `TAMANHO_EQUIPE = 2` e **`N_EQUIPES = 1`**
+(uma dupla, um roteiro). O padrão daqui (`N_EQUIPES = 2`, `TAMANHO_EQUIPE = 1`) tem a mesma mão
+de obra e custa **mais** — são dois roteiros, cada um pagando ida e volta.
 
 A F9 corrigiu três desvios da implementação em relação ao `MODELO_CUSTO.md` já aprovado
 (fixo por estrato em vez de por amostra; ida-e-volta por município em vez de itinerário único;
@@ -249,11 +262,10 @@ Três cuidados:
 - `planning/DESIGN.md` (D1–D8) · `planning/MODELO_CUSTO.md` (fórmula e fontes) ·
   `planning/PLANO_IMPLEMENTACAO.md` (plano passo a passo com código de cada task) ·
   `planning/definition of done.md` (critério de aceite por fase, para o humano acompanhar).
-- `planning/LACUNAS_CENARIOS.md` — **as 10 coisas que a aba `Cenarios` não modela** (L1–L10),
-  com efeito em R$ e prioridade. Escrito em 2026-08-13 porque a aba é a que vai para a mesa de
-  decisão e só uma das dez lacunas (o km de dividir) chegava ao usuário, pelo `Leia-me`.
-  Cuidado especial com **L2**: `cenarios_por_prazo` não usa `TAMANHO_EQUIPE`, então a coluna
-  `Equipes` conta *pessoas*; inofensivo em `1.0`, mente em `2.0`.
+- `planning/LACUNAS_CENARIOS.md` — as 10 coisas que a aba `Cenarios` não modelava (L1–L10), com
+  efeito em R$ e prioridade. **A F15 fechou cinco** (L1 km de dividir, L2 `Equipes` contando
+  pessoas, L3 ocupação, L4 teto de equipes, L7 faixa fixa); as cinco abertas continuam ali, com
+  o status marcado no topo de cada uma.
 - Cada documento de planejamento novo ganha companion HTML autocontido em `planning/html/`
   (D4, inspirado em `planning/html-effectiveness/`). Existem hoje: `DESIGN.html`,
   `MODELO_CUSTO.html`, `PLANO_IMPLEMENTACAO.html`, `LACUNAS_CENARIOS.html` — `PLAN.md` ainda

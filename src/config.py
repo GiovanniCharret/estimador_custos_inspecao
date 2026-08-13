@@ -10,25 +10,34 @@ O custo e' calculado POR AMOSTRA (nao por estrato) e soma duas parcelas:
 1) ESCRITORIO (fixo, UMA vez por amostra): planejamento + relatorio + apresentacao =
    HORAS_ESCRITORIO_POR_OS x tarifa de escritorio (36h x R$360 = R$12.960).
 
-2) CAMPO: dias faturados x TAMANHO_EQUIPE x HORAS_DIA_CAMPO x tarifa de campo
-   (R$600/h => R$4.800 por pessoa-dia). Os dias saem da geometria:
-   - ROTEIRO: a equipe sai da CAPITAL da UF do contrato, encadeia TODAS as paradas
-     numa viagem so (vizinho mais proximo, municipio a municipio e obra a obra
-     dentro do municipio) e volta a capital UMA vez no fim. Nao ha ida-e-volta por
-     obra nem por municipio. Km em linha reta viram km de estrada pelo
+2) CAMPO: N_EQUIPES x TAMANHO_EQUIPE x dias faturados x HORAS_DIA_CAMPO x tarifa de
+   campo (R$600/h => R$4.800 por pessoa-dia). Os dias saem da geometria:
+   - DIVISAO: as N equipes sao INDEPENDENTES. O itinerario e' cortado em N blocos
+     geograficos contiguos e CADA equipe sai da capital, varre o seu bloco e volta.
+     Por isso o km SOMADO cresce ao dividir (+18% a +37% com duas equipes, nos dados
+     reais): a ida e a volta sao cobradas uma vez por equipe.
+   - ROTEIRO (de cada equipe): sai da CAPITAL da UF do contrato, encadeia as paradas
+     do seu bloco numa viagem so (vizinho mais proximo, municipio a municipio e obra
+     a obra dentro do municipio) e volta a capital UMA vez no fim. Nao ha ida-e-volta
+     por obra nem por municipio. Km em linha reta viram km de estrada pelo
      FATOR_RODOVIARIO; km viram horas pela VELOCIDADE_KMH.
    - INSPECAO: cada UC consome HORAS_DIA_CAMPO / UCS_POR_DIA[tipo] horas.
      LPT (rede/postes): 30 UCs/dia. MLA (fotovoltaico remoto): 3 UCs/dia.
-   - DIAS: (horas de roteiro + horas de inspecao) / HORAS_DIA_CAMPO, ARREDONDADO
-     PARA CIMA (a equipe nao vende meio dia), mais DIAS_MOBILIZACAO.
+   - DIAS: ditados pela equipe MAIS LENTA (o prazo tem de caber para todas):
+     teto(maior horas de campo / (HORAS_DIA_CAMPO x TAMANHO_EQUIPE)) + DIAS_MOBILIZACAO.
+     Arredondado PARA CIMA porque a equipe nao vende meio dia.
 
 BENCHMARK (minhas_notas/Tabela_Resumo_Extratos_Amostra.xlsx, aba 'Resumo'): a
 engenharia da PB 7a Tranche estimou 3 amostras e as tres obedecem, ao centavo, a
    custo = 12.960 + 9.600 x (dias + 1),  onde 9.600 = 2 pessoas x 8h x R$600.
-Ou seja: mesma formula desta memoria, com TAMANHO_EQUIPE = 2. Aqui o parametro fica
-em 1 por decisao G1 do gate F1 (so engenheiro estima; nao sobe em poste quem estima),
-o que deixa a estimativa ~44% abaixo do benchmark. Para reproduzir o benchmark, basta
-mudar TAMANHO_EQUIPE para 2 - sem tocar em codigo.
+Ou seja: mesma formula desta memoria com DUAS pessoas em campo. Ha duas maneiras de
+chegar la, e elas NAO sao equivalentes:
+   TAMANHO_EQUIPE = 2, N_EQUIPES = 1 -> uma dupla, UM roteiro. Reproduz o benchmark
+                                        ao centavo (as duas viajam juntas).
+   TAMANHO_EQUIPE = 1, N_EQUIPES = 2 -> duas equipes, DOIS roteiros. Mesmo custo de
+                                        pessoal, mais km - e' o padrao daqui.
+O padrao (N_EQUIPES_PADRAO = 2) custa MAIS que o benchmark de mesma mao de obra,
+justamente porque cobra a ida e a volta de cada equipe.
 
 Por que assim: mantem a camada de preco que o orgao ja usa e troca o julgamento
 "condicoes logisticas" por geometria reprodutivel (coordenadas das UCs), sem
@@ -46,9 +55,23 @@ TARIFAS_HORA = {
 }
 # Diaria/pernoite em R$ por equipe-dia de campo (decisao G2: tarifa ja embute -> 0).
 CUSTO_DIARIA = 0.0
-# Pessoas na equipe de campo. G1 fixou 1 (so o engenheiro estima). O benchmark da
-# engenharia da PB 7a Tranche usa 2 - mudar para 2.0 aqui reproduz aquele valor.
+# PESSOAS DENTRO DE UMA equipe. G1 fixou 1 (so o engenheiro estima).
+# NAO confundir com N_EQUIPES_PADRAO abaixo: aqui e' o tamanho da equipe, la e' quantas
+# equipes independentes vao a campo. Uma equipe de 2 pessoas faz UM roteiro (as duas
+# viajam juntas); duas equipes de 1 fazem DOIS roteiros, cada um saindo da capital.
 TAMANHO_EQUIPE = 1.0
+# Quantas equipes INDEPENDENTES o calculo oficial (aba Resumo) assume. Cada uma tem o
+# seu roteiro, sai da capital e volta - por isso o km SOMADO cresce ao dividir, e por
+# isso este parametro muda a geometria, nao so a aritmetica. Decisao do humano em
+# 2026-08-13: o padrao passou de 1 para 2 (era implicito antes de o parametro existir).
+N_EQUIPES_PADRAO = 2
+# Faixa de equipes que a aba 'Cenarios' varre, e o teto de dias que ela aceita por
+# equipe. Combinacao que nao cabe no teto nao e' calculada nem exibida (decisao do
+# humano: uma amostra que precise de mais de 20 dias por equipe nao e' cenario, e'
+# inviabilidade - nao ha o que apresentar).
+N_EQUIPES_MIN = 1
+N_EQUIPES_MAX = 7
+MAX_DIAS_POR_EQUIPE = 20
 
 # --- Jornada e produtividade (decisao G5 do gate) ---
 # Horas de um dia de campo (8h x 600 = 4.800/equipe-dia, formula decifrada do orgao).
@@ -61,9 +84,6 @@ HORAS_ESCRITORIO_POR_OS = 36.0
 # Dias cobrados alem dos dias de trabalho, para a mobilizacao (sair da capital / voltar).
 # CADA EQUIPE carrega o seu: o benchmark da engenharia cobra equipes x (dias + 1).
 DIAS_MOBILIZACAO = 1.0
-# Quantos dias para cima e para baixo do calculado a aba 'Cenarios' explora. Em cada
-# cenario o PRAZO e' dado e o numero de equipes e' que se ajusta para caber nele.
-VARIACAO_DIAS_CENARIOS = 2
 # Amostra usada quando o usuario nao escolhe (1 = principal; 2 e 3 sao as reservas).
 AMOSTRA_PADRAO = 1
 # UCs inspecionadas por equipe por dia, por tipo de contrato (decisao G5):

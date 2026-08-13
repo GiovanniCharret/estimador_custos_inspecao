@@ -23,6 +23,20 @@ x F6 — mapas HTML gerados com camadas por estrato e popup de custo; teste pass
 x F7 — e2e feliz + 8 bordas passam (16 testes); `planning/TESTES.md` escrito;
     status report `planning/html/STATUS_F7.html` gerado; `executar.bat` validado
     (sem entrada → "Lote.xlsx nao encontrado", exit 1, sem traceback).
+x F15 — equipes independentes e grade de cenários (2026-08-13). Critérios:
+    - o cálculo oficial assume `config.N_EQUIPES_PADRAO = 2` equipes **independentes**, e a
+      aba `Resumo` traz `Equipes` e `Pessoas por equipe` como colunas distintas;
+    - cada equipe tem o seu roteiro saindo da capital, então **o km de dividir entra no
+      custo** (o número subiu: 26 obras na PB vão de R$ 41.760 com 1 equipe para R$ 60.960
+      com 2) — a antiga ressalva do `Leia-me` virou conta;
+    - o prazo é o da equipe **mais lenta**, e o `Detalhe` diz de qual equipe é cada obra;
+    - a aba `Cenarios` é uma **grade** (1 a 7 equipes × até 20 dias por equipe) e mostra
+      **só o viável**; o que não cabe não aparece e nem chega a ser roteado (pré-filtro
+      pelas horas de inspeção — 80 UCs de MLA = 27 dias para 1 equipe, descartado antes);
+    - o benchmark da engenharia continua reproduzido ao centavo, agora explicitamente como
+      `TAMANHO_EQUIPE = 2` **com** `N_EQUIPES = 1` (uma dupla, um roteiro);
+    - 95 testes passando (86 → 95), com testes novos para o km extra de dividir, o prazo da
+      equipe crítica, os limites da grade e o descarte sem roteirizar.
 x F14 — mapa reduzido a pontos (2026-08-13). Critérios:
     - `gravar_mapa(df_ucs, lat0, lon0, caminho)` — sem polilinha, sem número de parada,
       sem `GroupedLayerControl` e sem cor por equipe; um ponto por UC e o marcador da base;

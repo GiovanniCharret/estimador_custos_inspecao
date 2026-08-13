@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Motor de custo: transforma a geometria de uma amostra em R$ (modelo F9).
+"""Motor de custo: transforma a geometria de uma amostra em R$ (modelo F15).
 
 === MEMORIA DE CALCULO (para humanos) ===
 [Mesmo bloco de src/config.py -- duplicado de proposito: quem abrir qualquer um dos
@@ -10,26 +10,38 @@ O custo e' POR AMOSTRA (nao por estrato):
   custo_amostra = CUSTO_FIXO + custo_campo
 
   CUSTO_FIXO  = HORAS_ESCRITORIO_POR_OS x tarifa_escritorio   (36h x 360 = 12.960, 1x)
-  custo_campo = TAMANHO_EQUIPE x dias_faturados x HORAS_DIA_CAMPO x tarifa_campo
+  custo_campo = N_EQUIPES x TAMANHO_EQUIPE x dias_faturados x HORAS_DIA_CAMPO x tarifa_campo
 
-  dias_faturados = teto(horas_de_campo / (HORAS_DIA_CAMPO x TAMANHO_EQUIPE)) + DIAS_MOBILIZACAO
-  horas_de_campo = horas_roteiro + horas_inspecao
+  dias_faturados = teto(horas da equipe MAIS LENTA / (HORAS_DIA_CAMPO x TAMANHO_EQUIPE))
+                   + DIAS_MOBILIZACAO
 
-  Os dias sao POR EQUIPE: duas equipes terminam o mesmo trabalho na metade dos dias.
-  Mais equipes NAO barateiam (o contrato paga por hora-profissional) - na verdade
-  encarecem um pouco, porque cada equipe carrega o seu dia de mobilizacao e porque o
-  arredondamento para dia inteiro desperdicia mais quanto mais equipes houver.
+As N equipes sao INDEPENDENTES: o itinerario e' cortado em N blocos geograficos
+contiguos e cada equipe sai da capital, varre o seu bloco e volta. Tres consequencias
+que o modelo anterior (uma equipe so, trabalho perfeitamente divisivel) escondia:
+
+  - o km SOMADO cresce ao dividir, porque a ida e a volta sao cobradas uma vez por
+    equipe (+18% a +37% com duas equipes, nos dados reais);
+  - o prazo e' ditado pela equipe MAIS LENTA, nao pela media;
+  - mais equipes NAO barateiam (o contrato paga por hora-profissional): encarecem, pelo
+    km extra, pelo dia de mobilizacao de cada equipe e pelo arredondamento para dia
+    inteiro.
+
+  Por equipe:
+    horas_campo    = horas_roteiro + horas_inspecao
     horas_roteiro  = km_estrada / VELOCIDADE_KMH
-      km_estrada   = FATOR_RODOVIARIO x (itinerario unico capital -> todas as obras ->
-                     capital, encadeado, + percurso entre as UCs de cada obra)
-    horas_inspecao = n_ucs x (HORAS_DIA_CAMPO / UCS_POR_DIA[tipo])  (LPT 30/dia; MLA 3/dia)
+      km_estrada   = FATOR_RODOVIARIO x (roteiro do bloco: capital -> obras -> capital,
+                     + percurso entre as UCs de cada obra)
+    horas_inspecao = n_ucs do bloco x (HORAS_DIA_CAMPO / UCS_POR_DIA[tipo])
+                     (LPT 30/dia; MLA 3/dia)
 
 O ESTRATO nao participa do custo. Ele identifica de onde cada obra veio na
 estratificacao e aparece so como coluna informativa no detalhe.
 
 BENCHMARK: a engenharia da PB 7a Tranche obedece, ao centavo, a
   custo = 12.960 + 9.600 x (dias + 1), com 9.600 = 2 pessoas x 8h x R$600.
-E' esta mesma formula com TAMANHO_EQUIPE = 2; aqui o parametro vale 1 (decisao G1).
+E' esta formula com TAMANHO_EQUIPE = 2 e N_EQUIPES = 1 (uma dupla, UM roteiro). O
+padrao daqui - N_EQUIPES = 2, TAMANHO_EQUIPE = 1 - tem a mesma mao de obra e custa
+MAIS, porque sao dois roteiros em vez de um.
 === FIM DA MEMORIA DE CALCULO ===
 """
 import math
@@ -37,7 +49,7 @@ import math
 import pandas as pd
 
 from src import config
-from src.distancias import montar_roteiro
+from src.distancias import dividir_roteiro
 
 
 def tarifa_campo():
@@ -67,57 +79,144 @@ def tarifa_escritorio():
     return config.TARIFAS_HORA[config.PERFIL_EQUIPE]["escritorio"]
 
 
-def custo_amostra(df_odis, uf, tipo_contrato):
-    """Precifica uma amostra inteira a partir do resumo geometrico por ODI.
+def horas_por_uc(tipo_contrato):
+    """Horas que uma UC consome na inspecao, pela produtividade do tipo de contrato.
 
-    Por que existe: e' o UNICO lugar onde a formula de custo vive. Trabalha na
-    granularidade AMOSTRA porque e' assim que o custo se comporta: o roteiro e' uma
-    viagem so (nao da para somar viagens por obra) e o fixo de escritorio e' uma OS so.
-    Devolver tambem o detalhe por obra evita que o resumo e o mapa recalculem o roteiro
-    por conta propria e acabem discordando entre si.
+    Por que existe: o mesmo numero e' usado no custo oficial e no pre-filtro da grade de
+    cenarios; uma funcao evita as duas copias divergirem. Le config na chamada.
 
-    Logica: Entrada (df por ODI, uf, tipo) -> Fase 1: monta o itinerario unico a partir
-    da capital da UF -> Fase 2: soma o percurso interno de cada obra e converte linha
-    reta em estrada -> Fase 3: km -> horas de roteiro; UCs -> horas de inspecao ->
-    Fase 4: horas -> dias inteiros + mobilizacao -> Fase 5: dias -> R$, mais o fixo
-    de escritorio -> Saida: (dict com os numeros da amostra, df do roteiro por obra).
+    Logica: Entrada (tipo do contrato) -> Fase 1: jornada / UCs por dia daquele tipo ->
+    Saida: horas por UC (LPT 8/30; MLA 8/3).
+    """
+    # Fase 1/Saida: a jornada dividida pela produtividade diaria do tipo (decisao G5).
+    return config.HORAS_DIA_CAMPO / config.UCS_POR_DIA[tipo_contrato]
+
+
+def repartir_entre_equipes(df_odis, uf, tipo_contrato, n_equipes):
+    """Divide a amostra entre N equipes independentes e mede o campo de cada uma.
+
+    Por que existe: e' a ponte entre a geometria (distancias.py) e o R$ (este modulo),
+    e o lugar onde a divisao deixa de ser aproximacao. Antes da F15 o custo assumia o
+    trabalho perfeitamente divisivel - N equipes rodariam os mesmos km que uma. Aqui
+    cada equipe recebe um bloco geografico e roteia a partir da capital, o que cobra a
+    ida e a volta de CADA uma. Funcao separada porque tanto o custo oficial quanto cada
+    linha da grade de cenarios precisam exatamente disto.
+
+    Logica: Entrada (df por ODI, uf, tipo, n_equipes) -> Fase 1: corta o itinerario em
+    N blocos contiguos, cada um roteado da capital -> Fase 2: por bloco, soma o percurso
+    interno das obras e converte linha reta em estrada -> Fase 3: km -> horas de roteiro,
+    UCs -> horas de inspecao -> Saida: lista de dicts, um por equipe (na ordem
+    geografica do itinerario de referencia).
     """
     # Capital da UF do contrato (G3); KeyError aqui = UF invalida (bug, nao dado).
     lat_cap, lon_cap = config.CAPITAIS_UF[uf]
-    # Fase 1: itinerario unico, encadeado, com volta a capital uma unica vez no fim.
-    roteiro, km_roteiro_reta = montar_roteiro(df_odis, lat_cap, lon_cap)
-    # Fase 2: o percurso entre as UCs de cada obra soma ao roteiro; so entao vira estrada.
-    km_interno_reta = float(roteiro["dist_interna_km"].sum()) if len(roteiro) else 0.0
-    km_estrada = (km_roteiro_reta + km_interno_reta) * config.FATOR_RODOVIARIO
-    # Fase 3: km -> horas de estrada; UCs -> horas de inspecao pela produtividade do tipo (G5).
-    horas_roteiro = km_estrada / config.VELOCIDADE_KMH
-    n_ucs = int(roteiro["n_ucs"].sum()) if len(roteiro) else 0
-    horas_por_uc = config.HORAS_DIA_CAMPO / config.UCS_POR_DIA[tipo_contrato]
-    horas_inspecao = n_ucs * horas_por_uc
-    # Fase 4: dias POR EQUIPE, arredondados PARA CIMA (a equipe nao vende meio dia), mais
-    # a mobilizacao. Dividir pelo tamanho da equipe e' o que a Fase 6 do MODELO_CUSTO.md
-    # prescreve: duas equipes fazem o mesmo trabalho na metade dos dias. A fracao fica
-    # exposta para o humano conferir o teto.
-    horas_campo = horas_roteiro + horas_inspecao
-    dias_fracionarios = horas_campo / (config.HORAS_DIA_CAMPO * config.TAMANHO_EQUIPE)
-    dias_trabalho = math.ceil(dias_fracionarios) if dias_fracionarios > 0 else 0
+    # Fase 1: um roteiro por equipe, cada um fechado na capital. Pode devolver MENOS
+    # rotas que equipes pedidas quando ha menos obras que equipes - quem chama decide.
+    rotas = dividir_roteiro(df_odis, lat_cap, lon_cap, n_equipes)
+    por_uc = horas_por_uc(tipo_contrato)
+    equipes = []
+    for roteiro, km_reta in rotas:
+        # Fase 2: o percurso entre as UCs de cada obra soma ao roteiro; so entao vira estrada.
+        km_interno = float(roteiro["dist_interna_km"].sum()) if len(roteiro) else 0.0
+        km_estrada = (km_reta + km_interno) * config.FATOR_RODOVIARIO
+        n_ucs = int(roteiro["n_ucs"].sum()) if len(roteiro) else 0
+        # Fase 3: as duas parcelas do dia de campo desta equipe.
+        horas_roteiro = km_estrada / config.VELOCIDADE_KMH
+        horas_inspecao = n_ucs * por_uc
+        equipes.append({
+            "roteiro": roteiro,
+            "n_odis": len(roteiro),
+            "n_ucs": n_ucs,
+            "km_estrada": km_estrada,
+            "horas_roteiro": horas_roteiro,
+            "horas_inspecao": horas_inspecao,
+            "horas_campo": horas_roteiro + horas_inspecao,
+        })
+    # Saida: uma entrada por equipe que de fato tem obra.
+    return equipes
+
+
+def _dias_para(horas_da_equipe_mais_lenta):
+    """Converte as horas da equipe critica em dias inteiros de trabalho.
+
+    Por que existe: o arredondamento para cima e a divisao pelo TAMANHO_EQUIPE aparecem
+    no custo oficial e na grade; concentrar aqui evita que uma das duas esqueca um dos
+    dois passos (foi exatamente o defeito corrigido na F10).
+
+    Logica: Entrada (horas da equipe mais lenta) -> Fase 1: divide pela capacidade
+    diaria da equipe (jornada x pessoas) -> Fase 2: arredonda para cima, porque a
+    equipe nao vende meio dia -> Saida: (dias inteiros, fracao antes do arredondamento).
+    """
+    # Fase 1: capacidade de um dia = jornada x pessoas da equipe.
+    fracao = horas_da_equipe_mais_lenta / (config.HORAS_DIA_CAMPO * config.TAMANHO_EQUIPE)
+    # Fase 2: teto - meio dia de equipe nao existe no contrato.
+    return (math.ceil(fracao) if fracao > 0 else 0), fracao
+
+
+def _custo_campo(n_equipes, dias_faturados):
+    """Preco do campo: pessoas x dias x jornada x tarifa.
+
+    Por que existe: a mesma multiplicacao vale para o numero oficial e para cada linha
+    da grade; duplicar seria convidar as duas a divergirem.
+
+    Logica: Entrada (n de equipes, dias faturados) -> Fase 1: pessoas em campo =
+    equipes x tamanho da equipe -> Saida: R$ (o contrato paga por hora-PROFISSIONAL).
+    """
+    # Fase 1/Saida: cada pessoa de cada equipe cobra a jornada inteira de cada dia faturado.
+    return (n_equipes * config.TAMANHO_EQUIPE * dias_faturados
+            * config.HORAS_DIA_CAMPO * tarifa_campo())
+
+
+def custo_amostra(df_odis, uf, tipo_contrato, n_equipes=None):
+    """Precifica uma amostra inteira a partir do resumo geometrico por ODI.
+
+    Por que existe: e' o UNICO lugar onde a formula de custo vive. Trabalha na
+    granularidade AMOSTRA porque e' assim que o custo se comporta: o fixo de escritorio
+    e' uma OS so, e o roteiro de cada equipe e' uma viagem so (nao da para somar viagens
+    por obra). Devolver tambem o detalhe por obra - ja com a equipe dona de cada uma -
+    evita que o resumo recalcule a divisao por conta propria e acabe discordando.
+
+    Logica: Entrada (df por ODI, uf, tipo, n_equipes) -> Fase 1: reparte a amostra entre
+    as equipes e mede o campo de cada uma -> Fase 2: o prazo e' o da equipe MAIS LENTA,
+    em dias inteiros, mais a mobilizacao -> Fase 3: dias -> R$, mais o fixo de
+    escritorio -> Fase 4: empilha os roteiros das equipes num detalhe so -> Saida:
+    (dict com os numeros da amostra, df do detalhe por obra).
+    """
+    # Padrao vem de config (decisao do humano: 2 equipes independentes).
+    n_equipes = config.N_EQUIPES_PADRAO if n_equipes is None else int(n_equipes)
+    # Fase 1: a divisao concreta - cada equipe com o seu roteiro saindo da capital.
+    equipes = repartir_entre_equipes(df_odis, uf, tipo_contrato, n_equipes)
+    # Mais equipes que obras: quem manda e' quantas equipes REALMENTE tem servico.
+    # Faturar as ociosas seria cobrar por gente que nao sai da garagem.
+    n_efetivo = max(1, len(equipes))
+    # Fase 2: o prazo tem de caber para TODAS - quem dita e' a equipe mais lenta.
+    horas_criticas = max((e["horas_campo"] for e in equipes), default=0.0)
+    dias_trabalho, dias_fracionarios = _dias_para(horas_criticas)
     dias_faturados = dias_trabalho + config.DIAS_MOBILIZACAO
-    # Fase 5: dias -> R$ (pessoa-dia = jornada x tarifa) e o fixo de escritorio, uma vez.
-    # O TAMANHO_EQUIPE multiplica aqui porque o contrato paga por hora-PROFISSIONAL.
-    custo_campo = config.TAMANHO_EQUIPE * dias_faturados * config.HORAS_DIA_CAMPO * tarifa_campo()
+    # Fase 3: dias -> R$ e o fixo de escritorio, uma vez por amostra.
+    custo_campo = _custo_campo(n_efetivo, dias_faturados)
     custo_fixo = config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio()
-    # Anota no detalhe o km de estrada de cada trecho (so exibicao; o total ja esta fechado).
-    if len(roteiro):
-        roteiro = roteiro.copy()
-        roteiro["km_trecho_estrada"] = roteiro["km_trecho"] * config.FATOR_RODOVIARIO
-    # Saida: os numeros da amostra + o roteiro que os gerou.
+    # Fase 4: um detalhe so, com a equipe dona de cada obra. A ordem dentro de cada
+    # equipe e' a ordem de visita dela; equipes entram na ordem geografica do itinerario.
+    detalhes = []
+    for i, equipe in enumerate(equipes, start=1):
+        roteiro = equipe["roteiro"].copy()
+        if len(roteiro):
+            roteiro["equipe"] = i
+            # km de estrada de cada trecho (so exibicao; o total ja esta fechado acima).
+            roteiro["km_trecho_estrada"] = roteiro["km_trecho"] * config.FATOR_RODOVIARIO
+        detalhes.append(roteiro)
+    detalhe = pd.concat(detalhes, ignore_index=True) if detalhes else pd.DataFrame()
+    # Saida: os numeros da amostra + o detalhe que os gerou.
     return {
-        "n_odis": len(roteiro),
-        "n_municipios": int(roteiro["Municipio"].nunique()) if len(roteiro) else 0,
-        "n_ucs": n_ucs,
-        "km_roteiro": km_estrada,
-        "horas_roteiro": horas_roteiro,
-        "horas_inspecao": horas_inspecao,
+        "n_odis": sum(e["n_odis"] for e in equipes),
+        "n_municipios": int(detalhe["Municipio"].nunique()) if len(detalhe) else 0,
+        "n_ucs": sum(e["n_ucs"] for e in equipes),
+        "n_equipes": n_efetivo,
+        "km_roteiro": sum(e["km_estrada"] for e in equipes),
+        "horas_roteiro": sum(e["horas_roteiro"] for e in equipes),
+        "horas_inspecao": sum(e["horas_inspecao"] for e in equipes),
+        "horas_equipe_critica": horas_criticas,
         "dias_fracionarios": dias_fracionarios,
         "dias_trabalho": dias_trabalho,
         "dias_faturados": dias_faturados,
@@ -125,62 +224,81 @@ def custo_amostra(df_odis, uf, tipo_contrato):
         "custo_campo": custo_campo,
         "custo_fixo": custo_fixo,
         "custo_total": custo_campo + custo_fixo,
-    }, roteiro
+    }, detalhe
 
 
-def cenarios_por_prazo(numeros, variacao=None):
-    """Explora prazos alternativos: dado um numero de dias, quantas equipes cabem nele.
+def grade_cenarios(df_odis, uf, tipo_contrato):
+    """Varre as combinacoes viaveis de (numero de equipes x prazo) e precifica cada uma.
 
-    Por que existe: o custo calculado responde "quanto custa", mas a pergunta que sobra na
-    mesa de planejamento e' "e se eu precisar terminar antes?". Aqui o PRAZO vira o dado e o
-    numero de equipes e' que se ajusta - o inverso de custo_amostra, que parte da equipe.
-    Fica numa funcao separada (e numa aba separada) para nao poluir o numero oficial: o
-    Resumo continua sendo uma linha por amostra, com a equipe vigente em config.
+    Por que existe: o numero oficial responde "quanto custa"; a pergunta que sobra na
+    mesa de planejamento e' "e se eu precisar terminar antes - ou se eu so tiver 3
+    equipes?". A grade responde as duas de uma vez, porque varre as duas dimensoes.
+    Substituiu (F15) a antiga cenarios_por_prazo, que varria so o prazo em torno do
+    calculado e, pior, assumia o trabalho perfeitamente divisivel: ela contava equipes
+    sem nunca reparti-las de fato, entao o km extra de cada equipe nunca aparecia.
 
-    O que o humano precisa enxergar aqui: mais equipes NAO baratearam nada. O contrato paga
-    por hora-profissional, entao encurtar o prazo custa mais - pelo dia de mobilizacao de
-    cada equipe nova e pelo desperdicio de arredondar para dia inteiro em mais equipes.
+    Duas regras de corte, ambas decisao do humano:
+      - de N_EQUIPES_MIN a N_EQUIPES_MAX equipes;
+      - no maximo MAX_DIAS_POR_EQUIPE dias para cada equipe.
+    Combinacao que estoura o teto NAO e' calculada nem exibida. O caso que motivou a
+    regra: 80 UCs de MLA (3 UCs/dia) sao 27 dias so de inspecao para uma equipe -
+    flagrantemente inviavel, e nao ha o que apresentar. O pre-filtro usa exatamente
+    esse limite inferior (so inspecao, dividida igualmente) para descartar ANTES de
+    rotear, que e' a parte cara.
 
-    Simplificacao assumida (mesma da Fase 6 do MODELO_CUSTO.md): o trabalho e' tratado como
-    perfeitamente divisivel entre as equipes. Na pratica cada equipe teria seu proprio
-    roteiro saindo da capital, o que rodaria um pouco mais que a divisao exata.
-
-    Logica: Entrada (numeros de uma amostra, variacao em dias) -> Fase 1: recupera as horas
-    de campo e centra a faixa no prazo ja calculado -> Fase 2: para cada prazo da faixa,
-    deduz o menor numero de equipes que cabe nele -> Fase 3: precifica cada combinacao com
-    a mesma formula do motor -> Saida: lista de dicts, um por cenario.
+    Logica: Entrada (df por ODI, uf, tipo) -> Fase 1: amostra vazia nao tem grade ->
+    Fase 2: para cada numero de equipes, descarta pelo limite inferior de inspecao sem
+    rotear -> Fase 3: reparte de fato e acha o prazo minimo daquele numero de equipes ->
+    Fase 4: uma linha por prazo entre o minimo e o teto -> Saida: lista de dicts.
     """
-    # Fase 1: a faixa e' centrada no prazo calculado e nunca desce abaixo de 1 dia.
-    variacao = config.VARIACAO_DIAS_CENARIOS if variacao is None else variacao
-    horas_campo = numeros["horas_roteiro"] + numeros["horas_inspecao"]
-    # Amostra sem obra nenhuma nao tem prazo a explorar.
-    if horas_campo <= 0:
+    # Fase 1: sem obra nao ha prazo a explorar.
+    if not len(df_odis):
         return []
-    centro = numeros["dias_trabalho"]
-    # O fixo de escritorio nao depende do prazo - calculado uma vez fora do laco.
-    custo_fixo = config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio()
+    por_uc = horas_por_uc(tipo_contrato)
+    # Total de horas de inspecao da amostra - nao depende de como se divide.
+    horas_inspecao_total = float(df_odis["n_ucs"].sum()) * por_uc
+    capacidade_dia = config.HORAS_DIA_CAMPO * config.TAMANHO_EQUIPE
     linhas = []
-    # Fase 2: um cenario por prazo possivel na faixa.
-    for dias in range(max(1, centro - variacao), centro + variacao + 1):
-        # Menor numero de equipes que da conta do trabalho dentro deste prazo.
-        equipes = max(1, math.ceil(horas_campo / (config.HORAS_DIA_CAMPO * dias)))
-        # Fase 3: mesma formula do motor - cada equipe cobra os dias de trabalho + mobilizacao.
-        dias_faturados = dias + config.DIAS_MOBILIZACAO
-        custo_campo = equipes * dias_faturados * config.HORAS_DIA_CAMPO * tarifa_campo()
-        linhas.append({
-            "dias_trabalho": dias,
-            "equipes": equipes,
-            "dias_faturados": dias_faturados,
-            # Ocupacao = quanto da capacidade contratada e' realmente usada. Baixa demais
-            # significa que o arredondamento esta pagando por gente parada.
-            "ocupacao": horas_campo / (config.HORAS_DIA_CAMPO * dias * equipes),
-            "custo_campo": custo_campo,
-            "custo_fixo": custo_fixo,
-            "custo_total": custo_campo + custo_fixo,
-            # Marca o cenario que corresponde ao numero oficial da aba Resumo.
-            "cenario": "calculado" if dias == centro else f"{dias - centro:+d} dia(s)",
-        })
-    # Saida: os cenarios em ordem crescente de prazo (do mais apertado ao mais folgado).
+    # Fase 2: um bloco por numero de equipes.
+    for n in range(config.N_EQUIPES_MIN, config.N_EQUIPES_MAX + 1):
+        # Mais equipes que obras nao e' cenario: alguem ficaria sem servico.
+        if n > len(df_odis):
+            break
+        # Pre-filtro barato: mesmo distribuindo a inspecao em partes iguais e ignorando
+        # TODO o deslocamento, ja passa do teto? Entao nao ha o que rotear.
+        if horas_inspecao_total / (n * capacidade_dia) > config.MAX_DIAS_POR_EQUIPE:
+            continue
+        # Fase 3: a divisao real, com o roteiro de cada equipe saindo da capital.
+        equipes = repartir_entre_equipes(df_odis, uf, tipo_contrato, n)
+        n_efetivo = len(equipes)
+        horas_criticas = max((e["horas_campo"] for e in equipes), default=0.0)
+        dias_minimo, _ = _dias_para(horas_criticas)
+        # Com o deslocamento contado, o teto pode estourar mesmo tendo passado no pre-filtro.
+        if dias_minimo > config.MAX_DIAS_POR_EQUIPE:
+            continue
+        horas_totais = sum(e["horas_campo"] for e in equipes)
+        km_somado = sum(e["km_estrada"] for e in equipes)
+        # Fase 4: do prazo mais apertado que cabe ate o teto. Prazos maiores que o minimo
+        # sao folga deliberada: a equipe fica ociosa e o custo sobe (mais dias faturados).
+        for dias in range(max(1, dias_minimo), config.MAX_DIAS_POR_EQUIPE + 1):
+            dias_faturados = dias + config.DIAS_MOBILIZACAO
+            custo_campo = _custo_campo(n_efetivo, dias_faturados)
+            linhas.append({
+                "n_equipes": n_efetivo,
+                "dias_trabalho": dias,
+                "dias_faturados": dias_faturados,
+                "km_roteiro": km_somado,
+                # Ocupacao = quanto da capacidade contratada e' realmente usada. Baixa
+                # demais significa que o prazo esta pagando por gente parada.
+                "ocupacao": horas_totais / (n_efetivo * capacidade_dia * dias),
+                "custo_campo": custo_campo,
+                "custo_fixo": config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio(),
+                "custo_total": custo_campo + config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio(),
+                # Marca a linha que corresponde ao numero oficial da aba Resumo.
+                "cenario": ("calculado" if n_efetivo == config.N_EQUIPES_PADRAO
+                            and dias == dias_minimo else ""),
+            })
+    # Saida: as combinacoes viaveis, por numero de equipes e depois por prazo.
     return linhas
 
 

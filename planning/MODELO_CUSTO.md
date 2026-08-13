@@ -674,3 +674,62 @@ modelo: os dias da engenharia **não seguem a geometria** (a amostra de 5 estrat
 mais curta — 1.456 km — e ganhou 7 dias; a de 4 estratos tem a rota mais longa e ganhou 5).
 Isso confirma o diagnóstico de b.1: os dias vinham de julgamento. Nenhum modelo determinístico
 reproduz 8/5/7 — e é justamente esse julgamento que este projeto substitui.
+
+---
+
+## EQUIPES INDEPENDENTES — F15 (2026-08-13)
+
+Decisão do humano (**G8** no `PLAN.md`): o número oficial passa a ser o de **duas equipes**, e a
+premissa de *trabalho perfeitamente divisível* — assumida desde a Fase 6 original e apontada como
+lacuna L1 em `LACUNAS_CENARIOS.md` — **sai do modelo**.
+
+### O que muda na fórmula
+
+```
+antes (F9/F10):  custo_campo = TAMANHO_EQUIPE × dias × 8h × tarifa
+                 dias        = teto(horas_de_UM_roteiro / (8h × TAMANHO_EQUIPE)) + mobilização
+
+agora (F15):     custo_campo = N_EQUIPES × TAMANHO_EQUIPE × dias × 8h × tarifa
+                 dias        = teto(horas da equipe MAIS LENTA / (8h × TAMANHO_EQUIPE)) + mobilização
+```
+
+`N_EQUIPES` e `TAMANHO_EQUIPE` são **grandezas diferentes**, e a distinção não é cosmética:
+
+| | roteiros | km | quem é |
+| --- | --- | --- | --- |
+| `TAMANHO_EQUIPE = 2`, `N_EQUIPES = 1` | 1 | o de sempre | uma dupla viajando junta — **é o benchmark** |
+| `TAMANHO_EQUIPE = 1`, `N_EQUIPES = 2` | 2 | +18% a +37% | duas equipes independentes — **é o padrão daqui** |
+
+Mesma mão de obra, mesmo custo de pessoal por dia — e custos totais diferentes, porque a segunda
+paga dois deslocamentos. O `test_reproduz_a_formula_do_benchmark_da_engenharia` passou a declarar
+`n_equipes=1` explicitamente, para que essa diferença fique amarrada em teste.
+
+### O que muda na aba `Cenarios`
+
+Deixa de ser uma faixa de prazos (`calculado ± 2`) e vira uma **grade equipes × prazo**:
+
+- de `N_EQUIPES_MIN` a `N_EQUIPES_MAX` equipes (1 a 7);
+- para cada uma, do **mínimo viável** até `MAX_DIAS_POR_EQUIPE` (20) dias;
+- **o inviável não aparece nem é calculado.** Um pré-filtro descarta pelo limite inferior — só as
+  horas de inspeção, divididas igualmente, ignorando todo deslocamento — *antes* de rotear.
+
+O caso que fixou a regra, dado pelo humano: **80 UCs de MLA** a 3 UCs/dia são 213h, ou ~27 dias só
+de inspeção para uma equipe. Flagrantemente acima do teto — não há conta a apresentar, e nem vale
+gastar o roteamento para descobrir isso.
+
+### Efeito no número
+
+Sondagem com 26 obras espalhadas pelo interior da PB (uma por município, como a amostra real):
+
+| Equipes | km somado | Dias trabalho | Dias faturados | Custo |
+| --- | --- | --- | --- | --- |
+| 1 | 1.220 | 5 | 6 | R$ 41.760 |
+| **2 (padrão)** | **1.663** | **4** | **5** | **R$ 60.960** |
+| 3 | 2.010 | 3 | 4 | R$ 70.560 |
+
+**O padrão ficou mais caro, e isso é o modelo ficando honesto, não pior.** Encurtar o prazo sempre
+custou mais; o que faltava era o km extra de cada equipe aparecer na conta em vez de numa ressalva
+de texto.
+
+Lacunas fechadas por esta fase: **L1** (km de dividir), **L2** (`Equipes` contando pessoas),
+**L3** (ocupação), **L4** (teto de equipes) e **L7** (faixa fixa de ±2 dias).

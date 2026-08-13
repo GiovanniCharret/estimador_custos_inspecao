@@ -7,42 +7,50 @@ from src.io_amostras import EntradaInvalida
 
 # Renomeacao de apresentacao da aba Resumo (apenas exibicao; nao afeta o calculo).
 # A ordem deste dicionario e' a ordem das colunas na planilha.
+# 'Equipes' (quantas) e 'Pessoas por equipe' (tamanho de cada) sao GRANDEZAS DIFERENTES
+# e ficam lado a lado de proposito: ate a F15 a planilha tinha 'Equipe' aqui e 'Equipes'
+# na aba Cenarios querendo dizer coisas distintas, o que era leitura errada esperando
+# acontecer.
 COLUNAS_RESUMO = {
     "n_estratos": "Estratos",
     "amostra": "Amostra",
     "n_odis": "ODIs",
     "n_municipios": "Municipios",
     "n_ucs": "UCs",
-    "km_roteiro": "Roteiro (km estrada)",
+    "n_equipes": "Equipes",
+    "tamanho_equipe": "Pessoas por equipe",
+    "km_roteiro": "Roteiro somado (km estrada)",
     "horas_roteiro": "Horas roteiro",
     "horas_inspecao": "Horas inspecao",
+    "horas_equipe_critica": "Horas da equipe mais lenta",
     "dias_fracionarios": "Dias (fracao)",
-    "dias_trabalho": "Dias trabalho",
-    "dias_faturados": "Dias faturados",
-    "tamanho_equipe": "Equipe",
+    "dias_trabalho": "Dias trabalho (por equipe)",
+    "dias_faturados": "Dias faturados (por equipe)",
     "custo_campo": "Custo campo (R$)",
     "custo_fixo": "Custo fixo OS (R$)",
     "custo_total": "Custo total (R$)",
 }
 
-# Renomeacao de apresentacao da aba Cenarios (prazos alternativos por estratificacao).
+# Renomeacao de apresentacao da aba Cenarios (grade equipes x prazo por estratificacao).
 COLUNAS_CENARIOS = {
     "n_estratos": "Estratos",
     "amostra": "Amostra",
-    "cenario": "Cenario",
+    "n_equipes": "Equipes",
     "dias_trabalho": "Dias trabalho (por equipe)",
-    "equipes": "Equipes",
     "dias_faturados": "Dias faturados (por equipe)",
+    "km_roteiro": "Roteiro somado (km estrada)",
     "ocupacao": "Ocupacao da equipe",
     "custo_campo": "Custo campo (R$)",
     "custo_fixo": "Custo fixo OS (R$)",
     "custo_total": "Custo total (R$)",
+    "cenario": "Cenario",
 }
 
 # Renomeacao de apresentacao da aba Detalhe (uma linha por obra, na ordem do roteiro).
 COLUNAS_DETALHE = {
     "n_estratos": "Estratos",
     "amostra": "Amostra",
+    "equipe": "Equipe",
     "ordem": "Ordem",
     "ODI": "ODI",
     "Municipio": "Municipio",
@@ -70,28 +78,33 @@ def _texto_leia_me():
         "Estimativa de custo de inspecao das amostras, por estratificacao.",
         "",
         "Aba 'Resumo'   : uma linha por estratificacao. E' o numero que vale.",
-        "Aba 'Cenarios' : e se o prazo fosse outro? Um cenario por prazo possivel.",
-        "Aba 'Detalhe'  : uma linha por obra, NA ORDEM DO ROTEIRO da equipe.",
+        "Aba 'Cenarios' : a grade de combinacoes VIAVEIS (quantas equipes x qual prazo).",
+        "Aba 'Detalhe'  : uma linha por obra, com a EQUIPE dona e a ordem de visita dela.",
+        "",
+        "CUIDADO com duas colunas parecidas e diferentes:",
+        "  'Equipes'            = quantas equipes independentes vao a campo;",
+        "  'Pessoas por equipe' = quantas pessoas ha DENTRO de cada equipe.",
         "",
         "O custo e' por AMOSTRA, nao por estrato:",
-        "  custo = custo fixo de escritorio (1x) + equipe x dias faturados x jornada x tarifa",
-        "  dias faturados = teto(horas de campo / (jornada x equipe)) + dias de mobilizacao",
+        "  custo = fixo de escritorio (1x) + equipes x pessoas x dias faturados x jornada x tarifa",
+        "  dias faturados = teto(horas da equipe MAIS LENTA / (jornada x pessoas)) + mobilizacao",
         "  horas de campo = roteiro (km de estrada / velocidade) + inspecao (UCs / produtividade)",
         "",
-        "O roteiro e' UMA viagem so: sai da capital da UF, encadeia todas as obras",
-        "(municipio a municipio, obra a obra) e volta a capital uma unica vez no fim.",
+        "As equipes sao INDEPENDENTES. O itinerario e' cortado em blocos geograficos",
+        "contiguos e CADA equipe sai da capital da UF, varre o seu bloco e volta uma unica",
+        "vez no fim. Por isso o km somado CRESCE ao dividir: a ida e a volta sao cobradas",
+        "uma vez por equipe (nos dados reais, de 18% a 37% a mais com duas equipes).",
+        "Este custo ja esta dentro dos numeros - nao e' mais uma ressalva.",
         "",
-        "Os DIAS sao por equipe: duas equipes fazem o mesmo trabalho na metade dos dias.",
-        "Encurtar o prazo NAO barateia - encarece. O contrato paga por hora-profissional,",
-        "cada equipe carrega o seu dia de mobilizacao, e o arredondamento para dia inteiro",
-        "desperdicia mais quanto mais equipes houver. A aba 'Cenarios' mostra esse preco.",
+        "O prazo e' o da equipe MAIS LENTA, porque todas precisam caber nele. Encurtar o",
+        "prazo NAO barateia - encarece: o contrato paga por hora-profissional, cada equipe",
+        "carrega o seu dia de mobilizacao e o seu deslocamento, e o arredondamento para dia",
+        "inteiro desperdica mais quanto mais equipes houver.",
         "",
-        "ATENCAO ao ler a aba 'Cenarios': ela trata o trabalho como perfeitamente divisivel",
-        "entre as equipes, isto e', assume que N equipes rodam os mesmos km que uma. Na",
-        "pratica cada equipe sai da capital e volta a ela, entao a quilometragem SOMADA",
-        "cresce ao dividir - nos dados reais, de 18% a 37% a mais com duas equipes. Os",
-        "cenarios com mais de uma equipe sao, portanto, OTIMISTAS: o custo real de encurtar",
-        "o prazo e' maior do que a tabela mostra.",
+        "A aba 'Cenarios' mostra SO o que e' viavel. Combinacao que passa do teto de dias",
+        "por equipe nao aparece - nao foi omitida, foi descartada por inviabilidade.",
+        "Prazos maiores que o minimo de cada linha sao folga deliberada: a equipe fica mais",
+        "ociosa (veja 'Ocupacao') e o custo sobe, porque ha mais dias faturados.",
         "",
         "O MAPA mostra apenas ONDE estao as obras da amostra e a base da equipe (capital).",
         "Ele nao desenha itinerario: a ordem de visita usada no calculo e' uma hipotese do",
@@ -101,7 +114,8 @@ def _texto_leia_me():
     ]
     # Fase 2: os parametros vigentes, lidos de config na hora da gravacao.
     linhas += [
-        f"  Perfil da equipe            : {config.PERFIL_EQUIPE} x {config.TAMANHO_EQUIPE:g} pessoa(s)",
+        f"  Equipes (calculo oficial)   : {config.N_EQUIPES_PADRAO:g}, independentes",
+        f"  Perfil / pessoas por equipe : {config.PERFIL_EQUIPE} x {config.TAMANHO_EQUIPE:g} pessoa(s)",
         f"  Tarifa campo / escritorio   : R$ {config.TARIFAS_HORA[config.PERFIL_EQUIPE]['campo']:.2f}/h"
         f" / R$ {config.TARIFAS_HORA[config.PERFIL_EQUIPE]['escritorio']:.2f}/h",
         f"  Jornada de campo            : {config.HORAS_DIA_CAMPO:g} h/dia",
@@ -109,6 +123,8 @@ def _texto_leia_me():
         f"  Dias de mobilizacao         : {config.DIAS_MOBILIZACAO:g}",
         f"  Velocidade / fator rodoviario: {config.VELOCIDADE_KMH:g} km/h / {config.FATOR_RODOVIARIO:g}",
         f"  Produtividade (UCs/dia)     : {config.UCS_POR_DIA}",
+        f"  Grade de cenarios           : {config.N_EQUIPES_MIN:g} a {config.N_EQUIPES_MAX:g} equipes,"
+        f" no maximo {config.MAX_DIAS_POR_EQUIPE:g} dias por equipe",
         "",
         "Todos os parametros ficam em src/config.py e podem ser ajustados sem rebuild.",
     ]

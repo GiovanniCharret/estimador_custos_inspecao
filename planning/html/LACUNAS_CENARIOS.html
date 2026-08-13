@@ -71,6 +71,17 @@
   .gap.grave { border-left:3px solid var(--clay); }
   .gap.media { border-left:3px solid var(--amber); }
   .gap.leve  { border-left:3px solid var(--olive); }
+  .gap.fechada { border-left:3px solid var(--olive); opacity:.92; }
+  .fechada-nota { background:var(--gray-150); border-radius:8px; padding:14px 16px;
+                  margin-bottom:14px; font-size:14px; }
+  .fechada-nota b { display:block; font-family:var(--mono); font-size:10.5px;
+                    letter-spacing:.08em; text-transform:uppercase; color:var(--olive);
+                    margin-bottom:5px; }
+  .selo { display:inline-block; font-family:var(--mono); font-size:10px;
+          letter-spacing:.06em; text-transform:uppercase; padding:2px 7px;
+          border-radius:20px; margin-left:8px; vertical-align:middle; }
+  .selo.ok { background:var(--olive); color:#fff; }
+  .selo.aberta { background:var(--gray-300); color:var(--gray-700); }
   .gap h3 { font-family:var(--serif); font-weight:500; font-size:19px; color:var(--slate);
             margin-bottom:4px; }
   .gap .tag { font-family:var(--mono); font-size:10px; letter-spacing:.08em;
@@ -90,18 +101,19 @@
 <div class="page">
 
 <nav>
-  <div class="label">Lacunas</div>
-  <a href="#l1" class="hot">L1 &middot; km de dividir</a>
-  <a href="#l2" class="hot">L2 &middot; Equipes = pessoas</a>
+  <div class="label">Fechadas na F15</div>
+  <a href="#l1">L1 &middot; km de dividir</a>
+  <a href="#l2">L2 &middot; Equipes = pessoas</a>
   <a href="#l3">L3 &middot; ocupa&ccedil;&atilde;o</a>
-  <a href="#l4" class="hot">L4 &middot; sem teto de equipes</a>
+  <a href="#l4">L4 &middot; sem teto de equipes</a>
+  <a href="#l7">L7 &middot; faixa &plusmn;2 fixa</a>
+  <div class="label" style="margin-top:22px">Abertas</div>
+  <a href="#l9" class="hot">L9 &middot; sem conting&ecirc;ncia</a>
+  <a href="#l8" class="hot">L8 &middot; velocidade/fator</a>
   <a href="#l5">L5 &middot; fixo constante</a>
   <a href="#l6">L6 &middot; di&aacute;ria zerada</a>
-  <a href="#l7">L7 &middot; faixa &plusmn;2 fixa</a>
-  <a href="#l8">L8 &middot; velocidade/fator</a>
-  <a href="#l9">L9 &middot; sem conting&ecirc;ncia</a>
   <a href="#l10">L10 &middot; s&oacute; varia prazo</a>
-  <a href="#prioridade">Prioridade</a>
+  <a href="#prioridade" style="margin-top:22px">Placar</a>
   <div class="files">
     <code>src/custo.py</code>
     <code>src/distancias.py</code>
@@ -118,29 +130,47 @@
   mais assume coisas sem dizer.</p>
 
   <div class="tldr">
-    <p><strong>Nada aqui &eacute; bug.</strong> O programa faz o que foi especificado; estes s&atilde;o
-    limites conhecidos do modelo. O <code>Leia-me</code> da planilha avisa da principal em duas
-    linhas &mdash; as outras nove nunca foram escritas em lugar nenhum.</p>
-    <p>Duas delas s&atilde;o baratas de fechar e uma <strong>j&aacute; est&aacute; armada</strong>:
-    dispara no dia em que algu&eacute;m mudar <code>TAMANHO_EQUIPE</code> para 2 para conversar com a
-    engenharia.</p>
+    <p><strong>Atualizado no mesmo dia: a F15 fechou cinco das dez.</strong> O humano decidiu que o
+    padr&atilde;o passa a ser <strong>2 equipes independentes</strong> e que a aba vira uma
+    <strong>grade equipes &times; prazo</strong> (1 a 7 equipes, at&eacute; 20 dias por equipe, s&oacute;
+    o vi&aacute;vel). Isso resolveu <strong>L1</strong> (o km de dividir entrou no custo),
+    <strong>L2</strong>, <strong>L3</strong>, <strong>L4</strong> e <strong>L7</strong>.</p>
+    <p>Continuam abertas <strong>L5, L6, L8, L9 e L10</strong> &mdash; todas premissa ou escopo,
+    nenhuma defeito de conta. O documento fica de p&eacute; porque as cinco abertas seguem valendo e
+    porque o hist&oacute;rico do que foi fechado, e por qu&ecirc;, &eacute; o que impede a lacuna de voltar.</p>
   </div>
 
-  <h2>O piso: o que a aba faz hoje</h2>
-  <p><code>custo.cenarios_por_prazo</code> inverte o c&aacute;lculo principal. Em vez de
-  &ldquo;dada a equipe, quantos dias&rdquo;, pergunta &ldquo;dado o prazo, quantas equipes
+  <h2>O piso: o que a aba fazia at&eacute; a F15</h2>
+  <p><code>custo.cenarios_por_prazo</code> invertia o c&aacute;lculo principal. Em vez de
+  &ldquo;dada a equipe, quantos dias&rdquo;, perguntava &ldquo;dado o prazo, quantas equipes
   cabem&rdquo;:</p>
 <pre>para cada dias em [calculado &minus; 2 ... calculado + 2]:
     equipes        = teto(<b>horas_campo</b> / (8h &times; dias))
     dias_faturados = dias + DIAS_MOBILIZACAO
     custo_campo    = equipes &times; dias_faturados &times; 8h &times; R$600
     custo_total    = custo_campo + R$12.960</pre>
-  <p><code>horas_campo</code> vem do c&aacute;lculo de <strong>uma</strong> equipe e nunca &eacute;
-  recalculado. Essa &uacute;nica frase &eacute; a raiz de tr&ecirc;s das lacunas abaixo.</p>
+  <p><code>horas_campo</code> vinha do c&aacute;lculo de <strong>uma</strong> equipe e nunca era
+  recalculado. Essa &uacute;nica frase era a raiz de tr&ecirc;s das lacunas abaixo.</p>
+  <p><strong>Hoje</strong> (<code>custo.grade_cenarios</code>) o prazo &eacute; a entrada e a
+  viabilidade &eacute; o filtro:</p>
+<pre>para cada n_equipes em [1 ... 7]:
+    se nem a inspecao dividida por n cabe em 20 dias: <b>pula sem rotear</b>
+    reparte de fato: n blocos contiguos, <b>cada um roteado da capital</b>
+    dias_min = teto(horas da equipe <b>MAIS LENTA</b> / (8h &times; pessoas por equipe))
+    se dias_min &gt; 20: pula
+    para cada dias em [dias_min ... 20]:
+        custo_campo = n &times; pessoas &times; (dias + mobilizacao) &times; 8h &times; R$600</pre>
 
-  <h2 id="l1">L1 &mdash; O quil&ocirc;metro de dividir n&atilde;o entra no custo</h2>
-  <div class="gap grave">
-    <div class="tag">A maior &middot; a &uacute;nica j&aacute; avisada ao usu&aacute;rio</div>
+  <h2 id="l1">L1 &mdash; O quil&ocirc;metro de dividir n&atilde;o entra no custo
+      <span class="selo ok">fechada F15</span></h2>
+  <div class="gap fechada">
+    <div class="fechada-nota"><b>Como foi fechada</b>
+      <code>custo.repartir_entre_equipes</code> chama <code>dividir_roteiro</code> e usa o km de
+      cada equipe nas horas &mdash; o n&uacute;mero oficial j&aacute; cobra os dois deslocamentos. A
+      itera&ccedil;&atilde;o que eu temia n&atilde;o foi necess&aacute;ria: como o prazo virou <em>entrada</em>
+      da grade (e n&atilde;o sa&iacute;da), n&atilde;o h&aacute; la&ccedil;o de realimenta&ccedil;&atilde;o.
+    </div>
+    <div class="tag">Era a maior &middot; a &uacute;nica j&aacute; avisada ao usu&aacute;rio</div>
     <p>A aba trata o trabalho como <strong>perfeitamente divis&iacute;vel</strong>: assume que N
     equipes rodam os mesmos km que uma. Na pr&aacute;tica cada equipe sai da capital e volta a ela.
     <code>dividir_roteiro</code> mede quanto isso custa em estrada:</p>
@@ -168,9 +198,17 @@
     curto com base num n&uacute;mero que subestima o pr&oacute;prio prazo curto.</div>
   </div>
 
-  <h2 id="l2">L2 &mdash; A coluna <code>Equipes</code> conta PESSOAS, n&atilde;o equipes</h2>
-  <div class="gap grave">
-    <div class="tag">Armadilha armada &middot; dispara com TAMANHO_EQUIPE = 2</div>
+  <h2 id="l2">L2 &mdash; A coluna <code>Equipes</code> conta PESSOAS, n&atilde;o equipes
+      <span class="selo ok">fechada F15</span></h2>
+  <div class="gap fechada">
+    <div class="fechada-nota"><b>Como foi fechada</b>
+      <code>N_EQUIPES</code> (quantas equipes) e <code>TAMANHO_EQUIPE</code> (pessoas em cada)
+      viraram par&acirc;metros distintos, ambos multiplicando o custo. Na planilha s&atilde;o as colunas
+      vizinhas <strong>Equipes</strong> e <strong>Pessoas por equipe</strong>, e o
+      <code>Leia-me</code> abre explicando a diferen&ccedil;a. O teste do benchmark passou a declarar
+      <code>n_equipes=1</code>, deixando registrado que a engenharia usa uma dupla num roteiro s&oacute;.
+    </div>
+    <div class="tag">Era armadilha armada &middot; disparava com TAMANHO_EQUIPE = 2</div>
     <p><code>cenarios_por_prazo</code> <strong>n&atilde;o usa <code>config.TAMANHO_EQUIPE</code> em
     lugar nenhum</strong>: nem em <code>equipes = teto(horas / (8 &times; dias))</code>, nem em
     <code>custo_campo = equipes &times; dias &times; 8 &times; tarifa</code>. A vari&aacute;vel
@@ -202,9 +240,14 @@
     que a planilha estar&aacute; sob mais escrut&iacute;nio.</div>
   </div>
 
-  <h2 id="l3">L3 &mdash; A ocupa&ccedil;&atilde;o da equipe est&aacute; superestimada</h2>
-  <div class="gap media">
-    <div class="tag">Mesma raiz de L1 &middot; fecha junto</div>
+  <h2 id="l3">L3 &mdash; A ocupa&ccedil;&atilde;o da equipe est&aacute; superestimada
+      <span class="selo ok">fechada F15</span></h2>
+  <div class="gap fechada">
+    <div class="fechada-nota"><b>Como foi fechada</b>
+      Junto com L1: a ocupa&ccedil;&atilde;o passou a somar as horas reais de cada equipe, deslocamento
+      inclu&iacute;do.
+    </div>
+    <div class="tag">Tinha a mesma raiz de L1 &middot; fechou junto</div>
     <p><code>ocupacao = horas_campo / (8h &times; dias &times; equipes)</code> usa o
     <code>horas_campo</code> de <strong>uma</strong> equipe. Como o km real cresce ao dividir, a
     ocupa&ccedil;&atilde;o verdadeira dos cen&aacute;rios multi-equipe &eacute; <strong>maior</strong>
@@ -215,9 +258,16 @@
     deslocamento n&atilde;o contabilizado.</div>
   </div>
 
-  <h2 id="l4">L4 &mdash; N&atilde;o existe teto de equipes dispon&iacute;veis</h2>
-  <div class="gap media">
-    <div class="tag">Melhor rela&ccedil;&atilde;o esfor&ccedil;o / benef&iacute;cio</div>
+  <h2 id="l4">L4 &mdash; N&atilde;o existe teto de equipes dispon&iacute;veis
+      <span class="selo ok">fechada F15</span></h2>
+  <div class="gap fechada">
+    <div class="fechada-nota"><b>Como foi fechada</b>
+      <code>N_EQUIPES_MIN</code>/<code>N_EQUIPES_MAX</code> (1 a 7) limitam a varredura, e a grade
+      nunca prop&otilde;e mais equipes que obras. N&atilde;o virou o <code>MAX_EQUIPES</code> que eu sugeri:
+      o humano declarou a <strong>faixa</strong> inteira, o que &eacute; melhor &mdash; o m&iacute;nimo tamb&eacute;m
+      ficou expl&iacute;cito.
+    </div>
+    <div class="tag">Era a melhor rela&ccedil;&atilde;o esfor&ccedil;o / benef&iacute;cio</div>
     <p>A aba prop&otilde;e o n&uacute;mero de equipes que a matem&aacute;tica pedir. Na sondagem acima
     ela chegou a <strong>5</strong> para uma amostra de 12 obras. Nada no modelo pergunta se h&aacute;
     5 equipes, se a contratada consegue mobiliz&aacute;-las, ou se faz sentido operacional.</p>
@@ -252,9 +302,16 @@
     o prazo &mdash; e a <code>Cenarios</code> &eacute; a aba que mais varia prazo.</div>
   </div>
 
-  <h2 id="l7">L7 &mdash; A faixa &eacute; fixa em &plusmn;2 dias, n&atilde;o proporcional</h2>
-  <div class="gap leve">
-    <div class="tag">VARIACAO_DIAS_CENARIOS = 2</div>
+  <h2 id="l7">L7 &mdash; A faixa &eacute; fixa em &plusmn;2 dias, n&atilde;o proporcional
+      <span class="selo ok">fechada F15</span></h2>
+  <div class="gap fechada">
+    <div class="fechada-nota"><b>Como foi fechada</b>
+      Por um caminho melhor que o que eu propus. Em vez de trocar a varia&ccedil;&atilde;o absoluta por
+      percentual, o humano tirou a faixa relativa do jogo: a grade vai do <strong>m&iacute;nimo vi&aacute;vel
+      de cada n&ordm; de equipes at&eacute; um teto absoluto</strong> (<code>MAX_DIAS_POR_EQUIPE = 20</code>).
+      A janela deixa de depender do prazo calculado, e a assimetria no piso de 1 dia some junto.
+    </div>
+    <div class="tag">Era VARIACAO_DIAS_CENARIOS = 2</div>
     <div class="scroll">
     <table>
       <tr><th>Amostra real</th><th class="num">Prazo calculado</th><th class="num">Faixa</th>
@@ -308,35 +365,44 @@
     r&aacute;pido custa mais&rdquo;, quando existem outras trocas a fazer.</div>
   </div>
 
-  <h2 id="prioridade">Prioridade sugerida</h2>
+  <h2 id="prioridade">Placar</h2>
   <div class="scroll">
   <table>
-    <tr><th>#</th><th>Lacuna</th><th>Erra o R$?</th><th>Esfor&ccedil;o</th><th>Prioridade</th></tr>
-    <tr class="hi"><td>L4</td><td>sem teto de equipes</td><td>n&atilde;o (erra a viabilidade)</td>
-        <td>baixo</td><td><strong>1&ordm; &mdash; melhor rela&ccedil;&atilde;o</strong></td></tr>
-    <tr class="hi"><td>L2</td><td><code>Equipes</code> conta pessoas</td>
-        <td>sim, se <code>TAMANHO_EQUIPE &ne; 1</code></td><td>baixo</td>
-        <td><strong>2&ordm; &mdash; armadilha armada</strong></td></tr>
-    <tr class="hi"><td>L1+L3</td><td>km de dividir e ocupa&ccedil;&atilde;o</td>
-        <td><strong>sim, subestima</strong></td><td>alto (iterativo)</td>
-        <td><strong>3&ordm; &mdash; a que mais importa</strong></td></tr>
-    <tr><td>L7</td><td>faixa fixa &plusmn;2 dias</td><td>n&atilde;o</td><td>baixo</td><td>4&ordm;</td></tr>
-    <tr><td>L9</td><td>sem conting&ecirc;ncia</td><td>sim, subestima</td>
-        <td>decis&atilde;o, n&atilde;o c&oacute;digo</td><td>5&ordm;</td></tr>
-    <tr><td>L8</td><td>velocidade / fator</td><td>sim, no absoluto</td>
-        <td>m&eacute;dio (dados externos)</td><td>6&ordm;</td></tr>
-    <tr><td>L5</td><td>fixo constante</td><td>talvez</td><td>decis&atilde;o</td><td>7&ordm;</td></tr>
-    <tr><td>L6</td><td>di&aacute;ria zerada</td><td>talvez</td><td>decis&atilde;o</td><td>8&ordm;</td></tr>
-    <tr><td>L10</td><td>s&oacute; varia prazo</td><td>n&atilde;o</td><td>m&eacute;dio</td><td>9&ordm;</td></tr>
+    <tr><th>#</th><th>Lacuna</th><th>Status</th><th>Erra o R$?</th><th>Esfor&ccedil;o</th></tr>
+    <tr><td>L1</td><td>km de dividir</td><td><span class="selo ok">fechada F15</span></td>
+        <td>subestimava</td><td>alto</td></tr>
+    <tr><td>L2</td><td><code>Equipes</code> conta pessoas</td><td><span class="selo ok">fechada F15</span></td>
+        <td>erraria com equipe &ne; 1</td><td>baixo</td></tr>
+    <tr><td>L3</td><td>ocupa&ccedil;&atilde;o</td><td><span class="selo ok">fechada F15</span></td>
+        <td>n&atilde;o (erra a leitura)</td><td>junto com L1</td></tr>
+    <tr><td>L4</td><td>sem teto de equipes</td><td><span class="selo ok">fechada F15</span></td>
+        <td>n&atilde;o (erra a viabilidade)</td><td>baixo</td></tr>
+    <tr><td>L7</td><td>faixa fixa &plusmn;2 dias</td><td><span class="selo ok">fechada F15</span></td>
+        <td>n&atilde;o</td><td>baixo</td></tr>
+    <tr class="hi"><td>L9</td><td>sem conting&ecirc;ncia</td><td><span class="selo aberta">aberta</span></td>
+        <td><strong>sim, subestima</strong></td><td>decis&atilde;o, n&atilde;o c&oacute;digo</td></tr>
+    <tr class="hi"><td>L8</td><td>velocidade / fator</td><td><span class="selo aberta">aberta</span></td>
+        <td>sim, no absoluto</td><td>m&eacute;dio (dados externos)</td></tr>
+    <tr><td>L5</td><td>fixo constante</td><td><span class="selo aberta">aberta</span></td>
+        <td>talvez</td><td>decis&atilde;o</td></tr>
+    <tr><td>L6</td><td>di&aacute;ria zerada</td><td><span class="selo aberta">aberta</span></td>
+        <td>talvez</td><td>decis&atilde;o</td></tr>
+    <tr><td>L10</td><td>s&oacute; varia prazo</td><td><span class="selo aberta">aberta</span></td>
+        <td>n&atilde;o</td><td>m&eacute;dio</td></tr>
   </table>
   </div>
-  <p><strong>Recomenda&ccedil;&atilde;o:</strong> L4 e L2 primeiro &mdash; s&atilde;o baratas, e L2 &eacute;
-  uma armadilha j&aacute; armada. S&oacute; depois L1+L3, que &eacute; a corre&ccedil;&atilde;o de fundo.</p>
+  <p><strong>Das cinco que restam, quatro s&atilde;o decis&atilde;o e n&atilde;o c&oacute;digo.</strong> L9, L5 e L6
+  dependem de o humano dizer o que &eacute; verdade no contrato; L8 exige dado externo; L10 &eacute;
+  amplia&ccedil;&atilde;o de escopo.</p>
+  <p><strong>Se for para mexer numa, L9 &eacute; a mais barata em esfor&ccedil;o e a mais cara em
+  consequ&ecirc;ncia:</strong> basta um percentual de conting&ecirc;ncia em <code>config.py</code>, e sem ele
+  os prazos da grade continuam sendo pisos t&eacute;cnicos apresentados como se fossem compromissos.</p>
 
   <footer>
     Companion de <code>planning/LACUNAS_CENARIOS.md</code> &middot; conven&ccedil;&atilde;o D4 &middot;
-    2026-08-13. F&oacute;rmula em <code>src/custo.py::cenarios_por_prazo</code>; medi&ccedil;&atilde;o do
-    km real em <code>src/distancias.py::dividir_roteiro</code>; par&acirc;metros em
+    2026-08-13, revisto no mesmo dia ap&oacute;s a F15. Grade em
+    <code>src/custo.py::grade_cenarios</code>; divis&atilde;o real em
+    <code>src/custo.py::repartir_entre_equipes</code>; par&acirc;metros em
     <code>src/config.py</code>.
   </footer>
 </main>

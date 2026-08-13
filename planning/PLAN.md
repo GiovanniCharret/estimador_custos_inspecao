@@ -45,6 +45,8 @@ x F13 — Chave de junção **declarada** pelo tipo do contrato (`CHAVE_JUNCAO_P
     em vez de descoberta por tentativa-e-erro — 2026-08-11
 x F14 — Mapa reduzido a pontos: saíram a polilinha, a numeração das paradas e o radio de
     equipes (decisão G7). O mapa localiza, não propõe itinerário — 2026-08-13
+x F15 — **Equipes independentes** (decisão G8): padrão de 2 equipes, cada uma com o seu
+    roteiro; aba `Cenarios` vira grade equipes × prazo, só com o viável — 2026-08-13
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -130,19 +132,24 @@ x F14 — Mapa reduzido a pontos: saíram a polilinha, a numeração das paradas
   repartir entre equipes, então o radio saiu junto e `gravar_mapa` voltou a
   `(df_ucs, lat0, lon0, caminho)`. O cálculo de custo **não muda** — `montar_roteiro` segue
   intacto em `distancias.py`.
-- **Inventário das lacunas da aba `Cenarios` (2026-08-13):** `planning/LACUNAS_CENARIOS.md` lista as
-  10 (L1–L10), com efeito em R$, esforço e prioridade. A pendência abaixo é a **L1**; as duas
-  recomendadas para ir antes dela são baratas — **L4** (nenhum teto de equipes: a aba já propôs 5
-  equipes para 12 obras) e **L2** (`cenarios_por_prazo` não usa `TAMANHO_EQUIPE`, então a coluna
-  `Equipes` conta *pessoas* — inofensivo em `1.0`, mente em `2.0`, que é justamente o valor usado
-  para conversar com a engenharia).
-- **Pendência aberta pela F11, agora sem vitrine (ver G7) — o custo de dividir não está no custo.**
-  `dividir_roteiro` mediu a divisão real das obras entre equipes: 2 equipes rodam **+18% a +37%**
-  mais km que uma, porque cada uma sai da capital e volta. A aba `Cenarios` ainda assume trabalho
-  perfeitamente divisível, então seus cenários multi-equipe são **otimistas**. Com a F14 o mapa
-  deixou de exibir esse km, e **só o aviso do `Leia-me` sobrou** — o que torna esta pendência mais
-  relevante, não menos. `dividir_roteiro` e `montar_roteiro` continuam no código e testadas por
-  causa dela **e da F-futura abaixo**; não são candidatas a remoção.
+- **G8 — DUAS EQUIPES INDEPENDENTES, E A GRADE DE CENÁRIOS (F15, decisão do humano em
+  2026-08-13):** o cálculo oficial passa a assumir **2 equipes** (`config.N_EQUIPES_PADRAO`), não
+  mais uma. Equipes são **independentes**: `custo.repartir_entre_equipes` corta o itinerário em N
+  blocos contíguos e roteia cada um da capital, de modo que o km de dividir entra no número — a
+  antiga L1 deixou de ser ressalva. O prazo é o da **equipe mais lenta**; todas são faturadas por
+  ele. A aba `Cenarios` deixa de ser uma faixa de prazos e vira **grade equipes × prazo**, de
+  `N_EQUIPES_MIN` a `N_EQUIPES_MAX` (1 a 7) e até `MAX_DIAS_POR_EQUIPE` (20) dias por equipe.
+  **Combinação inviável não aparece nem é calculada** — um pré-filtro pelo limite inferior (só
+  horas de inspeção) descarta antes de rotear. O caso que fixou a regra, dado pelo humano: 80 UCs
+  de MLA a 3 UCs/dia são 213h = 27 dias só de inspeção para uma equipe; não há o que apresentar.
+  Efeito no número: **o padrão ficou mais caro**, porque duas equipes pagam dois deslocamentos —
+  na sondagem de 26 obras na PB, R$ 41.760 (1 equipe, 1.220 km) → R$ 60.960 (2 equipes, 1.663 km).
+  Isso fecha as lacunas L1, L2, L3, L4 e L7 de `LACUNAS_CENARIOS.md`.
+- **Cuidado que a G8 cria:** `N_EQUIPES` (quantas) e `TAMANHO_EQUIPE` (pessoas em cada) são
+  grandezas distintas e ambas multiplicam o custo. O benchmark da engenharia é
+  `TAMANHO_EQUIPE=2, N_EQUIPES=1` — uma dupla num roteiro só. Confundir os dois é o erro que a
+  antiga L2 já tinha armado; por isso a planilha traz as colunas `Equipes` e `Pessoas por
+  equipe` lado a lado, e o `Leia-me` abre explicando a diferença.
 - **F-futura — o roteiro volta, numa fase OPERACIONAL** (humano, 2026-08-13). A supressão da F14
   é de **visualização para decisão gerencial**, não de escopo: o itinerário desenhado tem lugar
   num produto voltado a quem vai a campo, onde a rota é o assunto e o leitor sabe que ela é

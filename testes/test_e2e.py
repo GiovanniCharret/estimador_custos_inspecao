@@ -110,7 +110,8 @@ def test_e2e_custo_e_por_amostra_nao_por_estrato(tmp_path):
     assert resumo["Custo total (R$)"].tolist() == pytest.approx(
         (resumo["Custo campo (R$)"] + resumo["Custo fixo OS (R$)"]).tolist())
     # E o campo fecha com a formula de dias (o que amarra o modelo ao benchmark).
-    esperado_campo = (resumo["Dias faturados"] * config.TAMANHO_EQUIPE
+    esperado_campo = (resumo["Equipes"] * resumo["Pessoas por equipe"]
+                      * resumo["Dias faturados (por equipe)"]
                       * config.HORAS_DIA_CAMPO * config.TARIFAS_HORA[config.PERFIL_EQUIPE]["campo"])
     assert resumo["Custo campo (R$)"].tolist() == pytest.approx(esperado_campo.tolist())
 
@@ -149,9 +150,55 @@ def test_e2e_roteiro_encadeado_derruba_a_quilometragem(tmp_path):
     por_municipio = obras.groupby("Municipio")[["Latitude", "Longitude"]].mean()
     ida_e_volta = sum(2 * haversine_km(lat_cap, lon_cap, r.Latitude, r.Longitude)
                       for r in por_municipio.itertuples()) * config.FATOR_RODOVIARIO
-    assert a1["Roteiro (km estrada)"] < ida_e_volta
-    # A ordem do roteiro e' uma numeracao completa das obras da amostra.
-    assert sorted(obras["Ordem"]) == list(range(1, len(obras) + 1))
+    # Vale mesmo com as equipes do padrao somando os seus roteiros: encadear ainda ganha
+    # com folga de mandar a equipe voltar a capital a cada municipio.
+    assert a1["Roteiro somado (km estrada)"] < ida_e_volta
+    # Toda obra tem dono e a ordem e' completa DENTRO de cada equipe (cada uma tem o seu
+    # roteiro, entao a numeracao reinicia em 1 a cada equipe).
+    assert len(obras) == len(ODIS)
+    for _, da_equipe in obras.groupby("Equipe"):
+        assert sorted(da_equipe["Ordem"]) == list(range(1, len(da_equipe) + 1))
+
+
+def test_e2e_padrao_sao_duas_equipes_independentes(tmp_path):
+    # Decisao do humano (F15): o numero oficial e' o de DUAS equipes, nao mais de uma.
+    _monta_entrada(tmp_path, municipios={odi: f"MUNICIPIO {i}" for i, odi in enumerate(ODIS)})
+    assert executar(tmp_path) == 0
+    caminho = tmp_path / "saida" / "Resumo_Custos.xlsx"
+    resumo = pd.read_excel(caminho, sheet_name="Resumo")
+    linha = resumo[resumo["Amostra"] == 1].iloc[0]
+    assert linha["Equipes"] == config.N_EQUIPES_PADRAO == 2
+    # 'Equipes' e 'Pessoas por equipe' sao colunas distintas e nao se confundem.
+    assert linha["Pessoas por equipe"] == config.TAMANHO_EQUIPE
+    # As duas equipes aparecem no detalhe, cada obra com um dono so.
+    detalhe = pd.read_excel(caminho, sheet_name="Detalhe")
+    obras = detalhe[detalhe["Amostra"] == 1]
+    assert set(obras["Equipe"]) == {1, 2}
+    assert len(obras) == len(ODIS)
+
+
+def test_e2e_grade_de_cenarios_respeita_os_limites(tmp_path):
+    # A aba Cenarios e' uma grade (equipes x prazo) e nao mostra o inviavel.
+    _monta_entrada(tmp_path, municipios={odi: f"MUNICIPIO {i}" for i, odi in enumerate(ODIS)})
+    assert executar(tmp_path) == 0
+    cenarios = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Cenarios")
+    assert len(cenarios) > 0
+    # Nenhuma linha fora dos limites declarados em config.
+    assert cenarios["Equipes"].min() >= config.N_EQUIPES_MIN
+    assert cenarios["Equipes"].max() <= config.N_EQUIPES_MAX
+    assert cenarios["Dias trabalho (por equipe)"].max() <= config.MAX_DIAS_POR_EQUIPE
+    # Varias equipes E varios prazos: e' grade, nao lista.
+    assert cenarios["Equipes"].nunique() > 1
+    assert cenarios["Dias trabalho (por equipe)"].nunique() > 1
+    # Mais equipes = mais km somado (cada uma sai da capital e volta).
+    km = cenarios.groupby("Equipes")["Roteiro somado (km estrada)"].first()
+    assert km.is_monotonic_increasing
+    # Exatamente uma linha 'calculado', e ela e' a do Resumo.
+    marcadas = cenarios[cenarios["Cenario"] == "calculado"]
+    assert len(marcadas) == 1
+    resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
+    oficial = resumo[resumo["Amostra"] == 1].iloc[0]
+    assert marcadas.iloc[0]["Custo total (R$)"] == pytest.approx(oficial["Custo total (R$)"])
 
 
 def test_e2e_mapa_localiza_as_obras_sem_propor_itinerario(tmp_path):
@@ -338,8 +385,8 @@ def test_e2e_amostra_vazia_nao_derruba_o_pipeline(tmp_path):
     linha = resumo[resumo["Amostra"] == 2].iloc[0]
     # Sem obras: zero geometria, zero dias de trabalho - mas o fixo de OS continua existindo.
     assert linha["ODIs"] == 0 and linha["UCs"] == 0
-    assert linha["Roteiro (km estrada)"] == pytest.approx(0.0)
-    assert linha["Dias trabalho"] == 0
+    assert linha["Roteiro somado (km estrada)"] == pytest.approx(0.0)
+    assert linha["Dias trabalho (por equipe)"] == 0
     # E nao ha cenario de prazo a explorar para uma amostra sem trabalho.
     assert len(pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Cenarios")) == 0
 
