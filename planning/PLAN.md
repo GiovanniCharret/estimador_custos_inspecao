@@ -130,6 +130,12 @@ x F14 — Mapa reduzido a pontos: saíram a polilinha, a numeração das paradas
   repartir entre equipes, então o radio saiu junto e `gravar_mapa` voltou a
   `(df_ucs, lat0, lon0, caminho)`. O cálculo de custo **não muda** — `montar_roteiro` segue
   intacto em `distancias.py`.
+- **Inventário das lacunas da aba `Cenarios` (2026-08-13):** `planning/LACUNAS_CENARIOS.md` lista as
+  10 (L1–L10), com efeito em R$, esforço e prioridade. A pendência abaixo é a **L1**; as duas
+  recomendadas para ir antes dela são baratas — **L4** (nenhum teto de equipes: a aba já propôs 5
+  equipes para 12 obras) e **L2** (`cenarios_por_prazo` não usa `TAMANHO_EQUIPE`, então a coluna
+  `Equipes` conta *pessoas* — inofensivo em `1.0`, mente em `2.0`, que é justamente o valor usado
+  para conversar com a engenharia).
 - **Pendência aberta pela F11, agora sem vitrine (ver G7) — o custo de dividir não está no custo.**
   `dividir_roteiro` mediu a divisão real das obras entre equipes: 2 equipes rodam **+18% a +37%**
   mais km que uma, porque cada uma sai da capital e volta. A aba `Cenarios` ainda assume trabalho

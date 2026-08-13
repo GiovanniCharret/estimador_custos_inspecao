@@ -249,9 +249,15 @@ Três cuidados:
 - `planning/DESIGN.md` (D1–D8) · `planning/MODELO_CUSTO.md` (fórmula e fontes) ·
   `planning/PLANO_IMPLEMENTACAO.md` (plano passo a passo com código de cada task) ·
   `planning/definition of done.md` (critério de aceite por fase, para o humano acompanhar).
+- `planning/LACUNAS_CENARIOS.md` — **as 10 coisas que a aba `Cenarios` não modela** (L1–L10),
+  com efeito em R$ e prioridade. Escrito em 2026-08-13 porque a aba é a que vai para a mesa de
+  decisão e só uma das dez lacunas (o km de dividir) chegava ao usuário, pelo `Leia-me`.
+  Cuidado especial com **L2**: `cenarios_por_prazo` não usa `TAMANHO_EQUIPE`, então a coluna
+  `Equipes` conta *pessoas*; inofensivo em `1.0`, mente em `2.0`.
 - Cada documento de planejamento novo ganha companion HTML autocontido em `planning/html/`
   (D4, inspirado em `planning/html-effectiveness/`). Existem hoje: `DESIGN.html`,
-  `MODELO_CUSTO.html`, `PLANO_IMPLEMENTACAO.html` — `PLAN.md` ainda não tem companion.
+  `MODELO_CUSTO.html`, `PLANO_IMPLEMENTACAO.html`, `LACUNAS_CENARIOS.html` — `PLAN.md` ainda
+  não tem companion.
 - `planning/PROJECT_BUILDING.md` — checklist do humano, **somente leitura**.
 - Glossário de status: `x` concluído · `f` revisão futura · `a` anulado · `n` não se aplica ·
   `r` rollback (falhou) · `[ ]` pendente.

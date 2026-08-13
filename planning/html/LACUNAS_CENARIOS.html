@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>O que a aba Cenarios ainda nao modela</title>
+<style>
+  :root {
+    --ivory:#FAF9F5; --slate:#141413; --clay:#D97757; --oat:#E3DACC;
+    --olive:#788C5D; --gray-150:#F0EEE6; --gray-300:#D1CFC5;
+    --gray-500:#87867F; --gray-700:#3D3D3A; --amber:#B8860B;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--ivory); color:var(--gray-700); font-family:var(--sans);
+         font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased;
+         padding:56px 24px 120px; }
+  .page { max-width:1120px; margin:0 auto; display:grid;
+          grid-template-columns:210px minmax(0,1fr); gap:48px; }
+  @media (max-width:960px){ .page{grid-template-columns:1fr;} nav{display:none;} }
+
+  nav { position:sticky; top:32px; align-self:start; font-size:13px; }
+  nav .label { font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+               text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+  nav a { display:block; padding:5px 0 5px 12px; border-left:2px solid var(--gray-300);
+          color:var(--gray-700); text-decoration:none; }
+  nav a:hover { color:var(--slate); border-color:var(--clay); }
+  nav a.hot { border-color:var(--clay); }
+  nav .files { margin-top:28px; border-top:1px solid var(--gray-300); padding-top:14px; }
+  nav .files code { display:block; font-family:var(--mono); font-size:10.5px;
+                    color:var(--gray-500); padding:3px 0; word-break:break-all;
+                    background:none; }
+
+  .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.08em;
+             text-transform:uppercase; color:var(--gray-500); margin-bottom:10px; }
+  h1 { font-family:var(--serif); font-weight:500; font-size:33px; color:var(--slate);
+       letter-spacing:-.01em; margin-bottom:16px; line-height:1.2; }
+  h2 { font-family:var(--serif); font-weight:500; font-size:23px; color:var(--slate);
+       margin:46px 0 14px; scroll-margin-top:24px; }
+  p { margin-bottom:12px; max-width:720px; }
+  code { font-family:var(--mono); font-size:12.5px; background:var(--gray-150);
+         padding:1px 5px; border-radius:4px; }
+  strong { color:var(--slate); }
+  .lead { font-size:16.5px; }
+
+  .tldr { border:1.5px solid var(--gray-300); border-left:3px solid var(--clay);
+          border-radius:10px; background:#fff; padding:18px 20px; margin:18px 0 10px; }
+  .tldr p:last-child { margin-bottom:0; }
+
+  pre { background:#fff; border:1.5px solid var(--gray-300); border-radius:10px;
+        padding:16px 18px; margin:16px 0; overflow-x:auto;
+        font-family:var(--mono); font-size:12.5px; line-height:1.6; color:var(--gray-700); }
+  pre b { color:var(--clay); font-weight:600; }
+
+  table { border-collapse:collapse; width:100%; margin:16px 0; font-size:13.5px; }
+  .scroll { overflow-x:auto; margin:16px 0; }
+  .scroll table { margin:0; }
+  th { text-align:left; font-family:var(--mono); font-size:10.5px; letter-spacing:.06em;
+       text-transform:uppercase; color:var(--gray-500); font-weight:500;
+       border-bottom:1.5px solid var(--gray-300); padding:8px 12px 8px 0; }
+  td { padding:9px 12px 9px 0; border-bottom:1px solid var(--gray-300);
+       vertical-align:top; }
+  td.num, th.num { text-align:right; font-family:var(--mono); font-size:12.5px;
+                   padding-right:18px; }
+  tr.hi td { background:var(--gray-150); }
+
+  .gap { background:#fff; border:1.5px solid var(--gray-300); border-radius:12px;
+         padding:22px 24px; margin:18px 0; scroll-margin-top:24px; }
+  .gap.grave { border-left:3px solid var(--clay); }
+  .gap.media { border-left:3px solid var(--amber); }
+  .gap.leve  { border-left:3px solid var(--olive); }
+  .gap h3 { font-family:var(--serif); font-weight:500; font-size:19px; color:var(--slate);
+            margin-bottom:4px; }
+  .gap .tag { font-family:var(--mono); font-size:10px; letter-spacing:.08em;
+              text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+  .gap p:last-child { margin-bottom:0; }
+  .efeito { border-top:1px dashed var(--gray-300); margin-top:14px; padding-top:12px;
+            font-size:14px; }
+  .efeito b { font-family:var(--mono); font-size:10.5px; letter-spacing:.06em;
+              text-transform:uppercase; color:var(--gray-500); display:block;
+              margin-bottom:4px; font-weight:500; }
+
+  footer { margin-top:56px; border-top:1px solid var(--gray-300); padding-top:16px;
+           font-size:12.5px; color:var(--gray-500); }
+</style>
+</head>
+<body>
+<div class="page">
+
+<nav>
+  <div class="label">Lacunas</div>
+  <a href="#l1" class="hot">L1 &middot; km de dividir</a>
+  <a href="#l2" class="hot">L2 &middot; Equipes = pessoas</a>
+  <a href="#l3">L3 &middot; ocupa&ccedil;&atilde;o</a>
+  <a href="#l4" class="hot">L4 &middot; sem teto de equipes</a>
+  <a href="#l5">L5 &middot; fixo constante</a>
+  <a href="#l6">L6 &middot; di&aacute;ria zerada</a>
+  <a href="#l7">L7 &middot; faixa &plusmn;2 fixa</a>
+  <a href="#l8">L8 &middot; velocidade/fator</a>
+  <a href="#l9">L9 &middot; sem conting&ecirc;ncia</a>
+  <a href="#l10">L10 &middot; s&oacute; varia prazo</a>
+  <a href="#prioridade">Prioridade</a>
+  <div class="files">
+    <code>src/custo.py</code>
+    <code>src/distancias.py</code>
+    <code>src/config.py</code>
+    <code>planning/LACUNAS_CENARIOS.md</code>
+  </div>
+</nav>
+
+<main>
+  <div class="eyebrow">Planning &middot; 2026-08-13</div>
+  <h1>O que a aba <code>Cenarios</code> ainda n&atilde;o modela</h1>
+  <p class="lead">A aba <code>Cenarios</code> &eacute; a que vai para a mesa de decis&atilde;o &mdash;
+  ela responde <em>&ldquo;e se eu precisar terminar antes?&rdquo;</em>. &Eacute; tamb&eacute;m a que
+  mais assume coisas sem dizer.</p>
+
+  <div class="tldr">
+    <p><strong>Nada aqui &eacute; bug.</strong> O programa faz o que foi especificado; estes s&atilde;o
+    limites conhecidos do modelo. O <code>Leia-me</code> da planilha avisa da principal em duas
+    linhas &mdash; as outras nove nunca foram escritas em lugar nenhum.</p>
+    <p>Duas delas s&atilde;o baratas de fechar e uma <strong>j&aacute; est&aacute; armada</strong>:
+    dispara no dia em que algu&eacute;m mudar <code>TAMANHO_EQUIPE</code> para 2 para conversar com a
+    engenharia.</p>
+  </div>
+
+  <h2>O piso: o que a aba faz hoje</h2>
+  <p><code>custo.cenarios_por_prazo</code> inverte o c&aacute;lculo principal. Em vez de
+  &ldquo;dada a equipe, quantos dias&rdquo;, pergunta &ldquo;dado o prazo, quantas equipes
+  cabem&rdquo;:</p>
+<pre>para cada dias em [calculado &minus; 2 ... calculado + 2]:
+    equipes        = teto(<b>horas_campo</b> / (8h &times; dias))
+    dias_faturados = dias + DIAS_MOBILIZACAO
+    custo_campo    = equipes &times; dias_faturados &times; 8h &times; R$600
+    custo_total    = custo_campo + R$12.960</pre>
+  <p><code>horas_campo</code> vem do c&aacute;lculo de <strong>uma</strong> equipe e nunca &eacute;
+  recalculado. Essa &uacute;nica frase &eacute; a raiz de tr&ecirc;s das lacunas abaixo.</p>
+
+  <h2 id="l1">L1 &mdash; O quil&ocirc;metro de dividir n&atilde;o entra no custo</h2>
+  <div class="gap grave">
+    <div class="tag">A maior &middot; a &uacute;nica j&aacute; avisada ao usu&aacute;rio</div>
+    <p>A aba trata o trabalho como <strong>perfeitamente divis&iacute;vel</strong>: assume que N
+    equipes rodam os mesmos km que uma. Na pr&aacute;tica cada equipe sai da capital e volta a ela.
+    <code>dividir_roteiro</code> mede quanto isso custa em estrada:</p>
+    <div class="scroll">
+    <table>
+      <tr><th>Estratifica&ccedil;&atilde;o (PB, LPT, Amostra 1)</th><th class="num">1 equipe</th>
+          <th class="num">2 equipes</th><th class="num">3 equipes</th></tr>
+      <tr><td>3 estratos</td><td class="num">1.536 km</td>
+          <td class="num"><strong>2.100 km &nbsp;+37%</strong></td><td class="num">2.501 km &nbsp;+63%</td></tr>
+      <tr><td>4 estratos</td><td class="num">1.560 km</td>
+          <td class="num"><strong>1.838 km &nbsp;+18%</strong></td><td class="num">2.426 km &nbsp;+56%</td></tr>
+      <tr><td>5 estratos</td><td class="num">1.059 km</td>
+          <td class="num"><strong>1.301 km &nbsp;+23%</strong></td><td class="num">1.832 km &nbsp;+73%</td></tr>
+    </table>
+    </div>
+    <p>km em linha reta, antes do fator rodovi&aacute;rio &mdash; medidos em execu&ccedil;&atilde;o real.</p>
+    <p><strong>Por que ainda n&atilde;o foi fechada:</strong> exige realimentar
+    <code>cenarios_por_prazo</code> com a geometria de <code>dividir_roteiro</code> (hoje ele s&oacute;
+    recebe <code>numeros</code>, um dicion&aacute;rio sem geometria), e isso torna o c&aacute;lculo
+    <strong>iterativo</strong> &mdash; mais km significa mais horas, que podem exigir mais um dia, que
+    muda a divis&atilde;o. Precisa de uma decis&atilde;o sobre onde parar a itera&ccedil;&atilde;o.</p>
+    <div class="efeito"><b>Efeito</b>Os cen&aacute;rios multi-equipe s&atilde;o <strong>otimistas</strong>.
+    Como encurtar o prazo j&aacute; encarece no modelo atual, fechar esta lacuna <strong>acentua</strong>
+    a conclus&atilde;o que a aba entrega &mdash; n&atilde;o a inverte. O risco &eacute; aprovar um prazo
+    curto com base num n&uacute;mero que subestima o pr&oacute;prio prazo curto.</div>
+  </div>
+
+  <h2 id="l2">L2 &mdash; A coluna <code>Equipes</code> conta PESSOAS, n&atilde;o equipes</h2>
+  <div class="gap grave">
+    <div class="tag">Armadilha armada &middot; dispara com TAMANHO_EQUIPE = 2</div>
+    <p><code>cenarios_por_prazo</code> <strong>n&atilde;o usa <code>config.TAMANHO_EQUIPE</code> em
+    lugar nenhum</strong>: nem em <code>equipes = teto(horas / (8 &times; dias))</code>, nem em
+    <code>custo_campo = equipes &times; dias &times; 8 &times; tarifa</code>. A vari&aacute;vel
+    <code>equipes</code> conta, na verdade, <em>unidades de uma pessoa</em>.</p>
+    <p>Sondagem com <code>TAMANHO_EQUIPE = 2.0</code> (amostra sint&eacute;tica de 12 obras):</p>
+    <div class="scroll">
+    <table>
+      <tr><th>Cen&aacute;rio</th><th class="num">Dias</th><th class="num">&ldquo;Equipes&rdquo;</th>
+          <th class="num">Custo</th><th>Leitura correta</th></tr>
+      <tr><td>&minus;2 dias</td><td class="num">1</td><td class="num">5</td>
+          <td class="num">R$ 60.960</td><td>5 <strong>pessoas</strong>, n&atilde;o 5 duplas</td></tr>
+      <tr class="hi"><td>calculado</td><td class="num">3</td><td class="num">2</td>
+          <td class="num">R$ 51.360</td><td>1 dupla &mdash; bate com o <code>Resumo</code></td></tr>
+      <tr><td>+2 dias</td><td class="num">5</td><td class="num">1</td>
+          <td class="num">R$ 41.760</td><td><strong>1 pessoa sozinha</strong>, quebrando a dupla</td></tr>
+    </table>
+    </div>
+    <p>A linha <code>calculado</code> bate com a aba <code>Resumo</code> por <strong>coincid&ecirc;ncia
+    aritm&eacute;tica</strong>: <code>dias_trabalho</code> j&aacute; foi dividido por
+    <code>TAMANHO_EQUIPE</code>, ent&atilde;o <code>teto(horas/(8&times;dias))</code> cai de volta em
+    &asymp; <code>TAMANHO_EQUIPE</code>. As demais linhas n&atilde;o t&ecirc;m essa prote&ccedil;&atilde;o
+    &mdash; e a aba chega a propor <strong>desfazer a equipe</strong>, mandando uma pessoa sozinha a campo.</p>
+    <p>Agrava: o <code>Resumo</code> tem a coluna <strong>Equipe</strong> (pessoas por equipe) e o
+    <code>Cenarios</code> tem <strong>Equipes</strong> (contagem). Dois nomes quase id&ecirc;nticos,
+    duas grandezas diferentes.</p>
+    <div class="efeito"><b>Efeito</b>Hoje, zero &mdash; com <code>TAMANHO_EQUIPE = 1.0</code> as duas
+    leituras coincidem. No dia em que algu&eacute;m mudar para <code>2.0</code> para reproduzir o
+    benchmark da engenharia, a aba passa a mentir sem avisar. E esse &eacute; justamente o momento em
+    que a planilha estar&aacute; sob mais escrut&iacute;nio.</div>
+  </div>
+
+  <h2 id="l3">L3 &mdash; A ocupa&ccedil;&atilde;o da equipe est&aacute; superestimada</h2>
+  <div class="gap media">
+    <div class="tag">Mesma raiz de L1 &middot; fecha junto</div>
+    <p><code>ocupacao = horas_campo / (8h &times; dias &times; equipes)</code> usa o
+    <code>horas_campo</code> de <strong>uma</strong> equipe. Como o km real cresce ao dividir, a
+    ocupa&ccedil;&atilde;o verdadeira dos cen&aacute;rios multi-equipe &eacute; <strong>maior</strong>
+    que a exibida &mdash; a equipe est&aacute; mais ocupada do que a planilha diz, rodando estrada.</p>
+    <div class="efeito"><b>Efeito</b>A coluna que existe justamente para revelar desperd&iacute;cio
+    (ocupa&ccedil;&atilde;o baixa = pagando por gente parada) subestima o trabalho real. Uma
+    ocupa&ccedil;&atilde;o de 59% pode ser folga aparente que na pr&aacute;tica &eacute; tempo de
+    deslocamento n&atilde;o contabilizado.</div>
+  </div>
+
+  <h2 id="l4">L4 &mdash; N&atilde;o existe teto de equipes dispon&iacute;veis</h2>
+  <div class="gap media">
+    <div class="tag">Melhor rela&ccedil;&atilde;o esfor&ccedil;o / benef&iacute;cio</div>
+    <p>A aba prop&otilde;e o n&uacute;mero de equipes que a matem&aacute;tica pedir. Na sondagem acima
+    ela chegou a <strong>5</strong> para uma amostra de 12 obras. Nada no modelo pergunta se h&aacute;
+    5 equipes, se a contratada consegue mobiliz&aacute;-las, ou se faz sentido operacional.</p>
+    <p>Fechar &eacute; barato: um <code>MAX_EQUIPES</code> em <code>config.py</code> e o descarte (ou a
+    marca&ccedil;&atilde;o) dos cen&aacute;rios acima do teto.</p>
+    <div class="efeito"><b>Efeito</b>Cen&aacute;rios fisicamente imposs&iacute;veis apresentados com a
+    mesma autoridade dos vi&aacute;veis.</div>
+  </div>
+
+  <h2 id="l5">L5 &mdash; O custo fixo n&atilde;o varia com o n&uacute;mero de equipes</h2>
+  <div class="gap leve">
+    <div class="tag">Premissa n&atilde;o verificada</div>
+    <p>Todos os cen&aacute;rios carregam os mesmos R$ 12.960 (36h &times; R$360), uma vez por amostra.
+    A premissa &eacute; que a Ordem de Servi&ccedil;o &eacute; uma s&oacute;, independentemente de
+    quantas equipes v&atilde;o a campo.</p>
+    <p>&Eacute; defens&aacute;vel &mdash; uma amostra, um relat&oacute;rio. Mas coordenar 3 equipes,
+    consolidar 3 cadernos de campo e conciliar diverg&ecirc;ncias plausivelmente custa mais horas de
+    escrit&oacute;rio que coordenar uma.</p>
+    <div class="efeito"><b>Efeito</b>Se a premissa for falsa, refor&ccedil;a L1 na mesma
+    dire&ccedil;&atilde;o: cen&aacute;rios multi-equipe otimistas.</div>
+  </div>
+
+  <h2 id="l6">L6 &mdash; Di&aacute;ria/pernoite continua zerada nos cen&aacute;rios longos</h2>
+  <div class="gap leve">
+    <div class="tag">Decis&atilde;o G2 sob tens&atilde;o</div>
+    <p><code>CUSTO_DIARIA = 0.0</code> por decis&atilde;o G2: a tarifa de R$600/h j&aacute; embutiria
+    hospedagem e alimenta&ccedil;&atilde;o. A decis&atilde;o foi tomada olhando o caso base.</p>
+    <p>Ela fica mais tensionada exatamente onde os cen&aacute;rios vivem: prazos longos no interior,
+    com mais equipes e mais pernoites. E a aba n&atilde;o tem como mostrar isso, porque o
+    par&acirc;metro &eacute; constante.</p>
+    <div class="efeito"><b>Efeito</b>Se a tarifa n&atilde;o cobrir pernoite de fato, o erro cresce com
+    o prazo &mdash; e a <code>Cenarios</code> &eacute; a aba que mais varia prazo.</div>
+  </div>
+
+  <h2 id="l7">L7 &mdash; A faixa &eacute; fixa em &plusmn;2 dias, n&atilde;o proporcional</h2>
+  <div class="gap leve">
+    <div class="tag">VARIACAO_DIAS_CENARIOS = 2</div>
+    <div class="scroll">
+    <table>
+      <tr><th>Amostra real</th><th class="num">Prazo calculado</th><th class="num">Faixa</th>
+          <th>O que &plusmn;2 representa</th></tr>
+      <tr><td>RO, 3 estratos</td><td class="num">26 dias</td><td class="num">24&ndash;28</td>
+          <td>&plusmn;8% &mdash; janela estreita demais para ser &uacute;til</td></tr>
+      <tr><td>PB, 5 estratos</td><td class="num">6 dias</td><td class="num">4&ndash;8</td>
+          <td>&plusmn;33% &mdash; propor&ccedil;&atilde;o razo&aacute;vel</td></tr>
+      <tr><td>amostra pequena</td><td class="num">2 dias</td><td class="num">1&ndash;4</td>
+          <td>assim&eacute;trica: bate no piso de 1 dia</td></tr>
+    </table>
+    </div>
+    <div class="efeito"><b>Efeito</b>Em amostras grandes a aba oferece cinco cen&aacute;rios quase
+    id&ecirc;nticos; em amostras pequenas ela trunca de um lado.</div>
+  </div>
+
+  <h2 id="l8">L8 &mdash; Velocidade e fator rodovi&aacute;rio continuam sendo chutes da F1</h2>
+  <div class="gap media">
+    <div class="tag">Decis&atilde;o G4 &middot; nunca calibrada</div>
+    <p><code>VELOCIDADE_KMH = 45</code> e <code>FATOR_RODOVIARIO = 1,40</code> entram em
+    <code>horas_roteiro</code>, que &eacute; metade de <code>horas_campo</code>, que &eacute; a entrada
+    de <strong>todos</strong> os cen&aacute;rios.</p>
+    <p>Atenuante importante: como os dois par&acirc;metros afetam todos os cen&aacute;rios igualmente,
+    a <strong>compara&ccedil;&atilde;o entre cen&aacute;rios</strong> sobrevive.</p>
+    <div class="efeito"><b>Efeito</b>A aba &eacute; confi&aacute;vel para escolher <em>entre</em>
+    prazos, e n&atilde;o para prometer um n&uacute;mero.</div>
+  </div>
+
+  <h2 id="l9">L9 &mdash; N&atilde;o h&aacute; conting&ecirc;ncia</h2>
+  <div class="gap media">
+    <div class="tag">E h&aacute; evid&ecirc;ncia de que a engenharia usa uma</div>
+    <p>A aba n&atilde;o reserva nada para chuva, acesso impedido, obra n&atilde;o localizada ou
+    retrabalho. O modelo &eacute; determin&iacute;stico: mesma geometria, mesmo prazo, sempre.</p>
+    <p>H&aacute; um ind&iacute;cio concreto de que isso importa. Ao calibrar contra o benchmark (F9),
+    ficou registrado que os dias da engenharia <strong>n&atilde;o s&atilde;o geom&eacute;tricos</strong>:
+    a estratifica&ccedil;&atilde;o de 5 estratos tem o roteiro mais curto e, ainda assim, o maior
+    n&uacute;mero de dias. Nenhum modelo determin&iacute;stico reproduz 8/5/7 dias a partir da
+    geometria &mdash; o que sobra &eacute; julgamento que o modelo n&atilde;o tem.</p>
+    <div class="efeito"><b>Efeito</b>Os prazos da aba s&atilde;o <strong>pisos t&eacute;cnicos</strong>,
+    n&atilde;o compromissos. Vale dizer isso ao lado da tabela quando ela for apresentada.</div>
+  </div>
+
+  <h2 id="l10">L10 &mdash; Os cen&aacute;rios variam s&oacute; o prazo</h2>
+  <div class="gap leve">
+    <div class="tag">Lacuna de escopo, n&atilde;o de exatid&atilde;o</div>
+    <p>Ficam fora todas as outras alavancas: perfil da equipe (<code>TECNICO</code> custa R$513,22/h de
+    campo contra R$600 do <code>ENGENHEIRO</code>), produtividade (<code>UCS_POR_DIA</code>), e a
+    escolha da estratifica&ccedil;&atilde;o em si &mdash; que hoje se compara na aba <code>Resumo</code>,
+    mas nunca cruzada com prazo.</p>
+    <div class="efeito"><b>Efeito</b>A conversa de planejamento fica restrita a &ldquo;mais
+    r&aacute;pido custa mais&rdquo;, quando existem outras trocas a fazer.</div>
+  </div>
+
+  <h2 id="prioridade">Prioridade sugerida</h2>
+  <div class="scroll">
+  <table>
+    <tr><th>#</th><th>Lacuna</th><th>Erra o R$?</th><th>Esfor&ccedil;o</th><th>Prioridade</th></tr>
+    <tr class="hi"><td>L4</td><td>sem teto de equipes</td><td>n&atilde;o (erra a viabilidade)</td>
+        <td>baixo</td><td><strong>1&ordm; &mdash; melhor rela&ccedil;&atilde;o</strong></td></tr>
+    <tr class="hi"><td>L2</td><td><code>Equipes</code> conta pessoas</td>
+        <td>sim, se <code>TAMANHO_EQUIPE &ne; 1</code></td><td>baixo</td>
+        <td><strong>2&ordm; &mdash; armadilha armada</strong></td></tr>
+    <tr class="hi"><td>L1+L3</td><td>km de dividir e ocupa&ccedil;&atilde;o</td>
+        <td><strong>sim, subestima</strong></td><td>alto (iterativo)</td>
+        <td><strong>3&ordm; &mdash; a que mais importa</strong></td></tr>
+    <tr><td>L7</td><td>faixa fixa &plusmn;2 dias</td><td>n&atilde;o</td><td>baixo</td><td>4&ordm;</td></tr>
+    <tr><td>L9</td><td>sem conting&ecirc;ncia</td><td>sim, subestima</td>
+        <td>decis&atilde;o, n&atilde;o c&oacute;digo</td><td>5&ordm;</td></tr>
+    <tr><td>L8</td><td>velocidade / fator</td><td>sim, no absoluto</td>
+        <td>m&eacute;dio (dados externos)</td><td>6&ordm;</td></tr>
+    <tr><td>L5</td><td>fixo constante</td><td>talvez</td><td>decis&atilde;o</td><td>7&ordm;</td></tr>
+    <tr><td>L6</td><td>di&aacute;ria zerada</td><td>talvez</td><td>decis&atilde;o</td><td>8&ordm;</td></tr>
+    <tr><td>L10</td><td>s&oacute; varia prazo</td><td>n&atilde;o</td><td>m&eacute;dio</td><td>9&ordm;</td></tr>
+  </table>
+  </div>
+  <p><strong>Recomenda&ccedil;&atilde;o:</strong> L4 e L2 primeiro &mdash; s&atilde;o baratas, e L2 &eacute;
+  uma armadilha j&aacute; armada. S&oacute; depois L1+L3, que &eacute; a corre&ccedil;&atilde;o de fundo.</p>
+
+  <footer>
+    Companion de <code>planning/LACUNAS_CENARIOS.md</code> &middot; conven&ccedil;&atilde;o D4 &middot;
+    2026-08-13. F&oacute;rmula em <code>src/custo.py::cenarios_por_prazo</code>; medi&ccedil;&atilde;o do
+    km real em <code>src/distancias.py::dividir_roteiro</code>; par&acirc;metros em
+    <code>src/config.py</code>.
+  </footer>
+</main>
+</div>
+</body>
+</html>
