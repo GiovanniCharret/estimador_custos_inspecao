@@ -142,9 +142,10 @@ def dividir_roteiro(df_odis, lat_origem, lon_origem, n_equipes):
     com duas equipes, nos dados reais).
 
     ATENCAO - nao e' chamada pelo pipeline desde 2026-08-13, quando o mapa deixou de
-    desenhar rotas; era ele quem consumia essa divisao. Fica aqui, testada, porque e' a
-    unica medida que existe do quanto a aba 'Cenarios' e' otimista, e essa pendencia
-    (embutir o km real no custo multi-equipe) continua aberta no PLAN.md.
+    desenhar rotas; era ele quem consumia essa divisao. NAO E' CODIGO MORTO: fica aqui,
+    testada, por dois motivos ja decididos - e' a unica medida que existe do quanto a aba
+    'Cenarios' e' otimista (pendencia aberta no PLAN.md), e o roteiro desenhado deve voltar
+    numa fase OPERACIONAL, voltada a quem vai a campo, onde a rota e' o assunto.
 
     Como divide: o itinerario de uma equipe ja sai em ordem geografica (montar_roteiro
     encadeia municipio a municipio), entao basta cortar essa ordem em N blocos CONTIGUOS -

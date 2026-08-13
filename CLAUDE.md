@@ -132,13 +132,14 @@ Detalhes que não se deduzem lendo um arquivo só:
   rota não há o que repartir entre equipes, então o radio `GroupedLayerControl` saiu junto e o
   mapa voltou a ter camada única.
 - **`dividir_roteiro` ficou órfã do pipeline** por causa dessa decisão — era o mapa quem a
-  chamava. Continua no código e testada porque é a **única medida** do quanto a aba `Cenarios` é
-  otimista: a aba assume o trabalho perfeitamente divisível (N equipes rodam os mesmos km que
-  uma), enquanto a divisão real mostra 2 equipes rodando **+18% a +37%** mais, já que cada uma
-  sai da capital e volta. O aviso sobrevive no `Leia-me` da planilha; a pendência de embutir esse
-  km no custo continua aberta no `PLAN.md`. Ela corta o itinerário em blocos **contíguos**
-  equilibrados por km acumulado (não por contagem de obras) — como `montar_roteiro` já ordena
-  município a município, nenhum município é partido entre duas equipes.
+  chamava. **Não é código morto e não deve ser removida:** (a) é a única medida do quanto a aba
+  `Cenarios` é otimista — a aba assume o trabalho perfeitamente divisível, enquanto a divisão
+  real mostra 2 equipes rodando **+18% a +37%** mais, já que cada uma sai da capital e volta
+  (aviso sobrevive no `Leia-me`; embutir esse km no custo é pendência aberta no `PLAN.md`); e
+  (b) **o roteiro desenhado volta numa fase operacional**, voltada a quem vai a campo — a F14
+  tirou a rota do produto *gerencial*, não do escopo. Ela corta o itinerário em blocos
+  **contíguos** equilibrados por km acumulado (não por contagem de obras) — como `montar_roteiro`
+  já ordena município a município, nenhum município é partido entre duas equipes.
 - **O custo não é monótono no prazo** dentro da aba `Cenarios`: encurtar de 6 para 5 dias pode
   *baratear*, porque os dois cenários usam 2 equipes e 5 dias é menos dia-equipe que 6. A coluna
   `Ocupação da equipe` é o que torna isso legível.

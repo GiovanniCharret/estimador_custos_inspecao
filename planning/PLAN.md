@@ -135,9 +135,14 @@ x F14 — Mapa reduzido a pontos: saíram a polilinha, a numeração das paradas
   mais km que uma, porque cada uma sai da capital e volta. A aba `Cenarios` ainda assume trabalho
   perfeitamente divisível, então seus cenários multi-equipe são **otimistas**. Com a F14 o mapa
   deixou de exibir esse km, e **só o aviso do `Leia-me` sobrou** — o que torna esta pendência mais
-  relevante, não menos. `dividir_roteiro` continua no código e testada só por causa dela; se a
-  decisão for não usar a geometria real em `cenarios_por_prazo`, a função vira candidata a
-  remoção.
+  relevante, não menos. `dividir_roteiro` e `montar_roteiro` continuam no código e testadas por
+  causa dela **e da F-futura abaixo**; não são candidatas a remoção.
+- **F-futura — o roteiro volta, numa fase OPERACIONAL** (humano, 2026-08-13). A supressão da F14
+  é de **visualização para decisão gerencial**, não de escopo: o itinerário desenhado tem lugar
+  num produto voltado a quem vai a campo, onde a rota é o assunto e o leitor sabe que ela é
+  sugestão. Quando essa fase existir, o que hoje é ruído volta a ser o conteúdo — e aí vale
+  reabrir o que a F14 tirou (polilinha, ordem das paradas, divisão por equipe) **com estrada
+  real**, não em linha reta, já que o público operacional vai cobrar isso.
 - **Correção (F10):** `dias_trabalho` passou a dividir por `TAMANHO_EQUIPE`, como a Fase 6 do
   `MODELO_CUSTO.md` sempre prescreveu. Era invisível com equipe = 1; com equipe = 2 o custo
   dobrava em vez de ficar aproximadamente estável.
