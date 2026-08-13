@@ -103,7 +103,12 @@ def test_e2e_custo_e_por_amostra_nao_por_estrato(tmp_path):
     _monta_entrada(tmp_path)
     assert executar(tmp_path) == 0
     resumo = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
-    fixo_esperado = config.HORAS_ESCRITORIO_POR_OS * config.TARIFAS_HORA[config.PERFIL_EQUIPE]["escritorio"]
+    # Sem contrato informado o pipeline usa TIPO_CONTRATO_PADRAO; as horas de escritorio
+    # (e as tarifas) saem desse tipo.
+    tipo = config.TIPO_CONTRATO_PADRAO
+    tarifas = config.TARIFAS_HORA[tipo][config.PERFIL_EQUIPE]
+    horas = sum(config.HORAS_ESCRITORIO_POR_TIPO[tipo].values())
+    fixo_esperado = horas * tarifas["escritorio"]
     # Uma linha por amostra, e o fixo e' o mesmo valor unico em todas (nunca N x 12.960).
     assert resumo["Custo fixo OS (R$)"].tolist() == pytest.approx([fixo_esperado] * len(resumo))
     # O total fecha com campo + fixo, sem nenhum termo escondido.
@@ -112,7 +117,7 @@ def test_e2e_custo_e_por_amostra_nao_por_estrato(tmp_path):
     # E o campo fecha com a formula de dias (o que amarra o modelo ao benchmark).
     esperado_campo = (resumo["Equipes"] * resumo["Pessoas por equipe"]
                       * resumo["Dias faturados (por equipe)"]
-                      * config.HORAS_DIA_CAMPO * config.TARIFAS_HORA[config.PERFIL_EQUIPE]["campo"])
+                      * config.HORAS_DIA_CAMPO * tarifas["campo"])
     assert resumo["Custo campo (R$)"].tolist() == pytest.approx(esperado_campo.tolist())
 
 
@@ -282,6 +287,25 @@ def test_e2e_contrato_conhecido_usa_uf_e_tipo(tmp_path, capsys, monkeypatch):
     assert "PA" in saida and "MLA" in saida
     # Sem contrato nao ha aviso de padrao: o aviso so existe quando o contrato falta.
     assert "contrato nao informado" not in saida
+
+
+def test_e2e_tipo_de_obra_muda_as_horas_de_escritorio(tmp_path, monkeypatch):
+    # O 'Tipo de obra' da Ordem de Servico (Extensao de Redes x Geracao Descentralizada)
+    # muda as horas de escritorio, e isso tem de chegar a planilha - inclusive ao Leia-me,
+    # que existe para o usuario conferir com que numeros a estimativa foi feita.
+    _monta_entrada(tmp_path)
+    _base_contratos(tmp_path, monkeypatch,
+                    {"ECM TESTE-2026": {"uf": "PA", "tipo_contrato": "MLA", "vigente": "Andamento"}})
+    assert executar(tmp_path, contrato="ECM TESTE-2026") == 0
+    caminho = tmp_path / "saida" / "Resumo_Custos.xlsx"
+    resumo = pd.read_excel(caminho, sheet_name="Resumo")
+    # MLA = Geracao Descentralizada = 4 + 16 + 4 = 24h (e nao as 36h da Extensao).
+    assert set(resumo["Horas escritorio"]) == {24.0}
+    assert resumo["Custo fixo OS (R$)"].tolist() == pytest.approx([24 * 360.0] * len(resumo))
+    # E o Leia-me nomeia o tipo como o formulario de OS o chama.
+    texto = "\n".join(pd.read_excel(caminho, sheet_name="Leia-me")["Leia-me"].fillna("").map(str))
+    assert "Geracao Descentralizada" in texto
+    assert "24 h (uma vez por amostra)" in texto
 
 
 def test_e2e_tipo_contrato_muda_o_custo(tmp_path, monkeypatch):

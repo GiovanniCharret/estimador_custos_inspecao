@@ -115,6 +115,21 @@ Detalhes que não se deduzem lendo um arquivo só:
   capital no fim. A hierarquia município→obra é deliberada: uma rota gulosa direta sobre as obras
   entraria e sairia do mesmo município. Nos dados reais isso é 1.529 km contra 10.521 km do
   modelo antigo — a correção que motivou a F9.
+- **O TIPO DE CONTRATO muda as horas de escritório, não só a produtividade** (desde a F16). O
+  Formulário de OS tem um parâmetro binário — `Tipo de obra`, célula `E48` da aba `Ordem de
+  Serviço Emissão` — que as fórmulas `E26:E29` da aba `Custos Inspeções` leem: **Extensão de
+  Redes** (LPT) usa 8+24+4 = **36h**; **Geração Descentralizada** (MLA) usa 4+16+4 = **24h**.
+  Até 2026-08-13 o modelo tinha 36h fixas — o valor da Extensão —, então **todo contrato MLA
+  levava 12h a mais de escritório (R$ 4.320 por amostra)**. Achado pelo humano, lendo o
+  formulário. As tarifas também são tabeladas por tipo, mas só o **técnico** muda
+  (Eletrotécnico 593/250 no LPT × Técnico 513,22/273,22 no MLA); o engenheiro é 600/360 nos dois,
+  então com `PERFIL_EQUIPE = ENGENHEIRO` isso não altera número nenhum hoje.
+- **A regra ECO/ECM do usuário e o `tipo_contrato` da base dizem o mesmo, mas a base cobre mais.**
+  O humano descreve o tipo de obra pelo prefixo do contrato (`ECO` = Extensão, `ECM` = Geração).
+  O código usa `tipo_contrato` (LPT/MLA) de `base_contratos.json`, que é equivalente e cobre os
+  **113** contratos — inclusive os prefixos `ECFS` (28) e `ECOT` (16), que a regra não menciona e
+  são todos LPT. Há **uma** divergência conhecida: `ECM 001/2020` (Equatorial PA, 1ª Tranche,
+  encerrado) está na base como `LPT`. Não foi alterada — é dado do humano, não do código.
 - **`N_EQUIPES` e `TAMANHO_EQUIPE` são grandezas DIFERENTES e não se somam.** `N_EQUIPES_PADRAO`
   (= 2 desde a F15) são equipes **independentes**: cada uma tem seu bloco de obras, sai da capital
   e volta — logo **N roteiros**. `TAMANHO_EQUIPE` (= 1) são as pessoas **dentro** de uma equipe;
@@ -215,7 +230,8 @@ Detalhes que não se deduzem lendo um arquivo só:
 ## Modelo de custo (gate F1 aprovado em 2026-08-06 · corrigido na F9 · N equipes na F15)
 
 ```
-custo_amostra = 36h × R$360 (escritório, 1× por AMOSTRA)
+custo_amostra = horas_escritório(tipo) × R$360 (1× por AMOSTRA)
+                  LPT 8+24+4 = 36h → R$ 12.960 · MLA 4+16+4 = 24h → R$ 8.640
               + N_EQUIPES × TAMANHO_EQUIPE × dias_faturados × 8h × R$600/h
 
 dias_faturados = teto(horas da equipe MAIS LENTA / (8h × TAMANHO_EQUIPE)) + DIAS_MOBILIZACAO
@@ -302,7 +318,7 @@ O programa lê **só de `Entrada/`** (e de `dados/` para resolver o contrato):
 | --- | --- |
 | `Coordenadas_UCs_7ªTR_PA.xlsx` | exemplo do formato de coordenadas (aba `Base_UC`) |
 | `CalculoDistancias.xlsx` | referência **sugerida** de forma de cálculo (não canônica) |
-| `Formulário de Ordem de Serviço Equatorial-PA 4ª Tranche...xlsx` | fonte das tarifas (aba `Custos Inspeções`) |
+| `Formulário de Ordem de Serviço Equatorial-PA 4ª Tranche...xlsx` | **fonte canônica das tarifas E das horas de escritório** (aba `Custos Inspeções`: `E3:F6` tarifas, `E26:E29` horas por etapa — as duas keyed no `Tipo de obra` da célula `E48` da aba `Ordem de Serviço Emissão`) |
 | `20260224_Tabela_Resumo_Estratos_Amostra.xlsx` | **gabarito do output** — cabeçalhos deslocados, ler com `header=None` |
 | `Tabela_Resumo_Extratos_Amostra.xlsx` | **benchmark de CUSTO** (aba `Resumo`, ler com `header=None`): as 3 estratificações da PB 7ª Tranche com o custo estimado à mão pela engenharia. É o alvo de calibração da F9 |
 | `Apresentação amostra COELBA 11a ....pptx` | gabarito visual — **apenas slides 3 e 4** |

@@ -7,8 +7,10 @@ ajustado sem rebuild. Cada constante tem valor e FONTE.
 === MEMORIA DE CALCULO (para humanos) ===
 O custo e' calculado POR AMOSTRA (nao por estrato) e soma duas parcelas:
 
-1) ESCRITORIO (fixo, UMA vez por amostra): planejamento + relatorio + apresentacao =
-   HORAS_ESCRITORIO_POR_OS x tarifa de escritorio (36h x R$360 = R$12.960).
+1) ESCRITORIO (fixo, UMA vez por amostra): planejamento + relatorio + apresentacao,
+   com horas que MUDAM COM O TIPO DE CONTRATO (HORAS_ESCRITORIO_POR_TIPO):
+     LPT / Extensao de Redes      -> 8 + 24 + 4 = 36 h x R$360 = R$12.960
+     MLA / Geracao Descentralizada -> 4 + 16 + 4 = 24 h x R$360 = R$ 8.640
 
 2) CAMPO: N_EQUIPES x TAMANHO_EQUIPE x dias faturados x HORAS_DIA_CAMPO x tarifa de
    campo (R$600/h => R$4.800 por pessoa-dia). Os dias saem da geometria:
@@ -47,11 +49,24 @@ depender de malha rodoviaria externa. Detalhes e alternativas: planning/MODELO_C
 # --- Equipe (decisao G1 do gate) ---
 # Perfil usado na estimativa. Tecnico raramente e' usado (nao sobe em poste quem estima).
 PERFIL_EQUIPE = "ENGENHEIRO"
-# Tarifas R$/hora por perfil (Formulario de OS, aba 'Custos Inspecoes').
-# 'campo' = COM deslocamento; 'escritorio' = SEM deslocamento.
+# Tarifas R$/hora por TIPO DE CONTRATO e perfil (Formulario de OS, aba 'Custos Inspecoes',
+# celulas E3:F6). 'campo' = COM deslocamento; 'escritorio' = SEM deslocamento - e' a mesma
+# distincao que o formulario faz na celula O48 ('Obra Com Deslocamento: SIM/NAO').
+# O tipo entra porque o formulario tem DUAS tabelas de perfil:
+#   LPT (Extensao de Redes)   -> Eng. Eletricista e ELETROTECNICO
+#   MLA (Geracao Descentraliz.) -> Eng. Generalista e TECNICO
+# O engenheiro custa igual nos dois (360/600); quem muda e' o tecnico. Como PERFIL_EQUIPE
+# e' ENGENHEIRO (G1), hoje isso nao altera nenhum numero - fica correto para o dia em que
+# alguem estimar com tecnico.
 TARIFAS_HORA = {
-    "ENGENHEIRO": {"campo": 600.0, "escritorio": 360.0},
-    "TECNICO": {"campo": 513.22, "escritorio": 273.22},
+    "LPT": {
+        "ENGENHEIRO": {"campo": 600.0, "escritorio": 360.0},
+        "TECNICO": {"campo": 593.0, "escritorio": 250.0},
+    },
+    "MLA": {
+        "ENGENHEIRO": {"campo": 600.0, "escritorio": 360.0},
+        "TECNICO": {"campo": 513.22, "escritorio": 273.22},
+    },
 }
 # Diaria/pernoite em R$ por equipe-dia de campo (decisao G2: tarifa ja embute -> 0).
 CUSTO_DIARIA = 0.0
@@ -76,11 +91,26 @@ MAX_DIAS_POR_EQUIPE = 20
 # --- Jornada e produtividade (decisao G5 do gate) ---
 # Horas de um dia de campo (8h x 600 = 4.800/equipe-dia, formula decifrada do orgao).
 HORAS_DIA_CAMPO = 8.0
-# Horas de escritorio por OS: planejamento + relatorio + apresentacao, UMA vez por AMOSTRA
-# (36h x 360 = 12.960, o termo fixo da formula decifrada em MODELO_CUSTO.md a.5 e confirmado
-# pelo benchmark da engenharia). Antes da F9 este termo entrava uma vez por ESTRATO, o que
-# multiplicava o fixo pelo numero de estratos - erro corrigido na reconstrucao.
-HORAS_ESCRITORIO_POR_OS = 36.0
+# Horas de escritorio por OS (planejamento + relatorio + apresentacao), UMA vez por AMOSTRA
+# e DIFERENTES POR TIPO DE CONTRATO. Fonte: Formulario de OS, aba 'Custos Inspecoes',
+# celulas E26:E29 - tres formulas que leem o 'Tipo de obra' escolhido na celula E48 da aba
+# 'Ordem de Servico Emissao'. E' um parametro binario que o modelo ignorava ate 2026-08-13:
+#
+#   etapa          Extensao de Redes (LPT)   Geracao Descentralizada (MLA)
+#   planejamento              8 h                        4 h
+#   relatorio                24 h                       16 h
+#   apresentacao              4 h                        4 h
+#   TOTAL                    36 h                       24 h
+#
+# Os 36 h que valiam para tudo eram os da EXTENSAO - logo, todo contrato MLA vinha com 12 h
+# de escritorio a mais (R$ 4.320 por amostra). Mantido o desdobramento por etapa, e nao so
+# o total, porque e' assim que a OS e' preenchida e conferida.
+# A etapa 'Desenvolvimento' do formulario (112 h LPT / 56 h MLA) NAO entra aqui: e' o tempo
+# de campo, que este projeto calcula da geometria em vez de assumir por tabela.
+HORAS_ESCRITORIO_POR_TIPO = {
+    "LPT": {"planejamento": 8.0, "relatorio": 24.0, "apresentacao": 4.0},
+    "MLA": {"planejamento": 4.0, "relatorio": 16.0, "apresentacao": 4.0},
+}
 # Dias cobrados alem dos dias de trabalho, para a mobilizacao (sair da capital / voltar).
 # CADA EQUIPE carrega o seu: o benchmark da engenharia cobra equipes x (dias + 1).
 DIAS_MOBILIZACAO = 1.0

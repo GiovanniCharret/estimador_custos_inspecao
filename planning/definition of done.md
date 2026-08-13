@@ -23,6 +23,16 @@ x F6 — mapas HTML gerados com camadas por estrato e popup de custo; teste pass
 x F7 — e2e feliz + 8 bordas passam (16 testes); `planning/TESTES.md` escrito;
     status report `planning/html/STATUS_F7.html` gerado; `executar.bat` validado
     (sem entrada → "Lote.xlsx nao encontrado", exit 1, sem traceback).
+x F16 — horas de escritório por tipo de obra (2026-08-13). Critérios:
+    - `config.HORAS_ESCRITORIO_POR_TIPO` traz o desdobramento por etapa do Formulário de OS
+      (LPT 8+24+4 = 36h; MLA 4+16+4 = 24h), e não só o total;
+    - o custo fixo de um contrato MLA cai de R$ 12.960 para R$ 8.640 por amostra;
+    - `TARIFAS_HORA` passa a ser por tipo (só o técnico muda; o engenheiro é igual, então
+      nenhum número muda hoje) e `tarifa_campo`/`tarifa_escritorio` recebem o tipo;
+    - a aba `Resumo` ganha a coluna `Horas escritorio` e o `Leia-me` nomeia o tipo de obra
+      como o formulário o chama, com o desdobramento das etapas;
+    - 99 testes passando, com um teste que amarra as horas contra a planilha fonte (sem
+      monkeypatch) e outro que garante que a diferença de tarifa do técnico não se perca.
 x F15 — equipes independentes e grade de cenários (2026-08-13). Critérios:
     - o cálculo oficial assume `config.N_EQUIPES_PADRAO = 2` equipes **independentes**, e a
       aba `Resumo` traz `Equipes` e `Pessoas por equipe` como colunas distintas;

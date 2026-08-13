@@ -47,6 +47,8 @@ x F14 — Mapa reduzido a pontos: saíram a polilinha, a numeração das paradas
     equipes (decisão G7). O mapa localiza, não propõe itinerário — 2026-08-13
 x F15 — **Equipes independentes** (decisão G8): padrão de 2 equipes, cada uma com o seu
     roteiro; aba `Cenarios` vira grade equipes × prazo, só com o viável — 2026-08-13
+x F16 — **Horas de escritório por tipo de obra** (decisão G9): 36h no LPT, 24h no MLA,
+    conforme o parâmetro `E48` do Formulário de OS — 2026-08-13
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -145,6 +147,29 @@ x F15 — **Equipes independentes** (decisão G8): padrão de 2 equipes, cada um
   Efeito no número: **o padrão ficou mais caro**, porque duas equipes pagam dois deslocamentos —
   na sondagem de 26 obras na PB, R$ 41.760 (1 equipe, 1.220 km) → R$ 60.960 (2 equipes, 1.663 km).
   Isso fecha as lacunas L1, L2, L3, L4 e L7 de `LACUNAS_CENARIOS.md`.
+- **G9 — O TIPO DE OBRA MUDA AS HORAS DE ESCRITÓRIO (F16, achado do humano em 2026-08-13):** o
+  Formulário de OS tem um parâmetro binário que o modelo ignorava — `Tipo de obra` (célula `E48`
+  da aba `Ordem de Serviço Emissão`), lido pelas fórmulas `E26:E29` da aba `Custos Inspeções`:
+
+  | etapa | Extensão de Redes (LPT / ECO) | Geração Descentralizada (MLA / ECM) |
+  | --- | --- | --- |
+  | Planejamento | 8 h | 4 h |
+  | Relatório | 24 h | 16 h |
+  | Apresentação | 4 h | 4 h |
+  | **total** | **36 h → R$ 12.960** | **24 h → R$ 8.640** |
+
+  As 36h que valiam para tudo eram as da **Extensão**, então **todo contrato MLA vinha com
+  R$ 4.320 a mais por amostra**. Vira `config.HORAS_ESCRITORIO_POR_TIPO`, com o desdobramento por
+  etapa preservado — é assim que a OS é preenchida e conferida.
+  A etapa `Desenvolvimento` do formulário (112h LPT / 56h MLA) **não** entra: é o tempo de campo,
+  que este projeto calcula da geometria em vez de assumir por tabela.
+  As tarifas também são tabeladas por tipo (`E3:F6`), mas só o técnico muda — o engenheiro é
+  600/360 nos dois. `TARIFAS_HORA` passou a ser por tipo mesmo assim, para não guardar meia
+  verdade; com `PERFIL_EQUIPE = ENGENHEIRO` (G1) nenhum número muda por isso.
+  **Chave usada:** `tipo_contrato` da base, e não o prefixo do nome. A regra que o humano deu
+  (`ECO`→Extensão, `ECM`→Geração) cobre 69 dos 113 contratos; os prefixos `ECFS` (28) e `ECOT`
+  (16) ficam de fora e são todos LPT na base. Divergência única a confirmar com o humano:
+  `ECM 001/2020` está na base como `LPT`.
 - **Cuidado que a G8 cria:** `N_EQUIPES` (quantas) e `TAMANHO_EQUIPE` (pessoas em cada) são
   grandezas distintas e ambas multiplicam o custo. O benchmark da engenharia é
   `TAMANHO_EQUIPE=2, N_EQUIPES=1` — uma dupla num roteiro só. Confundir os dois é o erro que a

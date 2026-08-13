@@ -7,6 +7,13 @@ from src.io_amostras import EntradaInvalida
 
 # Renomeacao de apresentacao da aba Resumo (apenas exibicao; nao afeta o calculo).
 # A ordem deste dicionario e' a ordem das colunas na planilha.
+# Como o Formulario de Ordem de Servico chama cada tipo de contrato. O usuario reconhece a
+# obra por este nome (e' o que ele escolhe na celula 'Tipo de obra' da OS), nao pela sigla.
+NOME_TIPO_OBRA = {
+    "LPT": "Extensao de Redes de Distribuicao",
+    "MLA": "Sistemas de Geracao Descentralizada",
+}
+
 # 'Equipes' (quantas) e 'Pessoas por equipe' (tamanho de cada) sao GRANDEZAS DIFERENTES
 # e ficam lado a lado de proposito: ate a F15 a planilha tinha 'Equipe' aqui e 'Equipes'
 # na aba Cenarios querendo dizer coisas distintas, o que era leitura errada esperando
@@ -22,6 +29,7 @@ COLUNAS_RESUMO = {
     "km_roteiro": "Roteiro somado (km estrada)",
     "horas_roteiro": "Horas roteiro",
     "horas_inspecao": "Horas inspecao",
+    "horas_escritorio": "Horas escritorio",
     "horas_equipe_critica": "Horas da equipe mais lenta",
     "dias_fracionarios": "Dias (fracao)",
     "dias_trabalho": "Dias trabalho (por equipe)",
@@ -63,15 +71,20 @@ COLUNAS_DETALHE = {
 }
 
 
-def _texto_leia_me():
+def _texto_leia_me(tipo_contrato=None):
     """Monta as linhas da aba Leia-me a partir dos parametros vigentes.
 
     Por que existe: a planilha e' lida por quem nunca vai abrir o codigo. Gerar o texto
     a partir de config (em vez de escrever numeros a mao) garante que a explicacao nunca
     fique defasada em relacao ao que foi de fato calculado.
 
-    Logica: Entrada (config) -> Fase 1: monta as linhas de conteudo -> Fase 2: monta as
-    linhas de parametros com os valores vigentes -> Saida: lista de strings.
+    Recebe o tipo do contrato porque dois parametros mudam com ele - as horas de
+    escritorio e a produtividade da inspecao -, e imprimir o valor errado num documento
+    que existe para explicar o calculo seria pior que nao imprimir nada.
+
+    Logica: Entrada (tipo do contrato, config) -> Fase 1: monta as linhas de conteudo ->
+    Fase 2: monta as linhas de parametros com os valores vigentes -> Saida: lista de
+    strings.
     """
     # Fase 1: o que cada aba contem e como ler os numeros.
     linhas = [
@@ -84,6 +97,10 @@ def _texto_leia_me():
         "CUIDADO com duas colunas parecidas e diferentes:",
         "  'Equipes'            = quantas equipes independentes vao a campo;",
         "  'Pessoas por equipe' = quantas pessoas ha DENTRO de cada equipe.",
+        "",
+        "As HORAS DE ESCRITORIO e a PRODUTIVIDADE da inspecao mudam com o tipo de obra do",
+        "contrato - e' o mesmo parametro que a Ordem de Servico pede na celula 'Tipo de obra'.",
+        "Extensao de Redes (LPT) usa 36 h de escritorio; Geracao Descentralizada (MLA), 24 h.",
         "",
         "O custo e' por AMOSTRA, nao por estrato:",
         "  custo = fixo de escritorio (1x) + equipes x pessoas x dias faturados x jornada x tarifa",
@@ -112,17 +129,23 @@ def _texto_leia_me():
         "",
         "PARAMETROS USADOS NESTA EXECUCAO:",
     ]
-    # Fase 2: os parametros vigentes, lidos de config na hora da gravacao.
+    # Fase 2: os parametros vigentes, lidos de config na hora da gravacao. Sem tipo
+    # conhecido, o padrao vale so para escolher QUAIS numeros imprimir.
+    tipo = tipo_contrato if tipo_contrato in config.TARIFAS_HORA else config.TIPO_CONTRATO_PADRAO
+    tarifas = config.TARIFAS_HORA[tipo][config.PERFIL_EQUIPE]
+    etapas = config.HORAS_ESCRITORIO_POR_TIPO[tipo]
     linhas += [
+        f"  Tipo de contrato            : {tipo} ({NOME_TIPO_OBRA.get(tipo, tipo)})",
         f"  Equipes (calculo oficial)   : {config.N_EQUIPES_PADRAO:g}, independentes",
         f"  Perfil / pessoas por equipe : {config.PERFIL_EQUIPE} x {config.TAMANHO_EQUIPE:g} pessoa(s)",
-        f"  Tarifa campo / escritorio   : R$ {config.TARIFAS_HORA[config.PERFIL_EQUIPE]['campo']:.2f}/h"
-        f" / R$ {config.TARIFAS_HORA[config.PERFIL_EQUIPE]['escritorio']:.2f}/h",
+        f"  Tarifa campo / escritorio   : R$ {tarifas['campo']:.2f}/h"
+        f" / R$ {tarifas['escritorio']:.2f}/h",
         f"  Jornada de campo            : {config.HORAS_DIA_CAMPO:g} h/dia",
-        f"  Horas de escritorio por OS  : {config.HORAS_ESCRITORIO_POR_OS:g} h (uma vez por amostra)",
+        f"  Horas de escritorio por OS  : {sum(etapas.values()):g} h (uma vez por amostra) = "
+        + " + ".join(f"{nome} {horas:g}h" for nome, horas in etapas.items()),
         f"  Dias de mobilizacao         : {config.DIAS_MOBILIZACAO:g}",
         f"  Velocidade / fator rodoviario: {config.VELOCIDADE_KMH:g} km/h / {config.FATOR_RODOVIARIO:g}",
-        f"  Produtividade (UCs/dia)     : {config.UCS_POR_DIA}",
+        f"  Produtividade (UCs/dia)     : {config.UCS_POR_DIA[tipo]:g} ({tipo})",
         f"  Grade de cenarios           : {config.N_EQUIPES_MIN:g} a {config.N_EQUIPES_MAX:g} equipes,"
         f" no maximo {config.MAX_DIAS_POR_EQUIPE:g} dias por equipe",
         "",
@@ -170,8 +193,11 @@ def gravar_resumo(resultados, caminho):
     try:
         # Abre o writer; PermissionError aqui = arquivo aberto no Excel.
         with pd.ExcelWriter(caminho) as xls:
-            # Fase 2: aba Leia-me com a memoria de calculo e os parametros vigentes.
-            pd.DataFrame({"Leia-me": _texto_leia_me()}).to_excel(xls, sheet_name="Leia-me", index=False)
+            # Fase 2: aba Leia-me com a memoria de calculo e os parametros vigentes. O tipo
+            # vem dos resultados (uma execucao = um contrato, logo um tipo so).
+            tipo = resultados[0].get("tipo_contrato") if resultados else None
+            pd.DataFrame({"Leia-me": _texto_leia_me(tipo)}).to_excel(
+                xls, sheet_name="Leia-me", index=False)
             # Fase 3: a tabela que importa - uma linha por estratificacao.
             resumo.rename(columns=COLUNAS_RESUMO).round(2).to_excel(xls, sheet_name="Resumo", index=False)
             # Fase 4: os prazos alternativos, para a conversa de planejamento.

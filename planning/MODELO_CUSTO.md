@@ -733,3 +733,60 @@ de texto.
 
 Lacunas fechadas por esta fase: **L1** (km de dividir), **L2** (`Equipes` contando pessoas),
 **L3** (ocupação), **L4** (teto de equipes) e **L7** (faixa fixa de ±2 dias).
+
+---
+
+## HORAS DE ESCRITÓRIO POR TIPO DE OBRA — F16 (2026-08-13)
+
+Achado do **humano**, lendo o Formulário de Ordem de Serviço: existe um parâmetro binário que o
+modelo ignorava desde a F1.
+
+Na aba `Ordem de Serviço Emissão`, a célula **`E48` (`Tipo de obra`)** é uma lista com dois
+valores. A aba `Custos Inspeções` a lê em cinco fórmulas — `D17:D20` (tarifas) e **`E26:E29`
+(horas por etapa)**:
+
+```
+E26 (Planejamento)  = IF(E48 = "Extensão de Redes de Distribuição",   8, IF(E48 = "Sistemas de Geração Descentralizada",  4, ""))
+E27 (Desenvolvim.)  = IF(...,                                       112, IF(...,                                        56, ""))
+E28 (Relatório)     = IF(...,                                        24, IF(...,                                        16, ""))
+E29 (Apresentação)  = IF(...,                                         4, IF(...,                                         4, ""))
+```
+
+| Etapa | Extensão de Redes (LPT / ECO) | Geração Descentralizada (MLA / ECM) |
+| --- | --- | --- |
+| Planejamento | 8 h | 4 h |
+| Relatório | 24 h | 16 h |
+| Apresentação | 4 h | 4 h |
+| **Total de escritório** | **36 h → R$ 12.960** | **24 h → R$ 8.640** |
+
+**Os 36h do modelo eram os da Extensão.** Todo contrato MLA vinha com 12h de escritório a mais —
+**R$ 4.320 por amostra**, em cima de um fixo que deveria ser R$ 8.640. Na tranche RO
+(`ECM 022/2025`), isso afeta as quatro estratificações.
+
+Por que ninguém tinha visto: o benchmark da engenharia (`Tabela_Resumo_Extratos_Amostra.xlsx`) é
+da **PB 7ª Tranche**, contrato `ECO 037/2025` — Extensão de Redes. Calibrar contra ele produziu
+os 36h corretos *para aquele tipo* e nada revelou que o número era condicional.
+
+### O que NÃO entra
+
+A etapa **Desenvolvimento** (112h / 56h) é o tempo de campo. O próprio formulário não a usa nas
+células de saída: a OS puxa as horas de campo da composição real das equipes
+(`'Composição Equipes Inspeção'!I9`), não da tabela. Este projeto faz o mesmo, calculando-as da
+geometria — os 112/56 são um *default* que substituímos por medição.
+
+### Tarifas: também por tipo, mas sem efeito hoje
+
+`D17:D20` mostram que a tabela de perfil também muda com `E48`:
+
+| Perfil | Extensão (sem/com deslocamento) | Geração (sem/com deslocamento) |
+| --- | --- | --- |
+| Engenheiro | 360 / 600 | 360 / 600 |
+| Técnico | **250 / 593** (Eletrotécnico) | **273,22 / 513,22** (Técnico) |
+
+O engenheiro custa o mesmo nos dois; só o técnico muda. Como `PERFIL_EQUIPE = ENGENHEIRO` (G1),
+**nenhum número muda por isso hoje**. `TARIFAS_HORA` passou a ser por tipo mesmo assim, para não
+guardar meia verdade — e um teste amarra a diferença, para que ela não se perca se alguém trocar
+o perfil.
+
+De quebra, `E2:F2` confirmam que a distinção `campo`/`escritorio` do `config.py` é exatamente a
+que o formulário chama de **com/sem deslocamento** (célula `O48` da OS).

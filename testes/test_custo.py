@@ -7,7 +7,8 @@ import pytest
 
 from src import config
 from src import custo as modulo_custo
-from src.custo import custo_amostra, grade_cenarios, tarifa_campo
+from src.custo import (custo_amostra, grade_cenarios, horas_escritorio,
+                       tarifa_campo, tarifa_escritorio)
 from src.distancias import haversine_km
 
 
@@ -30,11 +31,16 @@ def _config_redonda(monkeypatch):
     monkeypatch.setattr(config, "FATOR_RODOVIARIO", 1.0)
     monkeypatch.setattr(config, "VELOCIDADE_KMH", 50.0)
     monkeypatch.setattr(config, "HORAS_DIA_CAMPO", 8.0)
-    monkeypatch.setattr(config, "HORAS_ESCRITORIO_POR_OS", 10.0)
+    # 10h de escritorio nos dois tipos: os testes que nao tratam do tipo ficam com a
+    # mesma conta de antes. Quem testa a diferenca sobrescreve.
+    monkeypatch.setattr(config, "HORAS_ESCRITORIO_POR_TIPO",
+                        {"LPT": {"planejamento": 4.0, "relatorio": 4.0, "apresentacao": 2.0},
+                         "MLA": {"planejamento": 4.0, "relatorio": 4.0, "apresentacao": 2.0}})
     monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 4.0, "MLA": 1.0})
     monkeypatch.setattr(config, "PERFIL_EQUIPE", "ENGENHEIRO")
     monkeypatch.setattr(config, "TARIFAS_HORA",
-                        {"ENGENHEIRO": {"campo": 100.0, "escritorio": 50.0}})
+                        {"LPT": {"ENGENHEIRO": {"campo": 100.0, "escritorio": 50.0}},
+                         "MLA": {"ENGENHEIRO": {"campo": 100.0, "escritorio": 50.0}}})
     monkeypatch.setattr(config, "CUSTO_DIARIA", 0.0)
     monkeypatch.setattr(config, "TAMANHO_EQUIPE", 1.0)
     monkeypatch.setattr(config, "DIAS_MOBILIZACAO", 1.0)
@@ -300,4 +306,43 @@ def test_tarifa_campo_inclui_diaria(monkeypatch):
     _config_redonda(monkeypatch)
     # CUSTO_DIARIA = 80 por dia de campo -> 80/8h = +10/h sobre a tarifa 100.
     monkeypatch.setattr(config, "CUSTO_DIARIA", 80.0)
-    assert tarifa_campo() == pytest.approx(110.0)
+    assert tarifa_campo("LPT") == pytest.approx(110.0)
+
+
+def test_horas_de_escritorio_mudam_com_o_tipo_de_obra():
+    # O Formulario de OS decide as horas de escritorio pelo 'Tipo de obra' (celula E48):
+    # Extensao de Redes 8+24+4 = 36h; Geracao Descentralizada 4+16+4 = 24h. Sao os
+    # parametros reais de config, sem monkeypatch - este teste amarra a planilha fonte.
+    assert horas_escritorio("LPT") == pytest.approx(36.0)
+    assert horas_escritorio("MLA") == pytest.approx(24.0)
+    # E o desdobramento por etapa e' o da planilha, nao so o total.
+    assert config.HORAS_ESCRITORIO_POR_TIPO["LPT"] == {
+        "planejamento": 8.0, "relatorio": 24.0, "apresentacao": 4.0}
+    assert config.HORAS_ESCRITORIO_POR_TIPO["MLA"] == {
+        "planejamento": 4.0, "relatorio": 16.0, "apresentacao": 4.0}
+
+
+def test_custo_fixo_mla_e_menor_que_lpt_pelas_horas_de_escritorio(monkeypatch):
+    # REGRESSAO DA F16: ate 2026-08-13 o fixo era 36h para todo mundo - o valor da
+    # Extensao. Todo contrato MLA levava 12h de escritorio a mais (R$ 4.320 por amostra).
+    monkeypatch.setattr(config, "N_EQUIPES_PADRAO", 1)
+    lpt, _ = custo_amostra(_odis_teste(), uf="PB", tipo_contrato="LPT")
+    mla, _ = custo_amostra(_odis_teste(), uf="PB", tipo_contrato="MLA")
+    assert lpt["custo_fixo"] == pytest.approx(36 * 360.0)
+    assert mla["custo_fixo"] == pytest.approx(24 * 360.0)
+    assert lpt["custo_fixo"] - mla["custo_fixo"] == pytest.approx(4320.0)
+    # As horas viajam com os numeros, para a planilha poder exibi-las.
+    assert lpt["horas_escritorio"] == 36.0 and mla["horas_escritorio"] == 24.0
+    assert lpt["tipo_contrato"] == "LPT" and mla["tipo_contrato"] == "MLA"
+
+
+def test_tarifa_do_tecnico_muda_com_o_tipo_a_do_engenheiro_nao(monkeypatch):
+    # O Formulario tem uma tabela de perfil por tipo de obra. O engenheiro custa igual
+    # nos dois; o tecnico nao (Eletrotecnico 593/250 na Extensao, Tecnico 513,22/273,22
+    # na Geracao). Como PERFIL_EQUIPE e' ENGENHEIRO, hoje isso nao muda numero nenhum -
+    # o teste existe para que a diferenca nao se perca se alguem trocar o perfil.
+    assert tarifa_campo("LPT") == tarifa_campo("MLA") == pytest.approx(600.0)
+    assert tarifa_escritorio("LPT") == tarifa_escritorio("MLA") == pytest.approx(360.0)
+    monkeypatch.setattr(config, "PERFIL_EQUIPE", "TECNICO")
+    assert tarifa_campo("LPT") == pytest.approx(593.0)
+    assert tarifa_campo("MLA") == pytest.approx(513.22)

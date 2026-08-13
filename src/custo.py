@@ -9,7 +9,8 @@ O custo e' POR AMOSTRA (nao por estrato):
 
   custo_amostra = CUSTO_FIXO + custo_campo
 
-  CUSTO_FIXO  = HORAS_ESCRITORIO_POR_OS x tarifa_escritorio   (36h x 360 = 12.960, 1x)
+  CUSTO_FIXO  = horas de escritorio DO TIPO x tarifa_escritorio (1x por amostra)
+                LPT: 8+24+4 = 36h x 360 = 12.960 | MLA: 4+16+4 = 24h x 360 = 8.640
   custo_campo = N_EQUIPES x TAMANHO_EQUIPE x dias_faturados x HORAS_DIA_CAMPO x tarifa_campo
 
   dias_faturados = teto(horas da equipe MAIS LENTA / (HORAS_DIA_CAMPO x TAMANHO_EQUIPE))
@@ -52,31 +53,50 @@ from src import config
 from src.distancias import dividir_roteiro
 
 
-def tarifa_campo():
+def tarifa_campo(tipo_contrato):
     """Tarifa horaria de campo do perfil ativo, com diaria diluida por hora.
 
     Por que existe: G1/G2 do gate viram parametros; le config NA CHAMADA (nao no
-    import) para monkeypatch e ajustes sem rebuild funcionarem.
+    import) para monkeypatch e ajustes sem rebuild funcionarem. Recebe o tipo do
+    contrato porque o Formulario de OS tem uma tabela de perfil por tipo de obra -
+    o engenheiro custa igual nos dois, o tecnico nao.
 
-    Logica: Entrada (config) -> Fase 1: tarifa 'campo' do perfil ativo -> Fase 2:
-    soma CUSTO_DIARIA diluida pela jornada -> Saida: R$/hora.
+    Logica: Entrada (tipo do contrato) -> Fase 1: tarifa 'campo' do perfil ativo naquele
+    tipo -> Fase 2: soma CUSTO_DIARIA diluida pela jornada -> Saida: R$/hora.
     """
-    # Fase 1: tarifa de campo do perfil ativo (G1: ENGENHEIRO).
-    base = config.TARIFAS_HORA[config.PERFIL_EQUIPE]["campo"]
+    # Fase 1: tarifa de campo (COM deslocamento) do perfil ativo (G1: ENGENHEIRO).
+    base = config.TARIFAS_HORA[tipo_contrato][config.PERFIL_EQUIPE]["campo"]
     # Fase 2: diaria (G2: 0 por padrao) diluida pelas horas do dia de campo.
     return base + config.CUSTO_DIARIA / config.HORAS_DIA_CAMPO
 
 
-def tarifa_escritorio():
+def tarifa_escritorio(tipo_contrato):
     """Tarifa horaria de escritorio (sem deslocamento) do perfil ativo.
 
     Por que existe: par do tarifa_campo() para o termo fixo por OS; le config na
     chamada pelo mesmo motivo.
 
-    Logica: Entrada (config) -> Fase 1: tarifa 'escritorio' do perfil -> Saida: R$/h.
+    Logica: Entrada (tipo do contrato) -> Fase 1: tarifa 'escritorio' do perfil naquele
+    tipo -> Saida: R$/h.
     """
-    # Fase 1/Saida: tarifa de escritorio do perfil ativo.
-    return config.TARIFAS_HORA[config.PERFIL_EQUIPE]["escritorio"]
+    # Fase 1/Saida: tarifa SEM deslocamento do perfil ativo naquele tipo de contrato.
+    return config.TARIFAS_HORA[tipo_contrato][config.PERFIL_EQUIPE]["escritorio"]
+
+
+def horas_escritorio(tipo_contrato):
+    """Horas de escritorio de uma OS: planejamento + relatorio + apresentacao.
+
+    Por que existe: o Formulario de OS decide essas horas por um parametro binario
+    ('Tipo de obra', celula E48) que o modelo ignorava ate 2026-08-13 - eram 36 h fixas,
+    que sao as da Extensao de Redes. Geracao Descentralizada usa 24 h. Somar aqui, a
+    partir do desdobramento por etapa, mantem o config conferivel contra a planilha
+    original (que mostra as tres etapas separadas) sem espalhar a soma pelo codigo.
+
+    Logica: Entrada (tipo do contrato) -> Fase 1: pega as etapas daquele tipo ->
+    Saida: total de horas de escritorio da amostra.
+    """
+    # Fase 1/Saida: soma das tres etapas de escritorio do tipo (LPT 36 h, MLA 24 h).
+    return sum(config.HORAS_ESCRITORIO_POR_TIPO[tipo_contrato].values())
 
 
 def horas_por_uc(tipo_contrato):
@@ -153,18 +173,30 @@ def _dias_para(horas_da_equipe_mais_lenta):
     return (math.ceil(fracao) if fracao > 0 else 0), fracao
 
 
-def _custo_campo(n_equipes, dias_faturados):
+def _custo_campo(n_equipes, dias_faturados, tipo_contrato):
     """Preco do campo: pessoas x dias x jornada x tarifa.
 
     Por que existe: a mesma multiplicacao vale para o numero oficial e para cada linha
     da grade; duplicar seria convidar as duas a divergirem.
 
-    Logica: Entrada (n de equipes, dias faturados) -> Fase 1: pessoas em campo =
+    Logica: Entrada (n de equipes, dias faturados, tipo) -> Fase 1: pessoas em campo =
     equipes x tamanho da equipe -> Saida: R$ (o contrato paga por hora-PROFISSIONAL).
     """
     # Fase 1/Saida: cada pessoa de cada equipe cobra a jornada inteira de cada dia faturado.
     return (n_equipes * config.TAMANHO_EQUIPE * dias_faturados
-            * config.HORAS_DIA_CAMPO * tarifa_campo())
+            * config.HORAS_DIA_CAMPO * tarifa_campo(tipo_contrato))
+
+
+def _custo_fixo(tipo_contrato):
+    """Termo fixo de escritorio da amostra: horas da OS x tarifa sem deslocamento.
+
+    Por que existe: entra UMA vez por amostra (correcao da F9) e agora depende do tipo
+    (correcao da F16); tres call sites precisavam do mesmo par horas x tarifa.
+
+    Logica: Entrada (tipo do contrato) -> Saida: R$ (LPT 36h x 360; MLA 24h x 360).
+    """
+    # Saida: as horas de escritorio daquele tipo, a tarifa sem deslocamento do perfil.
+    return horas_escritorio(tipo_contrato) * tarifa_escritorio(tipo_contrato)
 
 
 def custo_amostra(df_odis, uf, tipo_contrato, n_equipes=None):
@@ -193,9 +225,9 @@ def custo_amostra(df_odis, uf, tipo_contrato, n_equipes=None):
     horas_criticas = max((e["horas_campo"] for e in equipes), default=0.0)
     dias_trabalho, dias_fracionarios = _dias_para(horas_criticas)
     dias_faturados = dias_trabalho + config.DIAS_MOBILIZACAO
-    # Fase 3: dias -> R$ e o fixo de escritorio, uma vez por amostra.
-    custo_campo = _custo_campo(n_efetivo, dias_faturados)
-    custo_fixo = config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio()
+    # Fase 3: dias -> R$ e o fixo de escritorio, uma vez por amostra (e por tipo).
+    custo_campo = _custo_campo(n_efetivo, dias_faturados, tipo_contrato)
+    custo_fixo = _custo_fixo(tipo_contrato)
     # Fase 4: um detalhe so, com a equipe dona de cada obra. A ordem dentro de cada
     # equipe e' a ordem de visita dela; equipes entram na ordem geografica do itinerario.
     detalhes = []
@@ -213,6 +245,10 @@ def custo_amostra(df_odis, uf, tipo_contrato, n_equipes=None):
         "n_municipios": int(detalhe["Municipio"].nunique()) if len(detalhe) else 0,
         "n_ucs": sum(e["n_ucs"] for e in equipes),
         "n_equipes": n_efetivo,
+        # O tipo viaja com os numeros porque a planilha precisa dele para explicar as
+        # horas de escritorio no Leia-me (elas mudam com ele).
+        "tipo_contrato": tipo_contrato,
+        "horas_escritorio": horas_escritorio(tipo_contrato),
         "km_roteiro": sum(e["km_estrada"] for e in equipes),
         "horas_roteiro": sum(e["horas_roteiro"] for e in equipes),
         "horas_inspecao": sum(e["horas_inspecao"] for e in equipes),
@@ -278,11 +314,13 @@ def grade_cenarios(df_odis, uf, tipo_contrato):
             continue
         horas_totais = sum(e["horas_campo"] for e in equipes)
         km_somado = sum(e["km_estrada"] for e in equipes)
+        # O fixo nao depende do prazo nem do numero de equipes - so do tipo do contrato.
+        custo_fixo = _custo_fixo(tipo_contrato)
         # Fase 4: do prazo mais apertado que cabe ate o teto. Prazos maiores que o minimo
         # sao folga deliberada: a equipe fica ociosa e o custo sobe (mais dias faturados).
         for dias in range(max(1, dias_minimo), config.MAX_DIAS_POR_EQUIPE + 1):
             dias_faturados = dias + config.DIAS_MOBILIZACAO
-            custo_campo = _custo_campo(n_efetivo, dias_faturados)
+            custo_campo = _custo_campo(n_efetivo, dias_faturados, tipo_contrato)
             linhas.append({
                 "n_equipes": n_efetivo,
                 "dias_trabalho": dias,
@@ -292,8 +330,8 @@ def grade_cenarios(df_odis, uf, tipo_contrato):
                 # demais significa que o prazo esta pagando por gente parada.
                 "ocupacao": horas_totais / (n_efetivo * capacidade_dia * dias),
                 "custo_campo": custo_campo,
-                "custo_fixo": config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio(),
-                "custo_total": custo_campo + config.HORAS_ESCRITORIO_POR_OS * tarifa_escritorio(),
+                "custo_fixo": custo_fixo,
+                "custo_total": custo_campo + custo_fixo,
                 # Marca a linha que corresponde ao numero oficial da aba Resumo.
                 "cenario": ("calculado" if n_efetivo == config.N_EQUIPES_PADRAO
                             and dias == dias_minimo else ""),
