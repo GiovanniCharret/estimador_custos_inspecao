@@ -46,8 +46,10 @@ O orquestrador expõe `executar(raiz, contrato=None, amostra=None) -> int` (0 su
 entrada), puro e sem stdin — o `__main__` é quem pergunta contrato **e amostra**. Todo
 `EntradaInvalida` é convertido ali, e só ali, em mensagem + exit 1.
 
-Saída atual (`saida/`): **um** `Resumo_Custos.xlsx` (`Leia-me`/`Resumo`/`Cenarios`/`Detalhe`)
-com todas as estratificações da amostra escolhida + um `Mapa_Estratos_N.html` por estratificação.
+Saída atual (`saida/`): **um** `Resumo_Custos.xlsx`
+(`Leia-me`/`Resumo`/`Cenarios`/`Detalhe` + `Resumo beneficiarios` quando o Anexo V traz a
+classificação) com todas as estratificações da amostra escolhida + um `Mapa_Estratos_N.html`
+por estratificação.
 
 **O que falta é conferência humana com o olho, não código:** conferir o `Resumo_Custos.xlsx`
 contra o benchmark da engenharia (F5) e abrir um mapa no browser (F6). Ver
@@ -95,11 +97,12 @@ Cada seta abaixo é um **contrato de dataframe** — mudar uma coluna quebra o m
 
 | Módulo | Entrada → Saída |
 | --- | --- |
-| `io_amostras.py` | `Entrada/` → `achar_entradas` → `([(n_estratos, caminho), ...], painel)` (descobre **todas** as estratificações pelo conteúdo) · `ler_n_estratos` · `ler_amostras` `{k: df[ODI,Estrato,Municipio,Cons]}` · `ler_painel` `df[ODI,UC,Municipio,LATITUDE,LONGITUDE]` → `juntar_amostras_painel` `{k: df 1 linha por UC}` |
+| `io_amostras.py` | `Entrada/` → `achar_entradas` → `([(n_estratos, caminho), ...], painel)` (descobre **todas** as estratificações pelo conteúdo) · `ler_n_estratos` · `ler_amostras` `{k: df[ODI,Estrato,Municipio,Cons]}` · `ler_painel` `df[ODI,UC,Municipio,LATITUDE,LONGITUDE,TipoComunidade,Enquadramento]` · `ler_dominios` → `{tipo_comunidade: [...], enquadramento: [...]}` → `juntar_amostras_painel` `{k: df 1 linha por UC}` |
 | `distancias.py` | df de UCs → `resumo_por_odi` → **1 linha por ODI** (colunas fixas, mesmo vazio): `n_ucs`, `lat_centro`, `lon_centro`, `dist_interna_km` · `montar_roteiro(df_odis, lat0, lon0)` → `(df com ordem/km_trecho, km_total)` = **itinerário único** · `dividir_roteiro(..., n_equipes)` → `[(roteiro, km), ...]`, um por equipe |
 | `config.py` | **todos** os números do modelo (G1–G5 do gate F1 + F9). Zero números mágicos fora daqui |
 | `custo.py` | `repartir_entre_equipes(df_odis, uf, tipo, n)` → lista com o campo de **cada equipe** (km, UCs, horas) · `custo_amostra(df_odis, uf, tipo_contrato, n_equipes=None)` → `(dict com os números da AMOSTRA, df do detalhe por obra com a coluna `equipe`)` · `grade_cenarios(df_odis, uf, tipo)` → **grade equipes × prazo**, só as combinações viáveis |
-| `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, cenarios, **números}, ...], caminho)` → `saida/Resumo_Custos.xlsx` com **4 abas fixas**: `Leia-me` + `Resumo` (1 linha por estratificação) + `Cenarios` (grade equipes × prazo) + `Detalhe` (1 linha por obra, com a equipe dona e a ordem dela) |
+| `beneficiarios.py` | `perfil_da_amostra(df_ucs, dominios, n_estratos, amostra)` → 1 linha da aba `Resumo beneficiarios` · `contar_por_dominio` → `({rótulo: contagem}, n fora do domínio)`. **Único módulo que não fala de custo** |
+| `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, cenarios, **números}, ...], caminho, perfis=None)` → `saida/Resumo_Custos.xlsx` com **4 abas fixas** — `Leia-me` + `Resumo` (1 linha por estratificação) + `Cenarios` (grade equipes × prazo) + `Detalhe` (1 linha por obra, com a equipe dona e a ordem dela) — **mais `Resumo beneficiarios`, que só existe se o Anexo V trouxer a classificação** |
 | `mapas.py` | `gravar_mapa(df_ucs, lat0, lon0, caminho)` → `saida/Mapa_Estratos_N.html` (folium; **um ponto por UC**, todos iguais, mais o marcador da base. Sem rota, sem camadas) |
 
 Detalhes que não se deduzem lendo um arquivo só:
@@ -115,6 +118,20 @@ Detalhes que não se deduzem lendo um arquivo só:
   capital no fim. A hierarquia município→obra é deliberada: uma rota gulosa direta sobre as obras
   entraria e sairia do mesmo município. Nos dados reais isso é 1.529 km contra 10.521 km do
   modelo antigo — a correção que motivou a F9.
+- **A aba `Resumo beneficiarios` tem esquema VARIÁVEL, e é a única assim.** As colunas vêm do
+  domínio das listas suspensas do Anexo V (aba `Dominios`, colunas **D** = `Tipo de Comunidade`
+  e **E** = `Enquadramento do beneficiário`; 12 + 12 = 24 categorias no Anexo V real), lidas por
+  **posição**, que é como o humano se refere a elas. **A lista vem da planilha, não dos dados**:
+  categoria com zero ocorrências vira coluna de zeros, porque "a amostra não pegou nenhuma
+  família indígena" é informação, e a coluna ausente seria ambiguidade. Nenhuma célula pode ser
+  nula (decisão do humano); `int(0)` pode.
+  Cada UC entra em **uma** categoria de cada bloco, então a soma das colunas é `2 × n_ucs` —
+  é essa identidade que denuncia UC sem classificação. As três coisas que não somem em silêncio:
+  categoria fora do domínio (`AVISO`, não entra em coluna nenhuma), classificação vazia (não
+  conta, e a soma do bloco fica abaixo do total), e rótulo repetido nos dois domínios (o segundo
+  ganha sufixo, com `AVISO`, em vez de sobrescrever o primeiro).
+  Sem a aba `Dominios` **e** sem as colunas de classificação, a aba não é gerada — uma aba só com
+  cabeçalho enganaria mais do que a ausência dela.
 - **O TIPO DE CONTRATO muda as horas de escritório, não só a produtividade** (desde a F16). O
   Formulário de OS tem um parâmetro binário — `Tipo de obra`, célula `E48` da aba `Ordem de
   Serviço Emissão` — que as fórmulas `E26:E29` da aba `Custos Inspeções` leem: **Extensão de

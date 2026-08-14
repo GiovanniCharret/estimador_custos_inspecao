@@ -7,6 +7,10 @@ from src.io_amostras import EntradaInvalida
 
 # Renomeacao de apresentacao da aba Resumo (apenas exibicao; nao afeta o calculo).
 # A ordem deste dicionario e' a ordem das colunas na planilha.
+# Nome da aba de perfil dos beneficiarios. SEM acento, como 'Cenarios' e pelo mesmo motivo:
+# nome de aba vaza para mensagens de erro e para o console cp1252 do Windows.
+ABA_BENEFICIARIOS = "Resumo beneficiarios"
+
 # Como o Formulario de Ordem de Servico chama cada tipo de contrato. O usuario reconhece a
 # obra por este nome (e' o que ele escolhe na celula 'Tipo de obra' da OS), nao pela sigla.
 NOME_TIPO_OBRA = {
@@ -155,7 +159,44 @@ def _texto_leia_me(tipo_contrato=None):
     return linhas
 
 
-def gravar_resumo(resultados, caminho):
+def _tabela_beneficiarios(perfis):
+    """Monta a aba 'Resumo beneficiarios' a partir das linhas de perfil de cada estratificacao.
+
+    Por que existe: a aba tem colunas VARIAVEIS (dependem do dominio do Anexo V), ao
+    contrario das outras tres, que tem esquema fixo. Sem cuidado, uma estratificacao sem
+    determinada categoria produziria NaN naquela coluna - e o humano foi explicito: nenhuma
+    celula pode ser nula, zero pode.
+
+    Logica: Entrada (lista de dicts) -> Fase 1: sem perfis, devolve df vazio -> Fase 2:
+    empilha preservando a ORDEM das colunas do dominio (o pandas ordenaria por outro
+    criterio) -> Fase 3: troca qualquer buraco por 0 e forca inteiro -> Saida: DataFrame.
+    """
+    # Fase 1: sem estratificacao nenhuma nao ha aba a montar.
+    if not perfis:
+        return pd.DataFrame()
+    # Fase 2: a ordem das colunas e' a do dominio, na ordem em que a primeira linha as trouxe;
+    # linhas seguintes podem acrescentar categorias (paineis sem aba 'Dominios').
+    ordem = []
+    for perfil in perfis:
+        for chave in perfil:
+            if chave not in ordem:
+                ordem.append(chave)
+    identificacao = ["n_estratos", "amostra", "n_ucs"]
+    contagens = [c for c in ordem if c not in identificacao]
+    # Sem NENHUMA categoria (painel sem classificacao de beneficiario) nao ha aba: uma
+    # tabela so com estratificacao/amostra/UCs nao diz nada que o 'Resumo' ja nao diga, e
+    # apareceria como uma aba misteriosamente vazia.
+    if not contagens:
+        return pd.DataFrame()
+    tabela = pd.DataFrame(perfis).reindex(columns=ordem)
+    # Fase 3: buraco vira 0 (decisao do humano: nenhuma celula nula, int(0) pode).
+    tabela[contagens] = tabela[contagens].fillna(0).astype(int)
+    # Saida: uma linha por estratificacao, sem nenhum vazio.
+    return tabela.rename(columns={"n_estratos": "Estratos", "amostra": "Amostra",
+                                  "n_ucs": "UCs na amostra"})
+
+
+def gravar_resumo(resultados, caminho, perfis=None):
     """Grava o Resumo_Custos.xlsx com todas as estratificacoes numa planilha so.
 
     Por que existe: e' o produto principal do estimador - a tabela que o humano cola na
@@ -164,10 +205,11 @@ def gravar_resumo(resultados, caminho):
     tomar. Isolar a gravacao permite ajustar formato sem tocar no calculo.
 
     Logica: Entrada (lista de dicts com os numeros + roteiro + cenarios de cada amostra,
-    caminho) -> Fase 1: separa as tres granularidades (resumo, cenarios, detalhe) -> Fase 2:
-    grava Leia-me -> Fase 3: grava a aba Resumo (uma linha por estratificacao) -> Fase 4:
-    grava a aba Cenarios (prazos alternativos) -> Fase 5: grava a aba Detalhe (todas as
-    obras, empilhadas) -> Saida: .xlsx gravado.
+    caminho, perfis de beneficiario) -> Fase 1: separa as granularidades (resumo, cenarios,
+    detalhe) -> Fase 2: grava Leia-me -> Fase 3: grava a aba Resumo (uma linha por
+    estratificacao) -> Fase 4: grava a aba Cenarios (grade equipes x prazo) -> Fase 5:
+    grava a aba Detalhe (todas as obras, empilhadas) -> Fase 6: grava a aba de
+    beneficiarios, quando houver -> Saida: .xlsx gravado.
     """
     # Fase 1: separa as tres granularidades a partir da mesma lista de resultados.
     linhas_resumo = []
@@ -204,6 +246,13 @@ def gravar_resumo(resultados, caminho):
             cenarios.rename(columns=COLUNAS_CENARIOS).round(2).to_excel(xls, sheet_name="Cenarios", index=False)
             # Fase 5: o detalhe por obra, na ordem em que a equipe as visita.
             detalhe.rename(columns=COLUNAS_DETALHE).round(4).to_excel(xls, sheet_name="Detalhe", index=False)
+            # Fase 6: o perfil dos beneficiarios. E' a unica aba que nao fala de custo, e a
+            # unica de esquema variavel (as colunas vem do dominio do Anexo V). Sem perfis
+            # (painel antigo, sem as colunas de classificacao) a aba simplesmente nao existe -
+            # uma aba so com cabecalho enganaria mais do que a ausencia dela.
+            beneficiarios = _tabela_beneficiarios(perfis or [])
+            if len(beneficiarios):
+                beneficiarios.to_excel(xls, sheet_name=ABA_BENEFICIARIOS, index=False)
     except PermissionError:
         # Arquivo travado (aberto no Excel): mensagem de usuario, nao traceback.
         raise EntradaInvalida(f"Nao consegui gravar {caminho}.\nFeche o arquivo no Excel e rode de novo.")

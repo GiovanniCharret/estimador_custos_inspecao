@@ -14,7 +14,7 @@ from src import config
 from src.distancias import haversine_km
 from src.estimar_custos import executar
 from testes.fixtures import (escrever_lote, escrever_painel, escrever_painel_anexo_v,
-                             ODIS, ODIS_LOTE_TEXTO)
+                             ODIS, ODIS_LOTE_TEXTO, ODIS_PAINEL_NUMERO)
 
 
 def _monta_entrada(raiz, odis_painel=ODIS, **kwargs_lote):
@@ -163,6 +163,50 @@ def test_e2e_roteiro_encadeado_derruba_a_quilometragem(tmp_path):
     assert len(obras) == len(ODIS)
     for _, da_equipe in obras.groupby("Equipe"):
         assert sorted(da_equipe["Ordem"]) == list(range(1, len(da_equipe) + 1))
+
+
+def test_e2e_aba_de_beneficiarios(tmp_path):
+    # A aba 'Resumo beneficiarios' sai do pipeline inteiro, com UMA coluna por categoria do
+    # dominio do Anexo V - inclusive as que ninguem escolheu - e nenhuma celula nula.
+    (tmp_path / "Entrada").mkdir()
+    escrever_lote(tmp_path / "Entrada" / "Lote.xlsx", abas=(1,), odis=ODIS_LOTE_TEXTO)
+    # 5 ODIs x 2 UCs = 10 linhas. Duas quilombolas, oito rurais; ninguem indigena.
+    classificacoes = ([("2 - Comunidade quilombola", "4 - Povos tradicionais")] * 2
+                      + [("11 - Rural geral / demais comunidades rurais",
+                          "1 - Famílias de baixa renda")] * 8)
+    escrever_painel_anexo_v(tmp_path / "Entrada" / "Anexo V - T.xlsx",
+                            odis=ODIS_PAINEL_NUMERO, classificacoes=classificacoes,
+                            com_dominios=True)
+    assert executar(tmp_path) == 0
+    caminho = tmp_path / "saida" / "Resumo_Custos.xlsx"
+    xls = pd.ExcelFile(caminho)
+    assert "Resumo beneficiarios" in xls.sheet_names
+    aba = xls.parse("Resumo beneficiarios")
+    # Uma linha por estratificacao (aqui so uma) e nenhuma celula nula.
+    assert len(aba) == 1
+    assert int(aba.isna().sum().sum()) == 0
+    linha = aba.iloc[0]
+    assert linha["UCs na amostra"] == 10
+    assert linha["2 - Comunidade quilombola"] == 2
+    assert linha["11 - Rural geral / demais comunidades rurais"] == 8
+    # A categoria que ninguem escolheu existe, valendo zero - e' o ponto da aba.
+    assert linha["1 - Comunidade indígena"] == 0
+    assert linha["0 - Não é prioridade"] == 0
+    # Cada UC entra em UMA categoria de cada bloco: a soma e' 2 x o numero de UCs.
+    contagens = [c for c in aba.columns if c not in ("Estratos", "Amostra", "UCs na amostra")]
+    assert sum(int(linha[c]) for c in contagens) == 2 * linha["UCs na amostra"]
+    # E as outras quatro abas continuam la (a aba nova nao substitui nada).
+    assert {"Leia-me", "Resumo", "Cenarios", "Detalhe"} <= set(xls.sheet_names)
+
+
+def test_e2e_sem_dominios_nao_gera_a_aba(tmp_path):
+    # Anexo V antigo, sem classificacao de beneficiario: a aba simplesmente nao existe.
+    # Uma aba so com cabecalho enganaria mais do que a ausencia dela.
+    _monta_entrada(tmp_path)
+    assert executar(tmp_path) == 0
+    xls = pd.ExcelFile(tmp_path / "saida" / "Resumo_Custos.xlsx")
+    assert "Resumo beneficiarios" not in xls.sheet_names
+    assert xls.sheet_names == ["Leia-me", "Resumo", "Cenarios", "Detalhe"]
 
 
 def test_e2e_padrao_sao_duas_equipes_independentes(tmp_path):

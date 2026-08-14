@@ -49,6 +49,8 @@ x F15 — **Equipes independentes** (decisão G8): padrão de 2 equipes, cada um
     roteiro; aba `Cenarios` vira grade equipes × prazo, só com o viável — 2026-08-13
 x F16 — **Horas de escritório por tipo de obra** (decisão G9): 36h no LPT, 24h no MLA,
     conforme o parâmetro `E48` do Formulário de OS — 2026-08-13
+x F17 — **Aba `Resumo beneficiarios`** (decisão G11): perfil das UCs sorteadas por
+    categoria do domínio do Anexo V, uma linha por estratificação — 2026-08-14
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -147,6 +149,22 @@ x F16 — **Horas de escritório por tipo de obra** (decisão G9): 36h no LPT, 2
   Efeito no número: **o padrão ficou mais caro**, porque duas equipes pagam dois deslocamentos —
   na sondagem de 26 obras na PB, R$ 41.760 (1 equipe, 1.220 km) → R$ 60.960 (2 equipes, 1.663 km).
   Isso fecha as lacunas L1, L2, L3, L4 e L7 de `LACUNAS_CENARIOS.md`.
+- **G11 — PERFIL DOS BENEFICIÁRIOS (F17, pedido do humano em 2026-08-14):** nova aba
+  `Resumo beneficiarios` no `Resumo_Custos.xlsx`, com **uma linha por estratificação** e uma
+  coluna por categoria das duas listas suspensas do Anexo V — `Tipo de Comunidade` (domínio na
+  coluna **D** da aba `Dominios`, 12 opções) e `Enquadramento do beneficiário` (coluna **E**,
+  12 opções). Responde a pergunta que o resto da planilha não responde: *quem* são as pessoas
+  que a amostra vai visitar. **Não entra em nenhuma conta de custo** — por isso vive num módulo
+  próprio, `src/beneficiarios.py`.
+  Regras que o humano fixou: nenhuma célula nula, `int(0)` pode. Daí a lista de colunas vir do
+  **domínio da planilha** e não dos valores presentes — categoria com zero ocorrências é
+  informação, coluna ausente seria ambiguidade.
+  **Correção de premissa feita na conversa:** o humano descreveu as colunas `D`/`E` como fonte
+  das binárias `O:AZ`. São coisas diferentes: `D`/`E` são os domínios das colunas `M`/`N`
+  (escolha única por UC), enquanto `O:AZ` são 38 flags `Sim`/`Não` cujo domínio é a coluna `F`
+  (`CODIGO_TIPOLOGIA_BENEFICIO`). Ele escolheu `D`+`E`. As duas visões se sobrepõem — as 16 UCs
+  com `2 - Comunidade quilombola` são as mesmas com `Sim` em `IV.2 - Família quilombola` —, então
+  as tipologias `O:AZ` ficam disponíveis para uma fase futura sem retrabalho.
 - **G9 — O TIPO DE OBRA MUDA AS HORAS DE ESCRITÓRIO (F16, achado do humano em 2026-08-13):** o
   Formulário de OS tem um parâmetro binário que o modelo ignorava — `Tipo de obra` (célula `E48`
   da aba `Ordem de Serviço Emissão`), lido pelas fórmulas `E26:E29` da aba `Custos Inspeções`:

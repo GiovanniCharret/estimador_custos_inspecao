@@ -28,8 +28,9 @@ rodar a suíte numa máquina limpa, sem os dados reais da distribuidora.
 | `test_distancias.py` | 14 | F3/F9/F11 | haversine contra valor conhecido (Belém→Castanhal ≈ 62 km), ponto igual = 0, centroide/rota interna, ODI com 1 UC, o **roteiro encadeado** (permutação completa, município não é revisitado, km fecha com trechos + volta, determinismo, amostra vazia) e a **divisão entre equipes** (toda obra tem dono, dividir soma mais km, 1 equipe = roteiro inteiro, mais equipes que obras, determinismo) |
 | `test_custo.py` | 20 | F4/F9/F10/F15/F16 | **horas de escritório por tipo de obra** (36h LPT × 24h MLA, amarradas contra a planilha fonte, sem monkeypatch), tarifa do técnico mudando com o tipo e a do engenheiro não, | fórmula da amostra com parâmetros redondos, roteiro < ida-e-volta, **fixo independente do nº de estratos**, LPT × MLA, arredondamento de dias, **dobrar a equipe (pessoas) = metade dos dias e não metade do custo**, **duas equipes rodam mais km e custam mais**, **prazo ditado pela equipe mais lenta**, detalhe com a equipe dona, a **grade equipes × prazo** (limites, ordem, monotonia do custo, linha `calculado`), o **descarte do inviável** e a prova de que ele **não roteia**, **reprodução da fórmula do benchmark**, diária diluída |
 | `test_resumo.py` | 5 | F5/F9/F10/F15 | as 4 abas fixas, `Equipes` × `Pessoas por equipe` como colunas distintas, a grade casando com o `Resumo`, equipe + ordem no detalhe, Leia-me com os parâmetros vigentes, `PermissionError` → mensagem amigável |
+| `test_beneficiarios.py` | 9 | F17 | leitura do domínio pelas colunas D/E (e a ausência da aba `Dominios` não sendo erro), **categoria vazia virando coluna de zeros**, espaço sobrando e acento não perdendo a UC, categoria fora do domínio contada à parte com aviso, UC sem classificação, e a garantia de que **nenhuma célula sai nula** — nem numa estratificação sem UC |
 | `test_mapas.py` | 4 | F6/F14 | um ponto por UC (obra de 3 UCs = 3 pontos), popup com ODI/município/nº de UCs, marcador da base, amostra vazia sem ponto — e um teste da **ausência**: nada de polilinha, parada ou radio de equipes |
-| `test_e2e.py` | 28 | F7/F8/F9/F10/F11/F15/F16 | pipeline inteiro `Entrada/` → `saida/` (abaixo) |
+| `test_e2e.py` | 30 | F7/F8/F9/F10/F11/F15/F16/F17 | pipeline inteiro `Entrada/` → `saida/` (abaixo) |
 
 ## O que o e2e cobre (F7)
 
@@ -42,6 +43,8 @@ Caminho feliz e as bordas que o `DESIGN.md` §7 elegeu como os erros mais prová
 | `test_e2e_varias_estratificacoes_numa_planilha_so` | Estratos 3 e 5 na `Entrada/` → 4 linhas na mesma aba `Resumo`, 2 mapas |
 | `test_e2e_roteiro_encadeado_derruba_a_quilometragem` | o roteiro gravado é menor que a soma das idas-e-voltas do modelo antigo, mesmo já somando os roteiros das duas equipes do padrão |
 | `test_e2e_padrao_sao_duas_equipes_independentes` | a aba `Resumo` diz 2 equipes, `Equipes` e `Pessoas por equipe` não se confundem, e as duas equipes aparecem no `Detalhe` com cada obra tendo um dono só |
+| `test_e2e_aba_de_beneficiarios` | a aba sai do pipeline inteiro com a categoria de zero ocorrências presente, zero nulos, e a soma das colunas igual a `2 × UCs` |
+| `test_e2e_sem_dominios_nao_gera_a_aba` | Anexo V antigo (sem classificação) → a planilha volta a ter exatamente as 4 abas |
 | `test_e2e_tipo_de_obra_muda_as_horas_de_escritorio` | contrato MLA → 24h e R$ 8.640 de fixo na aba `Resumo`, e o `Leia-me` nomeando "Geração Descentralizada" com o desdobramento das etapas |
 | `test_e2e_tipo_vem_do_prefixo_do_contrato` | `ECM`→MLA e `ECO`/`ECFS`/`ECOT`→LPT, com a base **sem** o campo `tipo_contrato` — o prefixo basta |
 | `test_e2e_prefixo_vence_o_cadastro_mas_avisa` | o caso real `ECM 001/2020` (cadastrado como LPT): o prefixo vence, o aviso sai, e o custo usa mesmo as 24h |

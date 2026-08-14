@@ -32,10 +32,28 @@ ALIAS_PAINEL = {
     "municipio": "municipio",
     "latitude": "latitude",
     "longitude": "longitude",
+    # Classificacao do beneficiario: escolha UNICA por UC, de uma lista suspensa cujo
+    # dominio mora na aba 'Dominios' (colunas D e E). Alimentam a aba 'Resumo
+    # beneficiarios' e nao participam de nenhum calculo de custo.
+    "tipo de comunidade": "tipo_comunidade",
+    "enquadramento do beneficiario": "enquadramento",
 }
 
-# Colunas sem as quais o Painel nao serve para nada (a UC e o municipio sao opcionais).
+# Colunas sem as quais o Painel nao serve para nada (a UC, o municipio e a classificacao
+# do beneficiario sao opcionais - sem elas o custo sai igual).
 COLUNAS_MINIMAS_PAINEL = {"odi", "latitude", "longitude"}
+
+# Aba e colunas dos DOMINIOS das listas suspensas do Anexo V. As colunas D e E sao as
+# duas classificacoes do beneficiario, e cada uma vira um bloco de colunas da aba
+# 'Resumo beneficiarios'. Ler o dominio da planilha (em vez de deduzir dos valores
+# presentes) e' o que garante que uma categoria com ZERO ocorrencias apareca mesmo assim -
+# na leitura gerencial, "nenhuma familia indigena" e' informacao, nao ausencia de linha.
+ABA_DOMINIOS = "Dominios"
+COLUNAS_DOMINIOS = {
+    # coluna da aba 'Dominios' -> coluna interna do painel que ela classifica
+    "D": "tipo_comunidade",
+    "E": "enquadramento",
+}
 
 # Linhas de cabecalho testadas no Painel, nesta ordem. A 0 cobre o formato simples
 # (e todos os testes sinteticos); a 1 cobre o Anexo V real, cuja primeira linha e' uma
@@ -318,6 +336,14 @@ def ler_painel(caminho):
         "Municipio": df[colmap["municipio"]].astype(str).str.strip() if "municipio" in colmap else "",
         "LATITUDE": pd.to_numeric(df[colmap["latitude"]], errors="coerce"),
         "LONGITUDE": pd.to_numeric(df[colmap["longitude"]], errors="coerce"),
+        # Classificacao do beneficiario. Vem com espaco sobrando no Anexo V real
+        # ('11 - Rural geral / demais comunidades rurais '), e sem o strip ela nao casa
+        # com o dominio da aba 'Dominios'. Ausente vira "" - a aba de beneficiarios
+        # mostra zeros, e o custo nao muda.
+        "TipoComunidade": (df[colmap["tipo_comunidade"]].astype(str).str.strip()
+                           if "tipo_comunidade" in colmap else ""),
+        "Enquadramento": (df[colmap["enquadramento"]].astype(str).str.strip()
+                          if "enquadramento" in colmap else ""),
     })
     # Fase 3: marca invalidas - NaN, zero exato ou fora da bounding box do Brasil.
     b = BBOX_BRASIL
@@ -329,6 +355,48 @@ def ler_painel(caminho):
         print(f"AVISO: {(~validas).sum()} UC(s) com coordenada invalida descartada(s) de {caminho.name}.")
     # Saida: somente UCs com coordenada valida.
     return ucs[validas].reset_index(drop=True)
+
+
+def ler_dominios(caminho):
+    """Le os dominios das listas suspensas de classificacao do beneficiario (aba 'Dominios').
+
+    Por que existe: a aba 'Resumo beneficiarios' tem UMA COLUNA POR CATEGORIA POSSIVEL, e
+    nao por categoria presente nos dados. A diferenca importa na leitura gerencial: uma
+    coluna 'Familia indigena' com zero e' um fato ('a amostra nao pegou nenhuma'), enquanto
+    a coluna ausente e' um mistero ('esqueceram ou nao existe?'). Por isso a lista de
+    colunas vem da PLANILHA, e nao dos valores encontrados.
+
+    A aba e' opcional: paineis antigos (e todos os sinteticos dos testes) nao a tem. Sem
+    ela, a aba de beneficiarios sai com as categorias que aparecerem nos dados - degradado,
+    mas util - e o resto do programa segue igual.
+
+    Logica: Entrada (caminho do Anexo V) -> Fase 1: sem a aba 'Dominios', devolve dominios
+    vazios -> Fase 2: le a aba inteira sem cabecalho, para pegar as colunas por POSICAO
+    (D e E), que e' como o humano as identifica -> Fase 3: primeira linha e' o titulo do
+    dominio; o resto sao os valores, na ordem da planilha -> Saida: {coluna interna:
+    [valores...]}.
+    """
+    xls = pd.ExcelFile(caminho)
+    # Fase 1: aba ausente nao e' erro - so nao ha dominio declarado.
+    aba = next((a for a in xls.sheet_names if _norm(a) == _norm(ABA_DOMINIOS)), None)
+    if aba is None:
+        return {interno: [] for interno in COLUNAS_DOMINIOS.values()}
+    # Fase 2: sem cabecalho, para que a posicao da coluna (D=3, E=4) seja o que manda -
+    # e' assim que o humano se refere a elas, e o titulo da linha 1 nao e' um dado.
+    df = xls.parse(aba, header=None)
+    dominios = {}
+    for letra, interno in COLUNAS_DOMINIOS.items():
+        # Letra da coluna -> indice 0-based ('D' -> 3).
+        indice = ord(letra.upper()) - ord("A")
+        if indice >= len(df.columns):
+            dominios[interno] = []
+            continue
+        # Fase 3: pula o titulo (linha 1) e mantem a ordem da planilha, que e' a ordem
+        # em que o usuario ve as opcoes na lista suspensa.
+        valores = df.iloc[1:, indice].dropna().astype(str).str.strip()
+        dominios[interno] = [v for v in valores if v]
+    # Saida: um dominio por classificacao, ja na ordem de apresentacao.
+    return dominios
 
 
 def escolher_chave_juncao(amostras, ucs, tipo_contrato=None):
@@ -477,6 +545,11 @@ def juntar_amostras_painel(amostras, ucs, tipo_contrato=None):
                 "UC": f"{odi}-{municipio}",
                 "LATITUDE": float(candidatas["LATITUDE"].mean()),
                 "LONGITUDE": float(candidatas["LONGITUDE"].mean()),
+                # A pseudo-UC nao existe no Anexo V, entao nao tem classificacao de
+                # beneficiario. Fica "" (e nao NaN) para a contagem por dominio poder
+                # trata-la como "sem classificacao" em vez de quebrar.
+                "TipoComunidade": "",
+                "Enquadramento": "",
             })
         # Fase 5: merge 1-para-N (cada ODI tem varias UCs) para os ODIs com UC real no painel;
         # remove Municipio de ucs antes do merge para nao duplicar a coluna ja vinda da amostra.

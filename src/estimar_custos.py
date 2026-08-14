@@ -19,7 +19,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.io_amostras import (EntradaInvalida, achar_entradas, ler_amostras,   # noqa: E402
-                             ler_painel, juntar_amostras_painel)
+                             ler_dominios, ler_painel, juntar_amostras_painel)
+from src.beneficiarios import perfil_da_amostra                               # noqa: E402
 from src.distancias import resumo_por_odi                                     # noqa: E402
 from src.custo import custo_amostra, grade_cenarios                           # noqa: E402
 from src.resumo import gravar_resumo                                          # noqa: E402
@@ -174,10 +175,14 @@ def executar(raiz, contrato=None, amostra=None):
         print(f"Lendo painel   : {painel.name}")
         # O painel serve a todas as estratificacoes - lido uma vez so.
         ucs = ler_painel(painel)
+        # Dominios das listas suspensas de classificacao do beneficiario: definem as COLUNAS
+        # da aba 'Resumo beneficiarios'. Aba opcional - painel antigo simplesmente nao a tem.
+        dominios = ler_dominios(painel)
         print(f"Estratificacoes: {', '.join(f'{n} estratos ({c.name})' for n, c in lotes)}")
         print(f"Amostra escolhida: {amostra}")
         # Fase 3: uma passada por estratificacao, precificando so a amostra escolhida.
         resultados = []
+        perfis = []
         mapas = {}
         for n_estratos, caminho in lotes:
             amostras = ler_amostras(caminho)
@@ -211,6 +216,9 @@ def executar(raiz, contrato=None, amostra=None):
                       f"{config.MAX_DIAS_POR_EQUIPE:g} dias por equipe com ate "
                       f"{config.N_EQUIPES_MAX:g} equipes; a aba 'Cenarios' fica sem linhas "
                       f"para esta estratificacao.")
+            # Perfil dos beneficiarios desta estratificacao: conta as UCs sorteadas em cada
+            # categoria do dominio. Nao entra em nenhuma conta de custo - e' outra pergunta.
+            perfis.append(perfil_da_amostra(df_ucs, dominios, n_estratos, amostra))
             # Guarda os numeros (para o resumo) e as UCs (para o mapa, que so as localiza).
             resultados.append({"n_estratos": n_estratos, "amostra": amostra,
                                "roteiro": roteiro, "cenarios": cenarios, **numeros})
@@ -225,7 +233,7 @@ def executar(raiz, contrato=None, amostra=None):
         saida = raiz / "saida"
         saida.mkdir(exist_ok=True)
         # Uma planilha so, com todas as estratificacoes lado a lado (decisao do humano na F9).
-        gravar_resumo(resultados, saida / "Resumo_Custos.xlsx")
+        gravar_resumo(resultados, saida / "Resumo_Custos.xlsx", perfis=perfis)
         # A capital entra no mapa como base da equipe (de onde ela parte), nao como obra.
         lat_cap, lon_cap = config.CAPITAIS_UF[uf]
         for n_estratos, df_ucs in mapas.items():

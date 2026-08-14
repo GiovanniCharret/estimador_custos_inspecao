@@ -75,8 +75,19 @@ def escrever_painel(caminho, odis=ODIS, ucs_por_odi=2, municipio="BARCARENA"):
         pd.DataFrame(linhas).to_excel(xls, sheet_name="Base_UC", index=False)
 
 
+# Dominios sinteticos das duas listas suspensas de classificacao do beneficiario, no
+# formato da aba 'Dominios' do Anexo V real: coluna D = tipo de comunidade, coluna E =
+# enquadramento. Curtos de proposito - o que os testes precisam provar e' que a coluna
+# aparece MESMO com zero ocorrencias, e para isso bastam poucas categorias.
+DOMINIO_COMUNIDADE = ["1 - Comunidade indígena", "2 - Comunidade quilombola",
+                      "11 - Rural geral / demais comunidades rurais"]
+DOMINIO_ENQUADRAMENTO = ["0 - Não é prioridade", "1 - Famílias de baixa renda",
+                         "4 - Povos tradicionais"]
+
+
 def escrever_painel_anexo_v(caminho, odis=ODIS_PAINEL_NUMERO, ucs_por_odi=2,
-                            municipio="GURINHÉM", numeros_uc=None):
+                            municipio="GURINHÉM", numeros_uc=None,
+                            classificacoes=None, com_dominios=False):
     """Grava um Painel no formato REAL do 'Anexo V - Painel de Monitoramento'.
 
     Por que existe: o Painel real e' saida do projeto irmao (monitoramentolpt_producao_enbpar)
@@ -93,12 +104,17 @@ def escrever_painel_anexo_v(caminho, odis=ODIS_PAINEL_NUMERO, ucs_por_odi=2,
     numeros_uc permite ditar os numeros de UC linha a linha (em vez do 4600000+i*10+j
     automatico). E' o que torna possivel testar a chave de juncao do contrato MLA, em que a
     UC e a ODI precisam apontar para linhas DIFERENTES para o teste provar alguma coisa.
+
+    classificacoes/com_dominios acrescentam a parte de BENEFICIARIOS: as colunas 'Tipo de
+    Comunidade'/'Enquadramento do beneficiario' na aba de dados e a aba 'Dominios' com as
+    listas suspensas. Ficam desligados por padrao porque o Anexo V antigo nao os tem - e os
+    testes de custo nao devem mudar de comportamento por causa disso.
     """
     linhas = []
     # Fase 1: ucs_por_odi UCs por ODI, com os nomes de coluna exatos do Anexo V.
     for i, odi in enumerate(odis):
         for j in range(ucs_por_odi):
-            linhas.append({
+            linha = {
                 "Distribuidora": "EPB",
                 "Número ODI": odi,
                 # Numero ditado pelo chamador quando ele quer controlar a chave; senao,
@@ -110,11 +126,32 @@ def escrever_painel_anexo_v(caminho, odis=ODIS_PAINEL_NUMERO, ucs_por_odi=2,
                 # Coordenadas na Paraiba (dentro da bbox do Brasil).
                 "Latitude": -7.12 - i * 0.01,
                 "Longitude": -35.35 - j * 0.01,
-            })
+            }
+            if classificacoes is not None:
+                # Espaco sobrando no fim de proposito: e' assim que o Anexo V real vem, e
+                # sem strip o valor nao casa com o dominio.
+                comunidade, enquadramento = classificacoes[len(linhas)]
+                linha["Tipo de Comunidade"] = f"{comunidade} "
+                linha["Enquadramento do beneficiário"] = enquadramento
+            linhas.append(linha)
     df = pd.DataFrame(linhas)
     with pd.ExcelWriter(caminho, engine="openpyxl") as xls:
         # Fase 2: startrow=1 deixa a primeira linha livre para a faixa de grupo.
         df.to_excel(xls, sheet_name="Preenchimento", index=False, startrow=1)
+        # Aba 'Dominios' no formato real: uma coluna por lista suspensa, com o titulo na
+        # primeira linha. As colunas A/B/C existem so para empurrar os dominios para D e E,
+        # que e' onde o programa os procura (por POSICAO, como o humano os identifica).
+        if com_dominios:
+            maior = max(len(DOMINIO_COMUNIDADE), len(DOMINIO_ENQUADRAMENTO))
+            def _completa(valores):
+                return list(valores) + [None] * (maior - len(valores))
+            pd.DataFrame({
+                "TIPO_ATENDIMENTO": _completa(["Extensão de Rede"]),
+                "UF": _completa(["PB"]),
+                "SIM_NAO": _completa(["Sim", "Não"]),
+                "TIPO_COMUNIDADE": _completa(DOMINIO_COMUNIDADE),
+                "ENQUADRAMENTO_BENEFICIARIO": _completa(DOMINIO_ENQUADRAMENTO),
+            }).to_excel(xls, sheet_name="Dominios", index=False)
         ws = xls.sheets["Preenchimento"]
         # Fase 3: faixa mesclada por cima do cabecalho real - e' ela que faz o pandas com
         # header=0 enxergar 'Identificacao minima' + varias colunas 'Unnamed'.
