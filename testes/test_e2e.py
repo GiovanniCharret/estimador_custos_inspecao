@@ -410,6 +410,33 @@ def test_e2e_contrato_desconhecido(tmp_path, capsys, monkeypatch):
     assert "ECM TESTE-2026" in capsys.readouterr().out
 
 
+def test_e2e_base_de_contratos_quebrada(tmp_path, capsys, monkeypatch):
+    # A base e' editada A MAO (foi assim que o ECM 001/2020 foi corrigido) e o erro mais
+    # comum e' virgula sobrando depois do ultimo contrato. Isso e' erro de DADOS: mensagem
+    # apontando a linha, exit 1, sem traceback de json/decoder.py na cara do usuario.
+    _monta_entrada(tmp_path)
+    (tmp_path / "base_contratos.json").write_text(
+        '{\n  "ECO 001/2026": {"uf": "PA", "vigente": "Andamento"},\n}\n', encoding="utf-8")
+    monkeypatch.setattr(config, "ARQUIVO_BASE_CONTRATOS", "base_contratos.json")
+    assert executar(tmp_path, contrato="ECO 001/2026") == 1
+    saida = capsys.readouterr().out
+    assert "ERRO DE ENTRADA" in saida
+    assert "erro de sintaxe" in saida and "linha 3" in saida
+    # E diz a causa provavel, que e' o que resolve o problema de quem esta lendo.
+    assert "VIRGULA SOBRANDO" in saida
+
+
+def test_e2e_base_de_contratos_com_bom(tmp_path, capsys, monkeypatch):
+    # O Bloco de Notas do Windows grava BOM. Com encoding='utf-8' puro o BOM derrubava a
+    # leitura com um erro incompreensivel ('Expecting value: line 1 column 1').
+    _monta_entrada(tmp_path)
+    (tmp_path / "base_contratos.json").write_text(
+        '{"ECO 001/2026": {"uf": "PA", "vigente": "Andamento"}}', encoding="utf-8-sig")
+    monkeypatch.setattr(config, "ARQUIVO_BASE_CONTRATOS", "base_contratos.json")
+    assert executar(tmp_path, contrato="ECO 001/2026") == 0
+    assert "UF=PA" in capsys.readouterr().out
+
+
 def test_e2e_base_de_contratos_ausente(tmp_path, capsys, monkeypatch):
     # Contrato informado mas base ausente: erro de entrada claro, nao traceback.
     _monta_entrada(tmp_path)

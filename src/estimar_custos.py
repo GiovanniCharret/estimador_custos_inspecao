@@ -108,7 +108,24 @@ def _resolver_contrato(raiz, contrato):
             f"({config.UF_PADRAO}/{config.TIPO_CONTRATO_PADRAO})."
         )
     # Le o JSON de contratos (chave = nome do contrato; campos uf/tipo_contrato/vigente).
-    base = json.loads(caminho.read_text(encoding="utf-8"))
+    # utf-8-SIG e nao utf-8: este arquivo e' editado A MAO no Windows (foi assim que o
+    # ECM 001/2020 foi corrigido), e o Bloco de Notas grava BOM. Com 'utf-8' puro o BOM
+    # viraria um erro incompreensivel ('Expecting value: line 1 column 1').
+    texto = caminho.read_text(encoding="utf-8-sig")
+    try:
+        base = json.loads(texto)
+    except json.JSONDecodeError as erro:
+        # Arquivo editado a mao e quebrado: e' erro de DADOS, nao bug de programa - o
+        # usuario precisa saber ONDE e o que costuma ser, nao ver um traceback de json/.
+        linha = texto.splitlines()[erro.lineno - 1] if erro.lineno <= len(texto.splitlines()) else ""
+        raise EntradaInvalida(
+            f"A base de contratos esta com erro de sintaxe e nao pode ser lida:\n"
+            f"  {caminho}\n"
+            f"  linha {erro.lineno}, coluna {erro.colno}: {erro.msg}\n"
+            f"  linha {erro.lineno}: {linha.strip()!r}\n"
+            f"Causa mais comum ao editar a mao: VIRGULA SOBRANDO depois do ultimo contrato\n"
+            f"(o JSON nao aceita ',' antes do '}}' final), ou aspas/chaves faltando."
+        )
     # Fase 3: indexa a base pela chave canonica e busca o contrato informado pela mesma regra -
     # continua sendo casamento exato, so que 'ECO 037-2025' e 'ECO 037/2025' viram a mesma chave.
     indice = {_chave_contrato(c): c for c in base}

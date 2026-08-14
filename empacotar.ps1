@@ -17,13 +17,19 @@ $Destino = Join-Path $PSScriptRoot "distribuicao\EstimadorCustos"
 if (Test-Path $Destino) {
     Remove-Item $Destino -Recurse -Force -ErrorAction SilentlyContinue
 }
+# O que interessa e' nao sobrar ARQUIVO - a pasta em si pode resistir a exclusao sem que
+# isso seja problema. No Windows basta o Explorer, o editor ou um terminal com o cwd ali
+# dentro para segurar o diretorio, e abortar nesse caso seria recusar trabalho por nada.
+$Presos = @()
 if (Test-Path $Destino) {
-    $Presos = Get-ChildItem $Destino -Recurse -File | ForEach-Object { $_.FullName }
+    $Presos = @(Get-ChildItem $Destino -Recurse -File -Force -ErrorAction SilentlyContinue)
+}
+if ($Presos.Count -gt 0) {
     Write-Host ""
     Write-Host "ERRO: nao consegui limpar $Destino." -ForegroundColor Red
     Write-Host "Algum arquivo esta aberto (tipicamente um .xlsx no Excel). Feche e rode de novo."
     Write-Host "Ficaram:"
-    $Presos | ForEach-Object { Write-Host "  $_" }
+    $Presos | ForEach-Object { Write-Host "  $($_.FullName)" }
     exit 1
 }
 New-Item -ItemType Directory -Path $Destino -Force | Out-Null
