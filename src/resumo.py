@@ -160,22 +160,29 @@ def _texto_leia_me(tipo_contrato=None):
 
 
 def _tabela_beneficiarios(perfis):
-    """Monta a aba 'Resumo beneficiarios' a partir das linhas de perfil de cada estratificacao.
+    """Monta a aba 'Resumo beneficiarios' TRANSPOSTA: categoria por linha, estratificacao por coluna.
 
-    Por que existe: a aba tem colunas VARIAVEIS (dependem do dominio do Anexo V), ao
-    contrario das outras tres, que tem esquema fixo. Sem cuidado, uma estratificacao sem
-    determinada categoria produziria NaN naquela coluna - e o humano foi explicito: nenhuma
-    celula pode ser nula, zero pode.
+    Por que existe: a aba tem esquema VARIAVEL (as categorias vem do dominio do Anexo V),
+    ao contrario das outras tres. Sem cuidado, uma estratificacao sem determinada categoria
+    produziria NaN naquela celula - e o humano foi explicito: nenhuma celula pode ser nula,
+    zero pode.
 
-    Logica: Entrada (lista de dicts) -> Fase 1: sem perfis, devolve df vazio -> Fase 2:
-    empilha preservando a ORDEM das colunas do dominio (o pandas ordenaria por outro
-    criterio) -> Fase 3: troca qualquer buraco por 0 e forca inteiro -> Saida: DataFrame.
+    Por que TRANSPOSTA (decisao do humano em 2026-08-14): sao ~24 categorias contra 3 ou 4
+    estratificacoes. Na horizontal a aba fica com dezenas de colunas de rotulo longo, que
+    ninguem le sem rolar; na vertical o rotulo cabe na primeira coluna e as estratificacoes
+    ficam lado a lado, que e' justamente a comparacao que o humano precisa fazer. E' a mesma
+    forma do gabarito da engenharia.
+
+    Logica: Entrada (lista de dicts, um por estratificacao) -> Fase 1: sem perfis ou sem
+    categoria nenhuma, devolve df vazio -> Fase 2: empilha preservando a ORDEM do dominio
+    -> Fase 3: troca buraco por 0 e forca inteiro -> Fase 4: transpoe -> Saida: DataFrame
+    com o rotulo no INDICE (a gravacao usa index=True e header=False).
     """
     # Fase 1: sem estratificacao nenhuma nao ha aba a montar.
     if not perfis:
         return pd.DataFrame()
-    # Fase 2: a ordem das colunas e' a do dominio, na ordem em que a primeira linha as trouxe;
-    # linhas seguintes podem acrescentar categorias (paineis sem aba 'Dominios').
+    # Fase 2: a ordem das linhas e' a do dominio, na ordem em que o primeiro perfil as trouxe;
+    # perfis seguintes podem acrescentar categorias (paineis sem aba 'Dominios').
     ordem = []
     for perfil in perfis:
         for chave in perfil:
@@ -189,11 +196,18 @@ def _tabela_beneficiarios(perfis):
     if not contagens:
         return pd.DataFrame()
     tabela = pd.DataFrame(perfis).reindex(columns=ordem)
-    # Fase 3: buraco vira 0 (decisao do humano: nenhuma celula nula, int(0) pode).
+    # Fase 3: buraco vira 0 (decisao do humano: nenhuma celula nula, int(0) pode). Feito
+    # ANTES de transpor, enquanto cada categoria ainda e' uma coluna de tipo unico - depois
+    # da transposicao o pandas ja teria misturado tudo em object e o astype(int) nao pegaria.
     tabela[contagens] = tabela[contagens].fillna(0).astype(int)
-    # Saida: uma linha por estratificacao, sem nenhum vazio.
-    return tabela.rename(columns={"n_estratos": "Estratos", "amostra": "Amostra",
-                                  "n_ucs": "UCs na amostra"})
+    tabela = tabela.rename(columns={"n_estratos": "Estratos", "amostra": "Amostra",
+                                    "n_ucs": "UCs na amostra"})
+    # Fase 4: transpoe. O rotulo vira o INDICE e cada estratificacao vira uma coluna; sem
+    # nome de coluna, porque a primeira linha ('Estratos 3 4 5') ja e' o cabecalho de fato.
+    transposta = tabela.T
+    transposta.columns = range(len(tabela))
+    # Saida: rotulos no indice, uma coluna por estratificacao.
+    return transposta
 
 
 def gravar_resumo(resultados, caminho, perfis=None):
@@ -252,7 +266,11 @@ def gravar_resumo(resultados, caminho, perfis=None):
             # uma aba so com cabecalho enganaria mais do que a ausencia dela.
             beneficiarios = _tabela_beneficiarios(perfis or [])
             if len(beneficiarios):
-                beneficiarios.to_excel(xls, sheet_name=ABA_BENEFICIARIOS, index=False)
+                # index=True + header=False: a tabela e' TRANSPOSTA, entao o rotulo da
+                # categoria e' o indice e a primeira linha ('Estratos | 3 | 4 | 5') ja faz
+                # o papel de cabecalho - uma linha de cabecalho a mais so somaria ruido.
+                beneficiarios.to_excel(xls, sheet_name=ABA_BENEFICIARIOS,
+                                       index=True, header=False)
     except PermissionError:
         # Arquivo travado (aberto no Excel): mensagem de usuario, nao traceback.
         raise EntradaInvalida(f"Nao consegui gravar {caminho}.\nFeche o arquivo no Excel e rode de novo.")

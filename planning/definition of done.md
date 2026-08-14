@@ -24,16 +24,17 @@ x F7 — e2e feliz + 8 bordas passam (16 testes); `planning/TESTES.md` escrito;
     status report `planning/html/STATUS_F7.html` gerado; `executar.bat` validado
     (sem entrada → "Lote.xlsx nao encontrado", exit 1, sem traceback).
 x F17 — aba `Resumo beneficiarios` (2026-08-14). Critérios:
-    - uma linha por estratificação e uma coluna por categoria do domínio do Anexo V
-      (`Dominios` D e E — 24 categorias no arquivo real), lidas por posição;
+    - **transposta**: uma linha por categoria do domínio do Anexo V (`Dominios` D e E —
+      24 categorias no arquivo real, lidas por posição) e uma coluna por estratificação;
     - **categoria com zero ocorrências aparece mesmo assim**, e nenhuma célula é nula
       (`int(0)` é o piso) — inclusive numa estratificação sem UC nenhuma;
-    - a soma das colunas é `2 × UCs`, porque cada UC entra em uma categoria de cada bloco;
+    - a soma da coluna de uma estratificação é `2 × UCs`, porque cada UC entra em uma
+      categoria de cada bloco;
     - as três fugas avisam em vez de sumir: categoria fora do domínio, classificação vazia
       e rótulo repetido nos dois domínios;
     - sem a aba `Dominios` e sem as colunas de classificação, a aba não é gerada;
-    - 112 testes passando (101 → 112) e execução real (`ECO 037/2025`) com 3 linhas,
-      27 colunas e zero nulos.
+    - 115 testes passando (101 → 115) e execução real (`ECO 037/2025`) com 27 linhas,
+      4 colunas (rótulo + 3 estratificações) e zero nulos.
 x F16 — horas de escritório por tipo de obra (2026-08-13). Critérios:
     - `config.HORAS_ESCRITORIO_POR_TIPO` traz o desdobramento por etapa do Formulário de OS
       (LPT 8+24+4 = 36h; MLA 4+16+4 = 24h), e não só o total;

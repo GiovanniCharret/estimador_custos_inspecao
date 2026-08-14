@@ -118,15 +118,20 @@ Detalhes que não se deduzem lendo um arquivo só:
   capital no fim. A hierarquia município→obra é deliberada: uma rota gulosa direta sobre as obras
   entraria e sairia do mesmo município. Nos dados reais isso é 1.529 km contra 10.521 km do
   modelo antigo — a correção que motivou a F9.
-- **A aba `Resumo beneficiarios` tem esquema VARIÁVEL, e é a única assim.** As colunas vêm do
+- **A aba `Resumo beneficiarios` é TRANSPOSTA e tem esquema VARIÁVEL — é a única assim nos dois
+  aspectos.** Categoria por **linha**, estratificação por **coluna** (decisão do humano): são ~24
+  categorias de rótulo longo contra 3–4 estratificações, e na horizontal ninguém lê sem rolar.
+  Por isso ela é gravada com `index=True, header=False` — a primeira linha (`Estratos | 3 | 4 |
+  5`) já é o cabeçalho de fato, e quem for ler no pandas precisa de
+  `header=None, index_col=0`. As categorias vêm do
   domínio das listas suspensas do Anexo V (aba `Dominios`, colunas **D** = `Tipo de Comunidade`
   e **E** = `Enquadramento do beneficiário`; 12 + 12 = 24 categorias no Anexo V real), lidas por
   **posição**, que é como o humano se refere a elas. **A lista vem da planilha, não dos dados**:
   categoria com zero ocorrências vira coluna de zeros, porque "a amostra não pegou nenhuma
   família indígena" é informação, e a coluna ausente seria ambiguidade. Nenhuma célula pode ser
   nula (decisão do humano); `int(0)` pode.
-  Cada UC entra em **uma** categoria de cada bloco, então a soma das colunas é `2 × n_ucs` —
-  é essa identidade que denuncia UC sem classificação. As três coisas que não somem em silêncio:
+  Cada UC entra em **uma** categoria de cada bloco, então a soma da coluna de uma estratificação
+  é `2 × n_ucs` — é essa identidade que denuncia UC sem classificação. As três coisas que não somem em silêncio:
   categoria fora do domínio (`AVISO`, não entra em coluna nenhuma), classificação vazia (não
   conta, e a soma do bloco fica abaixo do total), e rótulo repetido nos dois domínios (o segundo
   ganha sufixo, com `AVISO`, em vez de sobrescrever o primeiro).

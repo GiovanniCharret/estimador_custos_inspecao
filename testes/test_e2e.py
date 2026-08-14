@@ -181,20 +181,23 @@ def test_e2e_aba_de_beneficiarios(tmp_path):
     caminho = tmp_path / "saida" / "Resumo_Custos.xlsx"
     xls = pd.ExcelFile(caminho)
     assert "Resumo beneficiarios" in xls.sheet_names
-    aba = xls.parse("Resumo beneficiarios")
-    # Uma linha por estratificacao (aqui so uma) e nenhuma celula nula.
-    assert len(aba) == 1
+    # A aba e' TRANSPOSTA e nao tem linha de cabecalho propria: a primeira linha ja e'
+    # 'Estratos | 3 | ...'. Por isso header=None e o rotulo como indice.
+    aba = xls.parse("Resumo beneficiarios", header=None, index_col=0)
+    # Uma coluna por estratificacao (aqui so uma) e nenhuma celula nula.
+    assert len(aba.columns) == 1
     assert int(aba.isna().sum().sum()) == 0
-    linha = aba.iloc[0]
-    assert linha["UCs na amostra"] == 10
-    assert linha["2 - Comunidade quilombola"] == 2
-    assert linha["11 - Rural geral / demais comunidades rurais"] == 8
+    coluna = aba.iloc[:, 0]
+    assert list(aba.index)[:3] == ["Estratos", "Amostra", "UCs na amostra"]
+    assert coluna["UCs na amostra"] == 10
+    assert coluna["2 - Comunidade quilombola"] == 2
+    assert coluna["11 - Rural geral / demais comunidades rurais"] == 8
     # A categoria que ninguem escolheu existe, valendo zero - e' o ponto da aba.
-    assert linha["1 - Comunidade indígena"] == 0
-    assert linha["0 - Não é prioridade"] == 0
+    assert coluna["1 - Comunidade indígena"] == 0
+    assert coluna["0 - Não é prioridade"] == 0
     # Cada UC entra em UMA categoria de cada bloco: a soma e' 2 x o numero de UCs.
-    contagens = [c for c in aba.columns if c not in ("Estratos", "Amostra", "UCs na amostra")]
-    assert sum(int(linha[c]) for c in contagens) == 2 * linha["UCs na amostra"]
+    categorias = [c for c in aba.index if c not in ("Estratos", "Amostra", "UCs na amostra")]
+    assert sum(int(coluna[c]) for c in categorias) == 2 * coluna["UCs na amostra"]
     # E as outras quatro abas continuam la (a aba nova nao substitui nada).
     assert {"Leia-me", "Resumo", "Cenarios", "Detalhe"} <= set(xls.sheet_names)
 

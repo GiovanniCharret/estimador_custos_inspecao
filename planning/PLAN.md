@@ -50,7 +50,8 @@ x F15 — **Equipes independentes** (decisão G8): padrão de 2 equipes, cada um
 x F16 — **Horas de escritório por tipo de obra** (decisão G9): 36h no LPT, 24h no MLA,
     conforme o parâmetro `E48` do Formulário de OS — 2026-08-13
 x F17 — **Aba `Resumo beneficiarios`** (decisão G11): perfil das UCs sorteadas por
-    categoria do domínio do Anexo V, uma linha por estratificação — 2026-08-14
+    categoria do domínio do Anexo V, **transposta** (categoria por linha, estratificação
+    por coluna) — 2026-08-14
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -150,10 +151,14 @@ x F17 — **Aba `Resumo beneficiarios`** (decisão G11): perfil das UCs sorteada
   na sondagem de 26 obras na PB, R$ 41.760 (1 equipe, 1.220 km) → R$ 60.960 (2 equipes, 1.663 km).
   Isso fecha as lacunas L1, L2, L3, L4 e L7 de `LACUNAS_CENARIOS.md`.
 - **G11 — PERFIL DOS BENEFICIÁRIOS (F17, pedido do humano em 2026-08-14):** nova aba
-  `Resumo beneficiarios` no `Resumo_Custos.xlsx`, com **uma linha por estratificação** e uma
-  coluna por categoria das duas listas suspensas do Anexo V — `Tipo de Comunidade` (domínio na
-  coluna **D** da aba `Dominios`, 12 opções) e `Enquadramento do beneficiário` (coluna **E**,
-  12 opções). Responde a pergunta que o resto da planilha não responde: *quem* são as pessoas
+  `Resumo beneficiarios` no `Resumo_Custos.xlsx`, **transposta** — uma **linha** por categoria
+  das duas listas suspensas do Anexo V e uma **coluna** por estratificação. As categorias são
+  `Tipo de Comunidade` (domínio na coluna **D** da aba `Dominios`, 12 opções) e
+  `Enquadramento do beneficiário` (coluna **E**, 12 opções).
+  A transposição foi pedida depois de ver a versão horizontal: 24 categorias de rótulo longo
+  contra 3 estratificações não cabem na tela em colunas. Consequência técnica: a aba é gravada
+  com `index=True, header=False` e lida com `header=None, index_col=0` — a primeira linha
+  (`Estratos | 3 | 4 | 5`) já é o cabeçalho de fato. Responde a pergunta que o resto da planilha não responde: *quem* são as pessoas
   que a amostra vai visitar. **Não entra em nenhuma conta de custo** — por isso vive num módulo
   próprio, `src/beneficiarios.py`.
   Regras que o humano fixou: nenhuma célula nula, `int(0)` pode. Daí a lista de colunas vir do

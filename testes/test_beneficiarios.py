@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Testes do perfil de beneficiarios: dominio manda nas colunas, e nada fica nulo."""
+import numpy as np
 import pandas as pd
 
 from src.beneficiarios import contar_por_dominio, perfil_da_amostra
@@ -103,6 +104,26 @@ def test_perfil_tem_identificacao_e_total():
     assert linha["n_estratos"] == 4 and linha["amostra"] == 2 and linha["n_ucs"] == 1
 
 
+def test_tabela_e_transposta():
+    # Decisao do humano: categoria por LINHA, estratificacao por COLUNA. Sao ~24 categorias
+    # de rotulo longo contra 3 estratificacoes - na horizontal ninguem le sem rolar.
+    a = perfil_da_amostra(_ucs([("2 - Comunidade quilombola", "4 - Povos tradicionais")]),
+                          _dominios(), n_estratos=3, amostra=1)
+    b = perfil_da_amostra(_ucs([("1 - Comunidade indígena", "0 - Não é prioridade")] * 2),
+                          _dominios(), n_estratos=4, amostra=1)
+    tabela = _tabela_beneficiarios([a, b])
+    # Uma coluna por estratificacao; as linhas comecam pela identificacao e seguem no
+    # dominio, na ordem da planilha.
+    assert list(tabela.columns) == [0, 1]
+    assert list(tabela.index)[:3] == ["Estratos", "Amostra", "UCs na amostra"]
+    assert list(tabela.index)[3:] == DOMINIO_COMUNIDADE + DOMINIO_ENQUADRAMENTO
+    # E os numeros caem na celula certa: linha = categoria, coluna = estratificacao.
+    assert tabela.loc["Estratos"].tolist() == [3, 4]
+    assert tabela.loc["UCs na amostra"].tolist() == [1, 2]
+    assert tabela.loc["2 - Comunidade quilombola"].tolist() == [1, 0]
+    assert tabela.loc["1 - Comunidade indígena"].tolist() == [0, 2]
+
+
 def test_tabela_nunca_tem_celula_nula():
     # Exigencia explicita do humano: nenhuma celula nula; zero pode. Vale inclusive quando
     # uma estratificacao nao tem NENHUMA UC (nada a classificar).
@@ -110,14 +131,15 @@ def test_tabela_nunca_tem_celula_nula():
                               _dominios(), n_estratos=3, amostra=1)
     vazia = perfil_da_amostra(_ucs([]), _dominios(), n_estratos=4, amostra=1)
     tabela = _tabela_beneficiarios([cheia, vazia])
-    assert len(tabela) == 2
+    # Transposta: uma COLUNA por estratificacao.
+    assert len(tabela.columns) == 2
     assert int(tabela.isna().sum().sum()) == 0
     # As contagens sao inteiros, nao floats (o pandas viraria float ao encontrar buraco).
-    contagens = [c for c in tabela.columns if c not in ("Estratos", "Amostra", "UCs na amostra")]
-    assert all(str(tabela[c].dtype).startswith("int") for c in contagens)
-    # A estratificacao vazia e' uma linha de zeros, nao uma linha ausente.
-    assert tabela.iloc[1]["UCs na amostra"] == 0
-    assert all(tabela.iloc[1][c] == 0 for c in contagens)
+    categorias = DOMINIO_COMUNIDADE + DOMINIO_ENQUADRAMENTO
+    assert all(isinstance(v, (int, np.integer)) for v in tabela.loc[categorias].to_numpy().ravel())
+    # A estratificacao vazia e' uma coluna de zeros, nao uma coluna ausente.
+    assert tabela.loc["UCs na amostra", 1] == 0
+    assert all(tabela.loc[c, 1] == 0 for c in categorias)
 
 
 def test_tabela_de_perfis_vazia_nao_quebra():
