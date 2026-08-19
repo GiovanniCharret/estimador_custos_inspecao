@@ -33,7 +33,7 @@ entre amostras, coordenadas e custos; uma ODI tem N UCs (unidades consumidoras).
 
 ## Estado atual (2026-08-19)
 
-**Fases F0–F19 completas; 128 testes passando.** O pipeline roda ponta a ponta com **dados reais**
+**Fases F0–F20 completas; 122 testes passando.** O pipeline roda ponta a ponta com **dados reais**
 de duas tranches de tipos diferentes — `ECO 037/2025` (ENERGISA/PB, LPT, 3 estratificações) e
 `ECM 022/2025` (ENERGISA/RO, MLA, 4 estratificações):
 `executar.bat` → `_exec.ps1` → `src/estimar_custos.py` → `saida/`.
@@ -168,7 +168,7 @@ Detalhes que não se deduzem lendo um arquivo só:
   ida-e-volta, o dia de mobilização de cada equipe, e o arredondamento para dia inteiro. Na
   sondagem de 26 obras na PB: 1 equipe R$ 41.760 (1.220 km) → 2 equipes R$ 60.960 (1.663 km) →
   3 equipes R$ 70.560 (2.010 km).
-- **A aba `Cenarios` é uma GRADE de TRÊS dimensões (produtividade × equipes × prazo)** e varre o
+- **A aba `Cenarios` é uma GRADE (equipes × prazo)** e varre o
   **espectro inteiro de prazos: de 1 dia a `MAX_DIAS_POR_EQUIPE` (20)**, para cada número de
   equipes de `N_EQUIPES_MIN` a `N_EQUIPES_MAX` (1 a 7) — **inclusive os prazos que o próprio
   modelo diz que não cabem**, marcados na coluna `Cabe no prazo?` (`sim`/`nao`). O caso que
@@ -187,22 +187,23 @@ Detalhes que não se deduzem lendo um arquivo só:
   olha a **mais lenta**. Com blocos desiguais — o normal —, uma linha pode não caber com ocupação
   **abaixo** de 100%. O `Leia-me` chegou a afirmar o contrário; `test_ocupacao_nao_decide_se_cabe`
   existe para o texto não voltar a mentir.
+- **`Cenarios` tem UMA linha por `(estratificação, equipes, prazo)` — nunca duas.** É o
+  invariante que sustenta as duas colunas retiradas da aba; `test_cenarios_tem_uma_linha_por_
+  combinacao_e_nenhuma_repetida` o guarda.
 - **A coluna `Dias faturados (por equipe)` existe no `Resumo` e NÃO no `Cenarios`** (decisão do
   humano, 2026-08-19: confundia). Na grade o prazo é *entrada*, então duas colunas de dias sempre
   com um de diferença faziam procurar um sentido que não há; no `Resumo` o prazo é *resultado* e a
   diferença é a informação. Saiu a coluna, não o dia: `dias_faturados` continua em cada linha da
   grade e continua sendo o que multiplica a tarifa.
-- **A PRODUTIVIDADE é a terceira dimensão da grade, e só dela** (F18, 2026-08-19). A aba `Resumo`
-  usa **só** `UCS_POR_DIA` (MLA 3,0); a grade varre também `UCS_POR_DIA_ALTERNATIVAS` (MLA 1,5 —
-  o valor que a engenharia usa, do histórico do `ECM 015/2024`). A oficial entra sempre e **não se
-  repete** na tabela de alternativas: é o que impede a tabela de envelhecer se alguém mudar o
-  valor oficial. **Só a produtividade oficial marca o cenário `calculado`**, senão a planilha
-  teria dois números oficiais. A varredura passa a produtividade por argumento
-  (`horas_por_uc(tipo, ucs_por_dia)`, `repartir_entre_equipes(..., ucs_por_dia)`) e **nunca** mexe
-  em `config` — mexer vazaria para o custo oficial e para as outras estratificações da mesma
-  execução. A geometria não sabe de produtividade: os km de cada nº de equipes são idênticos nos
-  dois blocos; só as horas de inspeção mudam. Por isso o bloco de 1,5 tem sempre **menos** linhas.
-  Motivação e as outras nove divergências: `planning/CALIBRACAO_ENGENHARIA_RO.md`.
+- **A PRODUTIVIDADE já foi a terceira dimensão da grade e NÃO é mais** (F18 e F20, ambas em
+  2026-08-19 — a segunda a pedido do humano). Vale saber por que, para não voltar por engano:
+  **o custo não depende da produtividade** (só `cabe` e `ocupacao` dependem), e o bloco
+  alternativo de 1,5 UC/dia não trazia **nenhuma** combinação `equipes × prazo` que o de 3,0 já
+  não tivesse — produtividade menor só *elimina* números de equipe, nunca acrescenta. Metade das
+  linhas da aba era duplicata exata em `(equipes, prazo, custo)`. O espectro inteiro de prazos
+  (F19) já resolve sozinho o problema que a varredura tinha vindo resolver: a linha da engenharia
+  existe de qualquer forma. A produtividade vigente continua declarada no `Leia-me`.
+  A comparação com a engenharia e as dez divergências: `planning/CALIBRACAO_ENGENHARIA_RO.md`.
 - **O mapa NÃO desenha itinerário** (desde 2026-08-13, decisão do humano). Ele marca um ponto por
   UC, todos da mesma cor, mais a base. A rota gulosa continua existindo em `distancias.py` e
   alimentando o custo — o que saiu foi o **desenho**: a linha era hipótese do modelo traçada com a

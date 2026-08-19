@@ -81,31 +81,21 @@ def test_cenarios_nao_mostra_dias_faturados_mas_cobra_por_eles(tmp_path):
             * config.HORAS_DIA_CAMPO * tarifa)
 
 
-def test_gravar_resumo_cenarios_tem_a_coluna_de_produtividade(tmp_path, monkeypatch):
-    # A grade tem tres dimensoes desde 2026-08-19, e a terceira precisa APARECER: sem a
-    # coluna, dois blocos de produtividades diferentes viram linhas repetidas e
-    # contraditorias (mesmas equipes, mesmo prazo, custos diferentes).
-    monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 4.0, "MLA": 3.0})
-    monkeypatch.setattr(config, "UCS_POR_DIA_ALTERNATIVAS", {"LPT": [2.0]})
-    numeros, roteiro = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
-    resultado = {"n_estratos": 3, "amostra": 1, "roteiro": roteiro,
-                 "cenarios": grade_cenarios(_odis_teste(), uf="PA", tipo_contrato="LPT"),
-                 **numeros}
+def test_cenarios_tem_uma_linha_por_combinacao_e_nenhuma_repetida(tmp_path):
+    # Decisao do humano (2026-08-19): a coluna 'Produtividade (UCs/dia)' saiu da aba.
+    # O invariante que a remocao exige, e que este teste guarda: cada par
+    # (equipes, prazo) aparece UMA vez. Foi por perde-lo que a varredura de produtividade
+    # teve de sair junto - sem o rotulo, os dois blocos viravam 500 linhas gemeas e
+    # indistinguiveis, iguais ate no custo (o preco nao depende da produtividade).
     destino = tmp_path / "Resumo_Custos.xlsx"
-    gravar_resumo([resultado], destino)
+    gravar_resumo([_resultado(3), _resultado(4)], destino)
     cenarios = pd.read_excel(destino, sheet_name="Cenarios")
-    assert "Produtividade (UCs/dia)" in cenarios.columns
-    assert set(cenarios["Produtividade (UCs/dia)"]) == {4.0, 2.0}
-    # O Resumo segue falando so da oficial - e' a linha 'calculado' que faz a ponte.
-    marcadas = cenarios[cenarios["Cenario"] == "calculado"]
-    assert len(marcadas) == 1
-    assert marcadas.iloc[0]["Produtividade (UCs/dia)"] == 4.0
-    resumo = pd.read_excel(destino, sheet_name="Resumo")
-    assert marcadas.iloc[0]["Custo total (R$)"] == pytest.approx(
-        resumo.iloc[0]["Custo total (R$)"])
-    # E o Leia-me avisa que ha mais de uma produtividade na aba.
-    leia_me = pd.read_excel(destino, sheet_name="Leia-me", header=None)[0].astype(str)
-    assert leia_me.str.contains("Produtividades nos cenarios").any()
+    assert "Produtividade (UCs/dia)" not in cenarios.columns
+    chave = ["Estratos", "Amostra", "Equipes", "Dias trabalho (por equipe)"]
+    assert not cenarios.duplicated(chave).any()
+    # E a produtividade vigente continua declarada no Leia-me, que e' onde ela informa.
+    leia_me = pd.read_excel(destino, sheet_name="Leia-me")["Leia-me"].fillna("").astype(str)
+    assert leia_me.str.contains("Produtividade").any()
 
 
 def test_gravar_resumo_detalhe_traz_equipe_e_ordem(tmp_path):

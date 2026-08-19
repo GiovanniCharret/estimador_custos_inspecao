@@ -23,6 +23,18 @@ x F6 — mapas HTML gerados com camadas por estrato e popup de custo; teste pass
 x F7 — e2e feliz + 8 bordas passam (16 testes); `planning/TESTES.md` escrito;
     status report `planning/html/STATUS_F7.html` gerado; `executar.bat` validado
     (sem entrada → "Lote.xlsx nao encontrado", exit 1, sem traceback).
+x F20 — retirada da produtividade da aba `Cenarios` (2026-08-19). Critérios:
+    - a coluna `Produtividade (UCs/dia)` não existe mais na aba;
+    - **uma linha por `(estratificação, amostra, equipes, prazo)`** — zero duplicatas, que é o
+      invariante que a remoção exige (sem o rótulo, dois blocos viram linhas gêmeas);
+    - `UCS_POR_DIA_ALTERNATIVAS` e `produtividades_da_grade` removidos, sem código morto, com
+      nota em `config.py` explicando a retirada;
+    - a produtividade vigente continua declarada no `Leia-me`;
+    - as **quatro** linhas da engenharia continuam na aba com o preço exato (a F19 é quem as
+      garante, não a produtividade);
+    - 122 testes passando (128 → 122: saíram 7 testes que só existiam pela varredura, entrou 1
+      guardando o invariante de não-duplicação);
+    - execução real: aba de 1.040 → **540 linhas**, 12 → 11 colunas.
 x F19 — espectro inteiro de prazos na aba `Cenarios` (2026-08-19). Critérios:
     - todo número de equipes que aparece traz **todos** os prazos de 1 ao teto, sem buraco;
     - a coluna `Cabe no prazo?` só tem `sim`/`nao`, e é monótona dentro de cada número de
@@ -33,7 +45,7 @@ x F19 — espectro inteiro de prazos na aba `Cenarios` (2026-08-19). Critérios:
     - `Ocupacao` **não** decide se cabe (é média; `Cabe no prazo?` olha a equipe mais lenta), e
       há teste prendendo o `Leia-me` a essa verdade;
     - a coluna `Dias faturados (por equipe)` saiu do `Cenarios` e permanece no `Resumo`;
-    - 128 testes passando (123 → 128);
+    - 128 testes passando (123 → 128; hoje 122, depois da F20);
     - execução real (`ECM 022/2025`, amostra 1): as **quatro** combinações da engenharia
       presentes na aba com o preço exato — 296.640 (cabe) / 85.440 / 66.240 / 56.640 (não cabem).
     [ ] **Falta a parte humana:** abrir a aba (1.040 linhas) e dizer se o volume ficou utilizável

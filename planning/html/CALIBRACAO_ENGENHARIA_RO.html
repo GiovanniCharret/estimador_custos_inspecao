@@ -117,7 +117,7 @@
   <div class="label" style="margin-top:22px">Depois</div>
   <a href="#unidade">Ressalva de unidade</a>
   <a href="#f19" class="hot">O que a F19 fez</a>
-  <a href="#f18">O que a F18 fez</a>
+  <a href="#f18">F18 &rarr; F20 (revertida)</a>
   <a href="#placar">Placar</a>
   <div class="files">
     <code>suporte_contexto/Tabela_Resumo_Extratos_Amostra.xlsx</code>
@@ -222,10 +222,11 @@
     motor devolve <strong>14 dias e R$ 296.640</strong> &mdash; res&iacute;duo zero contra a amostra
     eleita, por um caminho completamente independente do deles (roteiro guloso sobre coordenadas
     &times; clusters e raios).</p>
-    <div class="fechada-nota"><b>Fechado em 2026-08-19 (F18)</b>
-    A aba <code>Cenarios</code> passou a varrer <strong>tamb&eacute;m</strong> 1,5 UC/dia
-    (<code>config.UCS_POR_DIA_ALTERNATIVAS</code>). A aba <code>Resumo</code> continua no default de
-    3,0 &mdash; decis&atilde;o do humano.</div>
+    <div class="fechada-nota"><b>Tentado e revertido no mesmo dia (F18 &rarr; F20)</b>
+    A aba <code>Cenarios</code> chegou a varrer tamb&eacute;m 1,5 UC/dia; a varredura saiu depois
+    que a <strong>F19</strong> resolveu o mesmo problema melhor. O achado continua valendo &mdash;
+    &eacute; a evid&ecirc;ncia mais forte deste documento &mdash;, s&oacute; n&atilde;o vive mais
+    na planilha.</div>
   </div>
 
   <div class="gap metodo" id="d3">
@@ -428,7 +429,7 @@
 
   <p>A aba passou de 613 para <strong>1.040 linhas</strong> na tranche real.</p>
 
-  <h2 id="f18">O que a F18 fez (2026-08-19)</h2>
+  <h2 id="f18">O que a F18 fez (e por que a F20 desfez)</h2>
   <p>Decis&atilde;o do humano, depois desta an&aacute;lise: <strong>os cen&aacute;rios passam a
   considerar tamb&eacute;m <code>UCS_POR_DIA["MLA"] = 1,5</code>; o <code>Resumo</code> continua no
   default de 3,0.</strong></p>
@@ -465,7 +466,25 @@ horas_por_uc / repartir_entre_equipes recebem <b>ucs_por_dia</b> opcional
   <p>A linha destacada &eacute; o resultado que d&aacute; confian&ccedil;a: <strong>a 1,5
   UC/equipe/dia, 14 dias com 4 equipes &eacute; o m&iacute;nimo vi&aacute;vel do bloco</strong>
   &mdash; o nosso modelo chega ao prazo recomendado pela engenharia por um caminho independente, e
-  n&atilde;o por ajuste.</p>
+  n&atilde;o por ajuste. <strong>Esse achado continua de p&eacute;</strong>; o que saiu foi a
+  coluna.</p>
+
+  <div class="gap fechada">
+    <h3>F20 &mdash; a varredura foi retirada da planilha <span class="selo ok">mesmo dia</span></h3>
+    <div class="tag">pedido do humano &middot; tr&ecirc;s fatos verificados antes de mexer</div>
+    <p><strong>(a)</strong> O custo <strong>n&atilde;o depende</strong> da produtividade &mdash; s&oacute;
+    <code>cabe</code> e <code>ocupacao</code> dependem. <strong>(b)</strong> O bloco de 1,5 n&atilde;o
+    trazia <strong>nenhuma</strong> combina&ccedil;&atilde;o <code>equipes &times; prazo</code> ausente
+    do de 3,0: produtividade menor s&oacute; <em>elimina</em> n&uacute;meros de equipe.
+    <strong>(c)</strong> 500 das 1.040 linhas eram duplicatas exatas em
+    <code>(equipes, prazo, custo)</code>. Sem o r&oacute;tulo da coluna elas ficariam
+    indistinguíveis, ent&atilde;o a varredura saiu junto.</p>
+    <p>E o problema que a F18 tinha vindo resolver &mdash; a linha da engenharia n&atilde;o existir
+    na aba &mdash; j&aacute; estava resolvido pela <a href="#f19">F19</a>, por um caminho melhor: o
+    espectro inteiro de prazos faz a linha existir seja qual for a produtividade.</p>
+    <div class="efeito"><b>Efeito na planilha</b>
+    De 1.040 para <strong>540 linhas</strong>; de 12 para 11 colunas.</div>
+  </div>
 
   <p>O bloco alternativo tem sempre <strong>menos</strong> linhas: metade da produtividade dobra as
   horas de inspe&ccedil;&atilde;o, e combina&ccedil;&otilde;es que cabiam em 20 dias deixam de
@@ -481,9 +500,9 @@ horas_por_uc / repartir_entre_equipes recebem <b>ucs_por_dia</b> opcional
         <code>Cabe no prazo?</code></td>
         <td>nenhuma &mdash; mas &eacute; o que faz as linhas da engenharia <strong>existirem</strong></td>
         <td>1 la&ccedil;o + 1 coluna</td><td><span class="selo ok">feito &middot; F19</span></td></tr>
-    <tr class="hi"><td class="num">1</td><td>Varrer 1,5 UC/dia nos cen&aacute;rios</td>
+    <tr><td class="num">&mdash;</td><td><s>Varrer 1,5 UC/dia nos cen&aacute;rios</s></td>
         <td>D2 (parcial)</td><td>1 par&acirc;metro + 1 la&ccedil;o</td>
-        <td><span class="selo ok">feito &middot; F18</span></td></tr>
+        <td><span class="selo aberta">revertido &middot; F18 &rarr; F20</span></td></tr>
     <tr><td class="num">2</td><td>Regra de n&ordm; de equipes derivada da geografia</td>
         <td>D1, D8</td><td>precisa de clusteriza&ccedil;&atilde;o</td><td>aberta</td></tr>
     <tr><td class="num">3</td><td>Fator de desbalanceamento (+10%)</td>

@@ -59,6 +59,8 @@ x F18 — **Produtividade como terceira dimensão da grade** (decisão G12): a a
 x F19 — **Espectro inteiro de prazos na aba `Cenarios`** (decisão G13): a grade varre de 1 dia ao
     teto, inclusive o que o modelo diz que não cabe, com a coluna `Cabe no prazo?`. Saiu também a
     coluna `Dias faturados (por equipe)` da mesma aba — 2026-08-19
+r F20 — **Rollback da F18**: a coluna `Produtividade (UCs/dia)` e a varredura que a gerava saíram
+    da aba `Cenarios`, a pedido do humano. A F19 tornou-as redundantes (ver G14) — 2026-08-19
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -191,6 +193,19 @@ x F19 — **Espectro inteiro de prazos na aba `Cenarios`** (decisão G13): a gra
   equipes é **14 dias, R$ 296.640** — exatamente a recomendação da engenharia, por um caminho
   independente (roteiro guloso sobre coordenadas × clusters e raios).
   As nove divergências restantes estão catalogadas em `planning/CALIBRACAO_ENGENHARIA_RO.md`.
+- **G14 — A PRODUTIVIDADE SAI DA GRADE (F20, decisão do humano em 2026-08-19):** a coluna
+  `Produtividade (UCs/dia)` e a varredura da F18 foram retiradas. Motivo verificado nos dados
+  reais antes de mexer: **o custo não depende da produtividade** — só `cabe` e `ocupacao`
+  dependem —, e o bloco de 1,5 UC/dia não trazia **nenhuma** combinação `equipes × prazo` ausente
+  do bloco de 3,0 (produtividade menor só *elimina* números de equipe). Resultado: 500 das 1.040
+  linhas eram duplicatas exatas em `(equipes, prazo, custo)`; sem o rótulo elas ficariam
+  indistinguíveis, então a varredura teve de sair junto com a coluna.
+  O que a F18 tinha vindo resolver — a linha da engenharia não existir na aba — já estava
+  resolvido pela **F19**, e por um caminho melhor: o espectro inteiro de prazos faz a linha
+  existir independentemente da produtividade. `UCS_POR_DIA_ALTERNATIVAS` e
+  `produtividades_da_grade` foram removidos; ficou uma nota em `config.py` explicando a retirada,
+  para a ideia não voltar por engano. A aba caiu de 1.040 para **540 linhas** e de 12 para 11
+  colunas, e as quatro linhas da engenharia continuam lá com o preço exato.
 - **G13 — O VEREDITO DO MODELO É DADO, NÃO FILTRO (F19, decisão do humano em 2026-08-19):** a F18
   não resolveu, e o motivo era outro: a linha `2 equipes × 4 dias` das 12 UCs do estrato 6 não
   existia na aba em produtividade nenhuma, porque a grade começava no **mínimo geométrico**

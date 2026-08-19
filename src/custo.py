@@ -35,11 +35,6 @@ que o modelo anterior (uma equipe so, trabalho perfeitamente divisivel) escondia
     horas_inspecao = n_ucs do bloco x (HORAS_DIA_CAMPO / UCS_POR_DIA[tipo])
                      (LPT 30/dia; MLA 3/dia)
 
-O numero OFICIAL (aba 'Resumo') usa so a produtividade de UCS_POR_DIA. A grade de
-CENARIOS varre tambem as de UCS_POR_DIA_ALTERNATIVAS - hoje MLA 1,5 UC/equipe/dia, que
-e' o valor que a engenharia usou na 3a tranche de RO - e cada linha diz qual usou.
-Nada mais muda entre as duas: mesma tarifa, mesmo fixo, mesma geometria.
-
 O ESTRATO nao participa do custo. Ele identifica de onde cada obra veio na
 estratificacao e aparece so como coluna informativa no detalhe.
 
@@ -104,54 +99,20 @@ def horas_escritorio(tipo_contrato):
     return sum(config.HORAS_ESCRITORIO_POR_TIPO[tipo_contrato].values())
 
 
-def horas_por_uc(tipo_contrato, ucs_por_dia=None):
+def horas_por_uc(tipo_contrato):
     """Horas que uma UC consome na inspecao, pela produtividade do tipo de contrato.
 
     Por que existe: o mesmo numero e' usado no custo oficial e no pre-filtro da grade de
     cenarios; uma funcao evita as duas copias divergirem. Le config na chamada.
 
-    O parametro ucs_por_dia existe para a grade de cenarios poder varrer produtividades
-    ALTERNATIVAS sem tocar em config (o que vazaria para o custo oficial e para as outras
-    estratificacoes da mesma execucao). Omitido, vale o oficial - que continua sendo o
-    unico caminho da aba 'Resumo'.
-
-    Logica: Entrada (tipo do contrato, produtividade opcional) -> Fase 1: jornada / UCs
-    por dia -> Saida: horas por UC (LPT 8/30; MLA 8/3).
+    Logica: Entrada (tipo do contrato) -> Fase 1: jornada / UCs por dia daquele tipo ->
+    Saida: horas por UC (LPT 8/30; MLA 8/3).
     """
-    # Fase 1: sem produtividade explicita, vale a oficial do tipo (decisao G5).
-    por_dia = config.UCS_POR_DIA[tipo_contrato] if ucs_por_dia is None else float(ucs_por_dia)
-    # Saida: a jornada dividida pela produtividade diaria.
-    return config.HORAS_DIA_CAMPO / por_dia
+    # Fase 1/Saida: a jornada dividida pela produtividade diaria do tipo (decisao G5).
+    return config.HORAS_DIA_CAMPO / config.UCS_POR_DIA[tipo_contrato]
 
 
-def produtividades_da_grade(tipo_contrato):
-    """Lista de produtividades (UCs/dia) que a aba 'Cenarios' deve varrer, na ordem.
-
-    Por que existe: a partir de 2026-08-19 a grade nao explora so equipes x prazo - ela
-    explora tambem a PRODUTIVIDADE, porque a engenharia dimensiona o MLA a 1,5
-    UC/equipe/dia (historico do ECM 015/2024) enquanto o numero oficial daqui e' 3,0.
-    Em vez de duas execucoes com o config editado, as duas hipoteses convivem na mesma
-    aba. Funcao separada para que a ordem e a deduplicacao existam num lugar so.
-
-    A OFICIAL vem sempre primeiro e nunca precisa ser repetida em
-    UCS_POR_DIA_ALTERNATIVAS: e' o que impede a tabela de alternativas de ficar velha
-    quando alguem mudar o valor oficial.
-
-    Logica: Entrada (tipo do contrato) -> Fase 1: a oficial abre a lista -> Fase 2:
-    acrescenta as alternativas do tipo, ignorando repetidas -> Saida: lista de floats.
-    """
-    # Fase 1: a produtividade oficial e' sempre a primeira - e' ela que marca o cenario
-    # 'calculado', o mesmo numero da aba Resumo.
-    valores = [float(config.UCS_POR_DIA[tipo_contrato])]
-    # Fase 2: as alternativas daquele tipo, sem repetir a oficial nem uma a outra.
-    for extra in config.UCS_POR_DIA_ALTERNATIVAS.get(tipo_contrato, []):
-        if float(extra) not in valores:
-            valores.append(float(extra))
-    # Saida: da oficial para as alternativas, na ordem em que o config as declara.
-    return valores
-
-
-def repartir_entre_equipes(df_odis, uf, tipo_contrato, n_equipes, ucs_por_dia=None):
+def repartir_entre_equipes(df_odis, uf, tipo_contrato, n_equipes):
     """Divide a amostra entre N equipes independentes e mede o campo de cada uma.
 
     Por que existe: e' a ponte entre a geometria (distancias.py) e o R$ (este modulo),
@@ -161,22 +122,18 @@ def repartir_entre_equipes(df_odis, uf, tipo_contrato, n_equipes, ucs_por_dia=No
     ida e a volta de CADA uma. Funcao separada porque tanto o custo oficial quanto cada
     linha da grade de cenarios precisam exatamente disto.
 
-    O ucs_por_dia opcional so afeta a parcela de INSPECAO: a geometria (blocos, km,
-    horas de roteiro) e' a mesma qualquer que seja a produtividade. E' isso que permite
-    a grade varrer produtividades sem que os km mudem de uma linha para a outra.
-
-    Logica: Entrada (df por ODI, uf, tipo, n_equipes, produtividade opcional) -> Fase 1:
-    corta o itinerario em N blocos contiguos, cada um roteado da capital -> Fase 2: por
-    bloco, soma o percurso interno das obras e converte linha reta em estrada -> Fase 3:
-    km -> horas de roteiro, UCs -> horas de inspecao -> Saida: lista de dicts, um por
-    equipe (na ordem geografica do itinerario de referencia).
+    Logica: Entrada (df por ODI, uf, tipo, n_equipes) -> Fase 1: corta o itinerario em
+    N blocos contiguos, cada um roteado da capital -> Fase 2: por bloco, soma o percurso
+    interno das obras e converte linha reta em estrada -> Fase 3: km -> horas de roteiro,
+    UCs -> horas de inspecao -> Saida: lista de dicts, um por equipe (na ordem geografica
+    do itinerario de referencia).
     """
     # Capital da UF do contrato (G3); KeyError aqui = UF invalida (bug, nao dado).
     lat_cap, lon_cap = config.CAPITAIS_UF[uf]
     # Fase 1: um roteiro por equipe, cada um fechado na capital. Pode devolver MENOS
     # rotas que equipes pedidas quando ha menos obras que equipes - quem chama decide.
     rotas = dividir_roteiro(df_odis, lat_cap, lon_cap, n_equipes)
-    por_uc = horas_por_uc(tipo_contrato, ucs_por_dia)
+    por_uc = horas_por_uc(tipo_contrato)
     equipes = []
     for roteiro, km_reta in rotas:
         # Fase 2: o percurso entre as UCs de cada obra soma ao roteiro; so entao vira estrada.
@@ -316,23 +273,24 @@ def grade_cenarios(df_odis, uf, tipo_contrato):
     calculado e, pior, assumia o trabalho perfeitamente divisivel: ela contava equipes
     sem nunca reparti-las de fato, entao o km extra de cada equipe nunca aparecia.
 
-    Desde 2026-08-19 a grade tem TRES dimensoes, nao duas: alem de equipes x prazo, ela
-    varre as PRODUTIVIDADES de produtividades_da_grade(). Motivo: comparando o
-    Resumo_Custos com o dimensionamento que a engenharia fez para a 3a tranche de RO,
-    a unica diferenca de parametro que explicava o prazo era a produtividade do MLA -
-    1,5 UC/equipe/dia la, 3,0 aqui. Com a oficial e a alternativa na MESMA aba, a
-    conversa deixa de exigir uma segunda execucao com o config editado. A aba 'Resumo'
-    nao muda: continua saindo so da produtividade oficial.
+    Desde 2026-08-19 a grade varre o ESPECTRO INTEIRO de prazos, de 1 dia ao teto -
+    inclusive os prazos que o nosso proprio modelo diz que nao cabem. Motivo, e e' o
+    motivo que mais importa neste arquivo: a engenharia dimensionou 12 UCs em 2 equipes
+    x 4 dias, e essa linha simplesmente NAO EXISTIA na aba, porque o nosso minimo
+    geometrico para 2 equipes era 7 dias. Uma aba que se chama 'Cenarios' e nao contem o
+    cenario que a engenharia adotou nao esta protegendo ninguem do impossivel: esta
+    escondendo o numero que a mesa de decisao precisa ver. O veredito do modelo e' DADO
+    (coluna 'cabe'), nao filtro. O preco continua exato: o custo nao depende de a equipe
+    dar conta do servico.
 
-    Desde 2026-08-19 (segunda rodada) a grade varre o ESPECTRO INTEIRO de prazos, de 1 dia
-    ao teto - inclusive os prazos que o nosso proprio modelo diz que nao cabem. Motivo, e
-    e' o motivo que mais importa neste arquivo: a engenharia dimensionou 12 UCs em
-    2 equipes x 4 dias, e essa linha simplesmente NAO EXISTIA na aba, porque o nosso
-    minimo geometrico para 2 equipes era 7 dias. Uma aba que se chama 'Cenarios' e nao
-    contem o cenario que a engenharia adotou nao esta protegendo ninguem do impossivel:
-    esta escondendo o numero que a mesa de decisao precisa ver.
-    A linha aparece com a coluna 'cabe' em False e a 'ocupacao' acima de 100%, que e' o
-    quanto falta. O preco continua exato: o custo nao depende de a equipe dar conta.
+    Houve por algumas horas uma TERCEIRA dimensao aqui - a produtividade, varrendo
+    tambem 1,5 UC/dia (o numero que a engenharia usa no MLA). Saiu a pedido do humano, e
+    vale registrar por que, para nao voltar por engano: o custo NAO depende da
+    produtividade (so 'cabe' e 'ocupacao' dependem), e o bloco alternativo nao trazia
+    nenhuma combinacao equipes x prazo que o oficial ja nao tivesse - produtividade menor
+    so ELIMINA numeros de equipe, nunca acrescenta. Metade das linhas da aba era
+    duplicata exata em (equipes, prazo, custo). O espectro inteiro de prazos ja resolve
+    sozinho o problema que a varredura de produtividade tinha vindo resolver.
 
     Duas regras de corte sobrevivem, ambas decisao do humano:
       - de N_EQUIPES_MIN a N_EQUIPES_MAX equipes;
@@ -341,9 +299,6 @@ def grade_cenarios(df_odis, uf, tipo_contrato):
     um numero de equipes que nao tem NENHUM prazo viavel dentro do teto - nao ha o que
     apresentar. O que mudou e' o de dentro: escolhido um numero de equipes que funciona,
     todos os prazos ate o teto aparecem, porque ai o prazo e' alavanca do usuario.
-    Elas valem por produtividade: metade da produtividade dobra as horas de inspecao,
-    entao numeros de equipes que cabem em 20 dias com 3 UCs/dia somem com 1,5. A grade
-    encolher numa produtividade e nao na outra e' informacao, nao defeito.
     Combinacao que estoura o teto NAO e' calculada nem exibida. O caso que motivou a
     regra: 80 UCs de MLA (3 UCs/dia) sao 27 dias so de inspecao para uma equipe -
     flagrantemente inviavel, e nao ha o que apresentar. O pre-filtro usa exatamente
@@ -351,79 +306,68 @@ def grade_cenarios(df_odis, uf, tipo_contrato):
     rotear, que e' a parte cara.
 
     Logica: Entrada (df por ODI, uf, tipo) -> Fase 1: amostra vazia nao tem grade ->
-    Fase 2: um bloco por PRODUTIVIDADE varrida -> Fase 3: para cada numero de equipes,
-    descarta pelo limite inferior de inspecao sem rotear -> Fase 4: reparte de fato e
-    acha o prazo minimo daquele numero de equipes (numero de equipes sem nenhum prazo
-    viavel sai aqui) -> Fase 5: uma linha por prazo, de 1 ao teto, marcando quais cabem
-    -> Saida: lista de dicts.
+    Fase 2: para cada numero de equipes, descarta pelo limite inferior de inspecao sem
+    rotear -> Fase 3: reparte de fato e acha o prazo minimo daquele numero de equipes
+    (numero de equipes sem nenhum prazo viavel sai aqui) -> Fase 4: uma linha por prazo,
+    de 1 ao teto, marcando quais cabem -> Saida: lista de dicts.
     """
     # Fase 1: sem obra nao ha prazo a explorar.
     if not len(df_odis):
         return []
     capacidade_dia = config.HORAS_DIA_CAMPO * config.TAMANHO_EQUIPE
-    # A oficial vem primeiro; e' ela que pode marcar o cenario 'calculado'.
-    produtividades = produtividades_da_grade(tipo_contrato)
-    oficial = produtividades[0]
+    # Total de horas de inspecao da amostra - nao depende de como se divide.
+    horas_inspecao_total = float(df_odis["n_ucs"].sum()) * horas_por_uc(tipo_contrato)
     linhas = []
-    # Fase 2: uma varredura completa de equipes x prazo por produtividade.
-    for por_dia in produtividades:
-        por_uc = horas_por_uc(tipo_contrato, por_dia)
-        # Total de horas de inspecao da amostra - nao depende de como se divide.
-        horas_inspecao_total = float(df_odis["n_ucs"].sum()) * por_uc
-        # Fase 3: um bloco por numero de equipes.
-        for n in range(config.N_EQUIPES_MIN, config.N_EQUIPES_MAX + 1):
-            # Mais equipes que obras nao e' cenario: alguem ficaria sem servico.
-            if n > len(df_odis):
-                break
-            # Pre-filtro barato: mesmo distribuindo a inspecao em partes iguais e
-            # ignorando TODO o deslocamento, ja passa do teto? Entao nao ha o que rotear.
-            if horas_inspecao_total / (n * capacidade_dia) > config.MAX_DIAS_POR_EQUIPE:
-                continue
-            # Fase 4: a divisao real, com o roteiro de cada equipe saindo da capital.
-            equipes = repartir_entre_equipes(df_odis, uf, tipo_contrato, n, por_dia)
-            n_efetivo = len(equipes)
-            horas_criticas = max((e["horas_campo"] for e in equipes), default=0.0)
-            dias_minimo, _ = _dias_para(horas_criticas)
-            # Com o deslocamento contado, o teto pode estourar mesmo tendo passado no
-            # pre-filtro.
-            if dias_minimo > config.MAX_DIAS_POR_EQUIPE:
-                continue
-            horas_totais = sum(e["horas_campo"] for e in equipes)
-            km_somado = sum(e["km_estrada"] for e in equipes)
-            # O fixo nao depende do prazo, do numero de equipes nem da produtividade -
-            # so do tipo do contrato.
-            custo_fixo = _custo_fixo(tipo_contrato)
-            # Fase 5: o espectro inteiro de prazos, de 1 dia ao teto. Abaixo do minimo a
-            # linha sai com 'cabe' False (o modelo diz que a equipe nao termina); acima do
-            # minimo e' folga deliberada - a equipe fica ociosa e o custo sobe, porque ha
-            # mais dias faturados. Nos dois casos o PRECO e' exato: o contrato paga por
-            # hora-profissional contratada, dando ela conta do servico ou nao.
-            for dias in range(1, config.MAX_DIAS_POR_EQUIPE + 1):
-                dias_faturados = dias + config.DIAS_MOBILIZACAO
-                custo_campo = _custo_campo(n_efetivo, dias_faturados, tipo_contrato)
-                linhas.append({
-                    "produtividade": por_dia,
-                    "n_equipes": n_efetivo,
-                    "dias_trabalho": dias,
-                    "dias_faturados": dias_faturados,
-                    # O veredito do modelo sobre esta combinacao, como DADO e nao como
-                    # filtro: cabe se o prazo alcanca o minimo que a geometria exige.
-                    "cabe": dias >= dias_minimo,
-                    "km_roteiro": km_somado,
-                    # Ocupacao = quanto da capacidade contratada e' realmente usada. Baixa
-                    # demais significa que o prazo esta pagando por gente parada; ACIMA DE
-                    # 100% e' o tanto que falta para o prazo caber.
-                    "ocupacao": horas_totais / (n_efetivo * capacidade_dia * dias),
-                    "custo_campo": custo_campo,
-                    "custo_fixo": custo_fixo,
-                    "custo_total": custo_campo + custo_fixo,
-                    # Marca a linha que corresponde ao numero oficial da aba Resumo -
-                    # que so existe na produtividade oficial.
-                    "cenario": ("calculado" if por_dia == oficial
-                                and n_efetivo == config.N_EQUIPES_PADRAO
-                                and dias == dias_minimo else ""),
-                })
-    # Saida: as combinacoes viaveis, por produtividade, depois equipes, depois prazo.
+    # Fase 2: um bloco por numero de equipes.
+    for n in range(config.N_EQUIPES_MIN, config.N_EQUIPES_MAX + 1):
+        # Mais equipes que obras nao e' cenario: alguem ficaria sem servico.
+        if n > len(df_odis):
+            break
+        # Pre-filtro barato: mesmo distribuindo a inspecao em partes iguais e ignorando
+        # TODO o deslocamento, ja passa do teto? Entao nao ha o que rotear.
+        if horas_inspecao_total / (n * capacidade_dia) > config.MAX_DIAS_POR_EQUIPE:
+            continue
+        # Fase 3: a divisao real, com o roteiro de cada equipe saindo da capital.
+        equipes = repartir_entre_equipes(df_odis, uf, tipo_contrato, n)
+        n_efetivo = len(equipes)
+        horas_criticas = max((e["horas_campo"] for e in equipes), default=0.0)
+        dias_minimo, _ = _dias_para(horas_criticas)
+        # Com o deslocamento contado, o teto pode estourar mesmo tendo passado no pre-filtro.
+        if dias_minimo > config.MAX_DIAS_POR_EQUIPE:
+            continue
+        horas_totais = sum(e["horas_campo"] for e in equipes)
+        km_somado = sum(e["km_estrada"] for e in equipes)
+        # O fixo nao depende do prazo nem do numero de equipes - so do tipo do contrato.
+        custo_fixo = _custo_fixo(tipo_contrato)
+        # Fase 4: o espectro inteiro de prazos, de 1 dia ao teto. Abaixo do minimo a linha
+        # sai com 'cabe' False (o modelo diz que a equipe nao termina); acima do minimo e'
+        # folga deliberada - a equipe fica ociosa e o custo sobe, porque ha mais dias
+        # faturados. Nos dois casos o PRECO e' exato: o contrato paga por hora-profissional
+        # contratada, dando ela conta do servico ou nao.
+        for dias in range(1, config.MAX_DIAS_POR_EQUIPE + 1):
+            dias_faturados = dias + config.DIAS_MOBILIZACAO
+            custo_campo = _custo_campo(n_efetivo, dias_faturados, tipo_contrato)
+            linhas.append({
+                "n_equipes": n_efetivo,
+                "dias_trabalho": dias,
+                "dias_faturados": dias_faturados,
+                # O veredito do modelo sobre esta combinacao, como DADO e nao como filtro:
+                # cabe se o prazo alcanca o minimo que a geometria exige.
+                "cabe": dias >= dias_minimo,
+                "km_roteiro": km_somado,
+                # Ocupacao = quanto da capacidade contratada e' realmente usada. Baixa
+                # demais significa que o prazo esta pagando por gente parada. CUIDADO: ela
+                # e' a MEDIA das equipes, enquanto 'cabe' olha a MAIS LENTA - com blocos
+                # desiguais, uma linha pode nao caber com ocupacao abaixo de 100%.
+                "ocupacao": horas_totais / (n_efetivo * capacidade_dia * dias),
+                "custo_campo": custo_campo,
+                "custo_fixo": custo_fixo,
+                "custo_total": custo_campo + custo_fixo,
+                # Marca a linha que corresponde ao numero oficial da aba Resumo.
+                "cenario": ("calculado" if n_efetivo == config.N_EQUIPES_PADRAO
+                            and dias == dias_minimo else ""),
+            })
+    # Saida: as combinacoes viaveis, por numero de equipes e depois por prazo.
     return linhas
 
 

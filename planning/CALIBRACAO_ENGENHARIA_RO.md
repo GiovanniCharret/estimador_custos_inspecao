@@ -86,9 +86,10 @@ deslocamento dos 8 do prazo).
 motor devolve **14 dias e R$ 296.640** — resíduo zero contra a amostra eleita, por um caminho
 completamente independente do deles (roteiro guloso sobre coordenadas × clusters e raios).
 
-> **Fechado em 2026-08-19 (F18):** a aba `Cenarios` passou a varrer **também** 1,5 UC/dia
-> (`config.UCS_POR_DIA_ALTERNATIVAS`). A aba `Resumo` continua no default de 3,0 — decisão do
-> humano. Ver § "O que a F18 fez".
+> **Tentado e revertido no mesmo dia (F18 → F20).** A aba `Cenarios` chegou a varrer também
+> 1,5 UC/dia; a varredura saiu depois que a **F19** resolveu o mesmo problema melhor. O achado
+> continua valendo — é a evidência mais forte deste documento —, só não vive mais na planilha.
+> Ver § "O que a F18 fez (e por que a F20 desfez)".
 
 ### D3 — O modelo de deslocamento é estruturalmente outro `MÉTODO`
 
@@ -185,7 +186,7 @@ dez divergências somadas.
 
 ---
 
-## O que a F18 fez (2026-08-19)
+## O que a F18 fez (e por que a F20 desfez)
 
 Decisão do humano, depois desta análise: **os cenários passam a considerar também
 `UCS_POR_DIA["MLA"] = 1,5`; o `Resumo` continua no default de 3,0.**
@@ -220,7 +221,17 @@ O que a grade mostra na tranche real (amostra 1, `ECM 022/2025`):
 
 A linha destacada é o resultado que dá confiança: **a 1,5 UC/equipe/dia, 14 dias com 4 equipes é
 o mínimo viável do bloco** — o nosso modelo chega ao prazo recomendado pela engenharia por um
-caminho independente, e não por ajuste.
+caminho independente, e não por ajuste. **Esse achado continua de pé**; o que saiu foi a coluna.
+
+> **F20 — a varredura foi retirada da planilha (pedido do humano, mesmo dia).** Três fatos,
+> verificados nos dados reais antes de mexer: (a) **o custo não depende da produtividade** — só
+> `cabe` e `ocupacao` dependem; (b) o bloco de 1,5 não trazia **nenhuma** combinação
+> `equipes × prazo` ausente do de 3,0, porque produtividade menor só *elimina* números de equipe;
+> (c) 500 das 1.040 linhas eram duplicatas exatas em `(equipes, prazo, custo)`. Sem o rótulo da
+> coluna elas ficariam indistinguíveis, então a varredura saiu junto.
+> E o problema que a F18 tinha vindo resolver — a linha da engenharia não existir na aba — já
+> estava resolvido pela **F19**, por um caminho melhor: o espectro inteiro de prazos faz a linha
+> existir seja qual for a produtividade. A aba voltou a 540 linhas e 11 colunas.
 
 O bloco alternativo tem sempre **menos** linhas: metade da produtividade dobra as horas de
 inspeção, e combinações que cabiam em 20 dias deixam de caber. A grade encolher numa produtividade
@@ -279,7 +290,7 @@ A aba passou de 613 para **1.040 linhas** na tranche real.
 | # | Ação | Divergências que fecha | Esforço | Status |
 | --- | --- | --- | --- | --- |
 | 0 | Varrer o espectro inteiro de prazos, com `Cabe no prazo?` | nenhuma — mas é o que faz as linhas da engenharia **existirem** | 1 laço + 1 coluna | **feito (F19)** |
-| 1 | Varrer 1,5 UC/dia nos cenários | D2 (parcial) | 1 parâmetro + 1 laço | **feito (F18)** |
+| — | ~~Varrer 1,5 UC/dia nos cenários~~ | D2 (parcial) | 1 parâmetro + 1 laço | **revertido (F18 → F20)**: redundante depois da F19 |
 | 2 | Regra de nº de equipes derivada da geografia | D1, D8 | precisa de clusterização | aberta |
 | 3 | Fator de desbalanceamento (+10%) | D5 (= L9) | 1 parâmetro | aberta |
 | 4 | Decidir a forma do deslocamento: por cluster ou por roteiro dividido | D3, D6 | decisão de modelo | aberta |
