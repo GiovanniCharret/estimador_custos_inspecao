@@ -37,6 +37,9 @@ def _config_redonda(monkeypatch):
                         {"LPT": {"planejamento": 4.0, "relatorio": 4.0, "apresentacao": 2.0},
                          "MLA": {"planejamento": 4.0, "relatorio": 4.0, "apresentacao": 2.0}})
     monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 4.0, "MLA": 1.0})
+    # Sem produtividades alternativas: a grade destes testes tem UM bloco so, como antes
+    # da terceira dimensao. Quem testa a varredura declara as suas.
+    monkeypatch.setattr(config, "UCS_POR_DIA_ALTERNATIVAS", {})
     monkeypatch.setattr(config, "PERFIL_EQUIPE", "ENGENHEIRO")
     monkeypatch.setattr(config, "TARIFAS_HORA",
                         {"LPT": {"ENGENHEIRO": {"campo": 100.0, "escritorio": 50.0}},
@@ -274,6 +277,83 @@ def test_grade_nem_roteia_a_combinacao_inviavel(monkeypatch):
     assert 1 not in chamadas
     # As viaveis, sim.
     assert 2 in chamadas
+
+
+def test_produtividades_da_grade_poe_a_oficial_primeiro_e_nao_repete(monkeypatch):
+    # A oficial nunca precisa ser declarada nas alternativas - e' o que impede a tabela de
+    # alternativas de envelhecer quando alguem mudar UCS_POR_DIA. Declarada por engano,
+    # tambem nao duplica a linha na aba.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 4.0, "MLA": 3.0})
+    monkeypatch.setattr(config, "UCS_POR_DIA_ALTERNATIVAS", {"MLA": [1.5, 3.0, 1.5]})
+    assert modulo_custo.produtividades_da_grade("MLA") == [3.0, 1.5]
+    # Tipo sem alternativa declarada continua com um bloco so.
+    assert modulo_custo.produtividades_da_grade("LPT") == [4.0]
+
+
+def test_grade_varre_tambem_a_produtividade(monkeypatch):
+    # Pedido do humano (2026-08-19): a engenharia dimensiona o MLA a 1,5 UC/equipe/dia e
+    # nos a 3,0. As duas hipoteses convivem na MESMA aba, para a comparacao nao exigir uma
+    # segunda execucao com o config editado.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 4.0, "MLA": 2.0})
+    monkeypatch.setattr(config, "UCS_POR_DIA_ALTERNATIVAS", {"MLA": [1.0]})
+    linhas = grade_cenarios(_odis_teste(), uf="PA", tipo_contrato="MLA")
+    assert {c["produtividade"] for c in linhas} == {2.0, 1.0}
+    # A oficial abre a aba; a alternativa vem depois, em bloco.
+    ordem = [c["produtividade"] for c in linhas]
+    assert ordem == sorted(ordem, key=lambda v: 0 if v == 2.0 else 1)
+    # Dentro de cada bloco, a ordenacao antiga (equipes, depois prazo) continua valendo.
+    for prod in (2.0, 1.0):
+        chaves = [(c["n_equipes"], c["dias_trabalho"]) for c in linhas
+                  if c["produtividade"] == prod]
+        assert chaves == sorted(chaves)
+
+
+def test_produtividade_menor_so_mexe_na_inspecao(monkeypatch):
+    # A geometria nao sabe de produtividade: mesmos blocos, mesmos km. So as horas de
+    # inspecao dobram quando a produtividade cai pela metade - e por isso o prazo minimo
+    # do bloco alternativo nunca e' MENOR que o do oficial.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 4.0, "MLA": 2.0})
+    monkeypatch.setattr(config, "UCS_POR_DIA_ALTERNATIVAS", {"MLA": [1.0]})
+    linhas = grade_cenarios(_odis_teste(), uf="PA", tipo_contrato="MLA")
+    for n in {c["n_equipes"] for c in linhas}:
+        do_bloco = {p: [c for c in linhas if c["produtividade"] == p and c["n_equipes"] == n]
+                    for p in (2.0, 1.0)}
+        if not (do_bloco[2.0] and do_bloco[1.0]):
+            continue
+        # Os km sao os mesmos: a divisao em blocos e' pura geometria.
+        assert do_bloco[1.0][0]["km_roteiro"] == pytest.approx(do_bloco[2.0][0]["km_roteiro"])
+        # E o prazo minimo so pode piorar (ou empatar, pelo arredondamento para dia).
+        assert (min(c["dias_trabalho"] for c in do_bloco[1.0])
+                >= min(c["dias_trabalho"] for c in do_bloco[2.0]))
+
+
+def test_so_a_produtividade_oficial_marca_o_cenario_calculado(monkeypatch):
+    # A linha 'calculado' e' a ponte com a aba Resumo, e o Resumo usa SO a oficial. Se a
+    # alternativa tambem marcasse, a planilha teria dois numeros oficiais.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "N_EQUIPES_PADRAO", 2)
+    monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 4.0, "MLA": 2.0})
+    monkeypatch.setattr(config, "UCS_POR_DIA_ALTERNATIVAS", {"MLA": [1.0]})
+    numeros, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="MLA")
+    marcadas = [c for c in grade_cenarios(_odis_teste(), uf="PA", tipo_contrato="MLA")
+                if c["cenario"] == "calculado"]
+    assert len(marcadas) == 1
+    assert marcadas[0]["produtividade"] == 2.0
+    assert marcadas[0]["custo_total"] == pytest.approx(numeros["custo_total"])
+
+
+def test_resumo_nao_muda_quando_se_declara_uma_alternativa(monkeypatch):
+    # A garantia que o humano pediu em palavras: "o resumo usa o default". Declarar uma
+    # alternativa mexe na grade e em nada mais.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 4.0, "MLA": 2.0})
+    sem, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="MLA")
+    monkeypatch.setattr(config, "UCS_POR_DIA_ALTERNATIVAS", {"MLA": [1.0]})
+    com, _ = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="MLA")
+    assert sem == com
 
 
 def test_grade_de_amostra_vazia(monkeypatch):

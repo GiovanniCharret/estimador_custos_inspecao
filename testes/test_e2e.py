@@ -253,6 +253,34 @@ def test_e2e_grade_de_cenarios_respeita_os_limites(tmp_path):
     assert marcadas.iloc[0]["Custo total (R$)"] == pytest.approx(oficial["Custo total (R$)"])
 
 
+def test_e2e_cenarios_trazem_as_duas_produtividades(tmp_path, monkeypatch):
+    # Pedido do humano (2026-08-19): a grade compara a produtividade OFICIAL com a que a
+    # engenharia usa, na mesma aba. A execucao inteira precisa carregar essa terceira
+    # dimensao ate o Excel - e o Resumo precisa NAO se mexer por causa dela.
+    _monta_entrada(tmp_path, municipios={odi: f"MUNICIPIO {i}" for i, odi in enumerate(ODIS)})
+    # Primeiro sem alternativa: o numero oficial de referencia.
+    assert executar(tmp_path) == 0
+    antes = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Resumo")
+    # Agora com uma alternativa declarada (metade da produtividade oficial do LPT).
+    metade = config.UCS_POR_DIA["LPT"] / 2
+    monkeypatch.setattr(config, "UCS_POR_DIA_ALTERNATIVAS", {"LPT": [metade]})
+    assert executar(tmp_path) == 0
+    caminho = tmp_path / "saida" / "Resumo_Custos.xlsx"
+    depois = pd.read_excel(caminho, sheet_name="Resumo")
+    # O Resumo usa o default e so o default - nao mudou um centavo.
+    pd.testing.assert_frame_equal(antes, depois)
+    cenarios = pd.read_excel(caminho, sheet_name="Cenarios")
+    assert set(cenarios["Produtividade (UCs/dia)"]) == {config.UCS_POR_DIA["LPT"], metade}
+    # A oficial abre a aba e e' a unica que marca o cenario 'calculado'.
+    marcadas = cenarios[cenarios["Cenario"] == "calculado"]
+    assert set(marcadas["Produtividade (UCs/dia)"]) == {config.UCS_POR_DIA["LPT"]}
+    # Mesma geometria nos dois blocos: os km de cada nº de equipes sao identicos.
+    km = cenarios.groupby(["Produtividade (UCs/dia)", "Equipes"])[
+        "Roteiro somado (km estrada)"].first().unstack(0)
+    assert km[metade].dropna().tolist() == pytest.approx(
+        km[config.UCS_POR_DIA["LPT"]].reindex(km[metade].dropna().index).tolist())
+
+
 def test_e2e_mapa_localiza_as_obras_sem_propor_itinerario(tmp_path):
     # O mapa gerado pela execucao inteira mostra ONDE estao as obras e mais nada: a rota
     # e' hipotese do modelo e ficou restrita ao calculo de custo (decisao de 2026-08-13).

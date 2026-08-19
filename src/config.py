@@ -25,6 +25,9 @@ O custo e' calculado POR AMOSTRA (nao por estrato) e soma duas parcelas:
      FATOR_RODOVIARIO; km viram horas pela VELOCIDADE_KMH.
    - INSPECAO: cada UC consome HORAS_DIA_CAMPO / UCS_POR_DIA[tipo] horas.
      LPT (rede/postes): 30 UCs/dia. MLA (fotovoltaico remoto): 3 UCs/dia.
+     A aba 'Resumo' usa SO essa produtividade oficial. A grade de CENARIOS varre
+     tambem as de UCS_POR_DIA_ALTERNATIVAS (hoje MLA 1,5 UC/equipe/dia, o numero do
+     dimensionamento da engenharia em RO) e marca cada linha com a que usou.
    - DIAS: ditados pela equipe MAIS LENTA (o prazo tem de caber para todas):
      teto(maior horas de campo / (HORAS_DIA_CAMPO x TAMANHO_EQUIPE)) + DIAS_MOBILIZACAO.
      Arredondado PARA CIMA porque a equipe nao vende meio dia.
@@ -119,6 +122,15 @@ AMOSTRA_PADRAO = 1
 # UCs inspecionadas por equipe por dia, por tipo de contrato (decisao G5):
 # LPT = obras com rede/postes/transformador; MLA = fotovoltaico em regioes remotas.
 UCS_POR_DIA = {"LPT": 30.0, "MLA": 3.0}
+# Produtividades ADICIONAIS varridas na aba 'Cenarios'. A de UCS_POR_DIA acima entra
+# sempre e NAO se repete aqui - por isso mudar o oficial nao exige mexer nesta tabela.
+# Por que existe (2026-08-19): o dimensionamento que a engenharia fez para a 3a tranche
+# de RO (ECM 022/2025) usa 1,5 UC/equipe/dia, derivada do historico real do ECM 015/2024
+# (18 UCs / (2 equipes x 6 dias efetivos, expurgando 2 dias de deslocamento dos 8)),
+# enquanto o numero OFICIAL desta ferramenta continua sendo 3,0. A aba 'Resumo' usa so o
+# oficial; a grade mostra as duas, para a conversa com a engenharia caber na mesma
+# planilha em vez de virar uma segunda execucao com o config editado.
+UCS_POR_DIA_ALTERNATIVAS = {"MLA": [1.5]}
 # Tipo usado quando o contrato nao e' informado/encontrado.
 TIPO_CONTRATO_PADRAO = "LPT"
 

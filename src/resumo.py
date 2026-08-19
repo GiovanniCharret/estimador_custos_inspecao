@@ -3,6 +3,10 @@
 import pandas as pd
 
 from src import config
+# Importado so pelo Leia-me: a lista de produtividades varridas na grade e' derivada de
+# config (oficial + alternativas, sem repetir), e a derivacao mora no motor de custo.
+# Repetir a regra aqui seria a segunda copia que sai de sincronia.
+from src import custo
 from src.io_amostras import EntradaInvalida
 
 # Renomeacao de apresentacao da aba Resumo (apenas exibicao; nao afeta o calculo).
@@ -47,6 +51,10 @@ COLUNAS_RESUMO = {
 COLUNAS_CENARIOS = {
     "n_estratos": "Estratos",
     "amostra": "Amostra",
+    # Terceira dimensao da grade desde 2026-08-19: a mesma amostra aparece uma vez por
+    # produtividade varrida. Vem antes de 'Equipes' porque e' a chave mais externa - e'
+    # por ela que a aba se agrupa na leitura.
+    "produtividade": "Produtividade (UCs/dia)",
     "n_equipes": "Equipes",
     "dias_trabalho": "Dias trabalho (por equipe)",
     "dias_faturados": "Dias faturados (por equipe)",
@@ -95,7 +103,7 @@ def _texto_leia_me(tipo_contrato=None):
         "Estimativa de custo de inspecao das amostras, por estratificacao.",
         "",
         "Aba 'Resumo'   : uma linha por estratificacao. E' o numero que vale.",
-        "Aba 'Cenarios' : a grade de combinacoes VIAVEIS (quantas equipes x qual prazo).",
+        "Aba 'Cenarios' : a grade de combinacoes VIAVEIS (produtividade x equipes x prazo).",
         "Aba 'Detalhe'  : uma linha por obra, com a EQUIPE dona e a ordem de visita dela.",
         "",
         "CUIDADO com duas colunas parecidas e diferentes:",
@@ -127,6 +135,15 @@ def _texto_leia_me(tipo_contrato=None):
         "Prazos maiores que o minimo de cada linha sao folga deliberada: a equipe fica mais",
         "ociosa (veja 'Ocupacao') e o custo sobe, porque ha mais dias faturados.",
         "",
+        "A coluna 'Produtividade (UCs/dia)' da aba 'Cenarios' e' a TERCEIRA dimensao da",
+        "grade. A aba 'Resumo' usa so a produtividade OFICIAL (a primeira da lista abaixo);",
+        "as demais existem porque a engenharia dimensiona com outro numero - no MLA, 1,5",
+        "UC/equipe/dia, tirado do historico de Rondonia - e a comparacao precisa caber na",
+        "mesma planilha. Nada mais muda entre os blocos: mesma tarifa, mesmo fixo, mesma",
+        "geometria e os mesmos km. So as horas de inspecao. Metade da produtividade dobra",
+        "essas horas, entao o bloco alternativo costuma ter MENOS linhas: combinacoes que",
+        "cabiam no teto de dias deixam de caber.",
+        "",
         "O MAPA mostra apenas ONDE estao as obras da amostra e a base da equipe (capital).",
         "Ele nao desenha itinerario: a ordem de visita usada no calculo e' uma hipotese do",
         "modelo, nao uma recomendacao de rota.",
@@ -149,7 +166,11 @@ def _texto_leia_me(tipo_contrato=None):
         + " + ".join(f"{nome} {horas:g}h" for nome, horas in etapas.items()),
         f"  Dias de mobilizacao         : {config.DIAS_MOBILIZACAO:g}",
         f"  Velocidade / fator rodoviario: {config.VELOCIDADE_KMH:g} km/h / {config.FATOR_RODOVIARIO:g}",
-        f"  Produtividade (UCs/dia)     : {config.UCS_POR_DIA[tipo]:g} ({tipo})",
+        f"  Produtividade (UCs/dia)     : {config.UCS_POR_DIA[tipo]:g} ({tipo}) - oficial,"
+        " usada na aba Resumo",
+        f"  Produtividades nos cenarios : "
+        + ", ".join(f"{v:g}" for v in custo.produtividades_da_grade(tipo))
+        + " UCs/dia (a primeira e' a oficial)",
         f"  Grade de cenarios           : {config.N_EQUIPES_MIN:g} a {config.N_EQUIPES_MAX:g} equipes,"
         f" no maximo {config.MAX_DIAS_POR_EQUIPE:g} dias por equipe",
         "",

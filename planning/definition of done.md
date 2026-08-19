@@ -23,6 +23,21 @@ x F6 — mapas HTML gerados com camadas por estrato e popup de custo; teste pass
 x F7 — e2e feliz + 8 bordas passam (16 testes); `planning/TESTES.md` escrito;
     status report `planning/html/STATUS_F7.html` gerado; `executar.bat` validado
     (sem entrada → "Lote.xlsx nao encontrado", exit 1, sem traceback).
+x F18 — produtividade como terceira dimensão da grade (2026-08-19). Critérios:
+    - a aba `Cenarios` tem a coluna `Produtividade (UCs/dia)` **antes** de `Equipes`, e no MLA
+      traz dois blocos: 3,0 (oficial) e 1,5 (o número da engenharia);
+    - a aba `Resumo` **não muda um centavo** ao se declarar uma alternativa — testado
+      comparando as duas execuções linha a linha;
+    - **exatamente uma** linha `calculado` por estratificação, sempre na produtividade oficial;
+    - os km de cada nº de equipes são **idênticos** nos dois blocos (a geometria não sabe de
+      produtividade); só as horas de inspeção mudam;
+    - o bloco de 1,5 tem **menos** linhas (combinações que cabiam em 20 dias deixam de caber), e
+      o `Leia-me` explica por quê;
+    - 122 testes passando (115 → 122);
+    - execução real (`ECM 022/2025`, amostra 1): a 1,5 UC/dia, o mínimo viável do estrato 3 com
+      4 equipes é **14 dias / R$ 296.640** — a recomendação da engenharia, ao centavo.
+    [ ] **Falta a parte humana:** abrir a aba `Cenarios` e conferir se os dois blocos ficaram
+        legíveis lado a lado (613 linhas na tranche real, contra 343 antes).
 x F17 — aba `Resumo beneficiarios` (2026-08-14). Critérios:
     - **transposta**: uma linha por categoria do domínio do Anexo V (`Dominios` D e E —
       24 categorias no arquivo real, lidas por posição) e uma coluna por estratificação;

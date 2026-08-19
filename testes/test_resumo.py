@@ -3,6 +3,7 @@
 import pandas as pd
 import pytest
 
+from src import config
 from src.custo import custo_amostra, grade_cenarios
 from src.io_amostras import EntradaInvalida
 from src.resumo import gravar_resumo
@@ -56,6 +57,33 @@ def test_gravar_resumo_cenarios(tmp_path):
     assert base["Custo total (R$)"] == pytest.approx(oficial["Custo total (R$)"])
     # E a grade fala do MESMO numero de equipes que o Resumo naquela linha.
     assert base["Equipes"] == oficial["Equipes"]
+
+
+def test_gravar_resumo_cenarios_tem_a_coluna_de_produtividade(tmp_path, monkeypatch):
+    # A grade tem tres dimensoes desde 2026-08-19, e a terceira precisa APARECER: sem a
+    # coluna, dois blocos de produtividades diferentes viram linhas repetidas e
+    # contraditorias (mesmas equipes, mesmo prazo, custos diferentes).
+    monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 4.0, "MLA": 3.0})
+    monkeypatch.setattr(config, "UCS_POR_DIA_ALTERNATIVAS", {"LPT": [2.0]})
+    numeros, roteiro = custo_amostra(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    resultado = {"n_estratos": 3, "amostra": 1, "roteiro": roteiro,
+                 "cenarios": grade_cenarios(_odis_teste(), uf="PA", tipo_contrato="LPT"),
+                 **numeros}
+    destino = tmp_path / "Resumo_Custos.xlsx"
+    gravar_resumo([resultado], destino)
+    cenarios = pd.read_excel(destino, sheet_name="Cenarios")
+    assert "Produtividade (UCs/dia)" in cenarios.columns
+    assert set(cenarios["Produtividade (UCs/dia)"]) == {4.0, 2.0}
+    # O Resumo segue falando so da oficial - e' a linha 'calculado' que faz a ponte.
+    marcadas = cenarios[cenarios["Cenario"] == "calculado"]
+    assert len(marcadas) == 1
+    assert marcadas.iloc[0]["Produtividade (UCs/dia)"] == 4.0
+    resumo = pd.read_excel(destino, sheet_name="Resumo")
+    assert marcadas.iloc[0]["Custo total (R$)"] == pytest.approx(
+        resumo.iloc[0]["Custo total (R$)"])
+    # E o Leia-me avisa que ha mais de uma produtividade na aba.
+    leia_me = pd.read_excel(destino, sheet_name="Leia-me", header=None)[0].astype(str)
+    assert leia_me.str.contains("Produtividades nos cenarios").any()
 
 
 def test_gravar_resumo_detalhe_traz_equipe_e_ordem(tmp_path):

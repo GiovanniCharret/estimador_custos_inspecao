@@ -1,6 +1,15 @@
 # TESTES — mapa da suíte do estimador
 
-Atualizado em 2026-08-11 (F13 — chave de junção declarada). **86 testes, todos passando.**
+Atualizado em 2026-08-11 (F13 — chave de junção declarada). **Hoje são 122 testes, todos
+passando** (`.venv\Scripts\python.exe -m pytest testes -q`).
+
+> **Aviso de validade:** a tabela de cobertura abaixo está congelada na F13. As fases F14–F18
+> acrescentaram testes que ela não lista — mapa sem itinerário (F14), grade equipes × prazo e
+> divisão real entre equipes (F15), horas de escritório por tipo (F16), aba
+> `Resumo beneficiarios` transposta (F17) e a **produtividade como terceira dimensão da grade**
+> (F18: `produtividades_da_grade`, varredura sem tocar em `config`, `Resumo` inalterado ao
+> declarar uma alternativa, e2e com os dois blocos na aba `Cenarios`). Os números por arquivo
+> valem como mapa de *onde procurar*, não como contagem.
 
 Nenhum teste depende de `minhas_notas/` nem de `Entrada/` (decisão D6): as planilhas
 são geradas sinteticamente em `tmp_path` por `testes/fixtures.py`. Isso é o que permite

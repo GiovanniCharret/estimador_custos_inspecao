@@ -52,6 +52,10 @@ x F16 — **Horas de escritório por tipo de obra** (decisão G9): 36h no LPT, 2
 x F17 — **Aba `Resumo beneficiarios`** (decisão G11): perfil das UCs sorteadas por
     categoria do domínio do Anexo V, **transposta** (categoria por linha, estratificação
     por coluna) — 2026-08-14
+x F18 — **Produtividade como terceira dimensão da grade** (decisão G12): a aba `Cenarios`
+    varre também `UCS_POR_DIA_ALTERNATIVAS` (hoje MLA 1,5 UC/equipe/dia, o número da
+    engenharia); a aba `Resumo` continua no default de 3,0 — 2026-08-19.
+    Motivação e memória da comparação: `planning/CALIBRACAO_ENGENHARIA_RO.md`
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -170,6 +174,20 @@ x F17 — **Aba `Resumo beneficiarios`** (decisão G11): perfil das UCs sorteada
   (`CODIGO_TIPOLOGIA_BENEFICIO`). Ele escolheu `D`+`E`. As duas visões se sobrepõem — as 16 UCs
   com `2 - Comunidade quilombola` são as mesmas com `Sim` em `IV.2 - Família quilombola` —, então
   as tipologias `O:AZ` ficam disponíveis para uma fase futura sem retrabalho.
+- **G12 — A PRODUTIVIDADE É A TERCEIRA DIMENSÃO DA GRADE (F18, decisão do humano em
+  2026-08-19):** comparando o `Resumo_Custos.xlsx` com o dimensionamento que a engenharia fez
+  para a 3ª tranche de RO (`ECM 022/2025`), a **fórmula de custo bateu ao centavo** — o que
+  divergia era o dimensionamento, e a única diferença de parâmetro que explicava o prazo era a
+  produtividade do MLA: **1,5 UC/equipe/dia** lá (histórico do `ECM 015/2024`), 3,0 aqui.
+  Decisão: a aba `Cenarios` passa a varrer **as duas**; a aba `Resumo` **continua no default de
+  3,0**. Implementado como `config.UCS_POR_DIA_ALTERNATIVAS` (produtividades *adicionais* — a
+  oficial entra sempre e não se repete lá, para a tabela não envelhecer se alguém mudar o valor
+  oficial) + `custo.produtividades_da_grade` + nova coluna `Produtividade (UCs/dia)`.
+  **Só a produtividade oficial marca o cenário `calculado`**, senão a planilha teria dois números
+  oficiais. Confirmação forte do valor: a 1,5 UC/dia, o **mínimo viável** do estrato 3 com 4
+  equipes é **14 dias, R$ 296.640** — exatamente a recomendação da engenharia, por um caminho
+  independente (roteiro guloso sobre coordenadas × clusters e raios).
+  As nove divergências restantes estão catalogadas em `planning/CALIBRACAO_ENGENHARIA_RO.md`.
 - **G9 — O TIPO DE OBRA MUDA AS HORAS DE ESCRITÓRIO (F16, achado do humano em 2026-08-13):** o
   Formulário de OS tem um parâmetro binário que o modelo ignorava — `Tipo de obra` (célula `E48`
   da aba `Ordem de Serviço Emissão`), lido pelas fórmulas `E26:E29` da aba `Custos Inspeções`:

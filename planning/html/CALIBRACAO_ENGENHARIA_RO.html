@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calibracao contra a engenharia - RO 3a Tranche</title>
+<style>
+  :root {
+    --ivory:#FAF9F5; --slate:#141413; --clay:#D97757; --oat:#E3DACC;
+    --olive:#788C5D; --gray-150:#F0EEE6; --gray-300:#D1CFC5;
+    --gray-500:#87867F; --gray-700:#3D3D3A; --amber:#B8860B;
+    --serif: ui-serif, Georgia, "Times New Roman", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--ivory); color:var(--gray-700); font-family:var(--sans);
+         font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased;
+         padding:56px 24px 120px; }
+  .page { max-width:1120px; margin:0 auto; display:grid;
+          grid-template-columns:210px minmax(0,1fr); gap:48px; }
+  @media (max-width:960px){ .page{grid-template-columns:1fr;} nav{display:none;} }
+
+  nav { position:sticky; top:32px; align-self:start; font-size:13px; }
+  nav .label { font-family:var(--mono); font-size:10px; letter-spacing:.1em;
+               text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+  nav a { display:block; padding:5px 0 5px 12px; border-left:2px solid var(--gray-300);
+          color:var(--gray-700); text-decoration:none; }
+  nav a:hover { color:var(--slate); border-color:var(--clay); }
+  nav a.hot { border-color:var(--clay); }
+  nav .files { margin-top:28px; border-top:1px solid var(--gray-300); padding-top:14px; }
+  nav .files code { display:block; font-family:var(--mono); font-size:10.5px;
+                    color:var(--gray-500); padding:3px 0; word-break:break-all;
+                    background:none; }
+
+  .eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.08em;
+             text-transform:uppercase; color:var(--gray-500); margin-bottom:10px; }
+  h1 { font-family:var(--serif); font-weight:500; font-size:33px; color:var(--slate);
+       letter-spacing:-.01em; margin-bottom:16px; line-height:1.2; }
+  h2 { font-family:var(--serif); font-weight:500; font-size:23px; color:var(--slate);
+       margin:46px 0 14px; scroll-margin-top:24px; }
+  p { margin-bottom:12px; max-width:720px; }
+  code { font-family:var(--mono); font-size:12.5px; background:var(--gray-150);
+         padding:1px 5px; border-radius:4px; }
+  strong { color:var(--slate); }
+  .lead { font-size:16.5px; }
+
+  .tldr { border:1.5px solid var(--gray-300); border-left:3px solid var(--clay);
+          border-radius:10px; background:#fff; padding:18px 20px; margin:18px 0 10px; }
+  .tldr p:last-child { margin-bottom:0; }
+
+  pre { background:#fff; border:1.5px solid var(--gray-300); border-radius:10px;
+        padding:16px 18px; margin:16px 0; overflow-x:auto;
+        font-family:var(--mono); font-size:12.5px; line-height:1.6; color:var(--gray-700); }
+  pre b { color:var(--clay); font-weight:600; }
+
+  table { border-collapse:collapse; width:100%; margin:16px 0; font-size:13.5px; }
+  .scroll { overflow-x:auto; margin:16px 0; }
+  .scroll table { margin:0; }
+  th { text-align:left; font-family:var(--mono); font-size:10.5px; letter-spacing:.06em;
+       text-transform:uppercase; color:var(--gray-500); font-weight:500;
+       border-bottom:1.5px solid var(--gray-300); padding:8px 12px 8px 0; }
+  td { padding:9px 12px 9px 0; border-bottom:1px solid var(--gray-300);
+       vertical-align:top; }
+  td.num, th.num { text-align:right; font-family:var(--mono); font-size:12.5px;
+                   padding-right:18px; }
+  tr.hi td { background:var(--gray-150); }
+
+  .gap { background:#fff; border:1.5px solid var(--gray-300); border-radius:12px;
+         padding:22px 24px; margin:18px 0; scroll-margin-top:24px; }
+  .gap.metodo { border-left:3px solid var(--clay); }
+  .gap.parametro { border-left:3px solid var(--amber); }
+  .gap.escopo { border-left:3px solid var(--olive); }
+  .gap.fechada { border-left:3px solid var(--olive); }
+  .fechada-nota { background:var(--gray-150); border-radius:8px; padding:14px 16px;
+                  margin-top:14px; font-size:14px; }
+  .fechada-nota b { display:block; font-family:var(--mono); font-size:10.5px;
+                    letter-spacing:.08em; text-transform:uppercase; color:var(--olive);
+                    margin-bottom:5px; }
+  .selo { display:inline-block; font-family:var(--mono); font-size:10px;
+          letter-spacing:.06em; text-transform:uppercase; padding:2px 7px;
+          border-radius:20px; margin-left:8px; vertical-align:middle; }
+  .selo.ok { background:var(--olive); color:#fff; }
+  .selo.aberta { background:var(--gray-300); color:var(--gray-700); }
+  .gap h3 { font-family:var(--serif); font-weight:500; font-size:19px; color:var(--slate);
+            margin-bottom:4px; }
+  .gap .tag { font-family:var(--mono); font-size:10px; letter-spacing:.08em;
+              text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+  .gap p:last-child { margin-bottom:0; }
+  .efeito { border-top:1px dashed var(--gray-300); margin-top:14px; padding-top:12px;
+            font-size:14px; }
+  .efeito b { font-family:var(--mono); font-size:10.5px; letter-spacing:.06em;
+              text-transform:uppercase; color:var(--gray-500); display:block;
+              margin-bottom:4px; font-weight:500; }
+
+  footer { margin-top:56px; border-top:1px solid var(--gray-300); padding-top:16px;
+           font-size:12.5px; color:var(--gray-500); }
+</style>
+</head>
+<body>
+<div class="page">
+
+<nav>
+  <div class="label">Bate exato</div>
+  <a href="#bate">Dados e f&oacute;rmula</a>
+  <div class="label" style="margin-top:22px">Diverg&ecirc;ncias</div>
+  <a href="#d1" class="hot">D1 &middot; equipes constantes</a>
+  <a href="#d2" class="hot">D2 &middot; produtividade 3 x 1,5</a>
+  <a href="#d3">D3 &middot; deslocamento</a>
+  <a href="#d4">D4 &middot; arredondamento</a>
+  <a href="#d5">D5 &middot; desbalanceamento</a>
+  <a href="#d6" class="hot">D6 &middot; realoca&ccedil;&atilde;o</a>
+  <a href="#d7">D7 &middot; abas discordam</a>
+  <a href="#d8">D8 &middot; caminho cr&iacute;tico</a>
+  <a href="#d9">D9 &middot; escolha da amostra</a>
+  <a href="#d10">D10 &middot; velocidade/fator</a>
+  <div class="label" style="margin-top:22px">Depois</div>
+  <a href="#unidade">Ressalva de unidade</a>
+  <a href="#f18">O que a F18 fez</a>
+  <a href="#placar">Placar</a>
+  <div class="files">
+    <code>suporte_contexto/Tabela_Resumo_Extratos_Amostra.xlsx</code>
+    <code>src/custo.py</code>
+    <code>src/config.py</code>
+    <code>planning/CALIBRACAO_ENGENHARIA_RO.md</code>
+  </div>
+</nav>
+
+<main>
+  <div class="eyebrow">Planning &middot; 2026-08-19 &middot; ECM 022/2025</div>
+  <h1>Calibra&ccedil;&atilde;o contra o dimensionamento da engenharia</h1>
+  <p class="lead">RO 3&ordf; Tranche, MLA/SIGFI. A compara&ccedil;&atilde;o produziu um resultado
+  incomum: <strong>a nossa f&oacute;rmula de custo est&aacute; certa e mesmo assim o n&uacute;mero
+  sai diferente.</strong></p>
+
+  <div class="tldr">
+    <p>Registrar s&oacute; o &ldquo;deu diferente&rdquo; perderia a informa&ccedil;&atilde;o que
+    importa &mdash; <em>onde</em> a diferen&ccedil;a mora, e qual dela &eacute;
+    <strong>par&acirc;metro</strong> (barato de mudar) e qual &eacute; <strong>m&eacute;todo</strong>
+    (decis&atilde;o de projeto).</p>
+    <p>Fonte: <code>suporte_contexto/Tabela_Resumo_Extratos_Amostra.xlsx</code>, abas
+    <code>Resumo</code> e <code>Dimensionamento_Inspecao</code>. Contraparte:
+    <code>saida/Resumo_Custos.xlsx</code> da mesma tranche.</p>
+  </div>
+
+  <h2 id="bate">O que j&aacute; bate, e bate exato</h2>
+  <p><strong>A leitura dos dados &eacute; id&ecirc;ntica.</strong> Nas quatro
+  estratifica&ccedil;&otilde;es, UCs e munic&iacute;pios coincidem: 45/13, 22/9, 15/9, 12/8.</p>
+
+  <p><strong>A f&oacute;rmula de custo &eacute; a mesma, com res&iacute;duo zero.</strong> A aba
+  <code>Resumo</code> deles obedece, nas quatro linhas, a</p>
+<pre>custo = <b>8.640</b> + <b>4.800</b> &times; equipes &times; (dias + 1)</pre>
+  <p>que &eacute; exatamente o modelo F16 para MLA (24 h &times; R$ 360 = R$ 8.640 de
+  escrit&oacute;rio) com <code>TAMANHO_EQUIPE = 1</code> e <code>DIAS_MOBILIZACAO = 1</code>.</p>
+
+  <div class="scroll">
+  <table>
+    <tr><th>Estratos</th><th class="num">Eq.</th><th class="num">Dias</th>
+        <th class="num">Engenharia</th><th>Confer&ecirc;ncia</th></tr>
+    <tr><td>3</td><td class="num">4</td><td class="num">14</td><td class="num">296.640</td>
+        <td>8.640 + 4.800 &times; 4 &times; 15 &check;</td></tr>
+    <tr><td>4</td><td class="num">2</td><td class="num">7</td><td class="num">85.440</td>
+        <td>8.640 + 4.800 &times; 2 &times; 8 &check;</td></tr>
+    <tr><td>5</td><td class="num">2</td><td class="num">5</td><td class="num">66.240</td>
+        <td>8.640 + 4.800 &times; 2 &times; 6 &check;</td></tr>
+    <tr><td>6</td><td class="num">2</td><td class="num">4</td><td class="num">56.640</td>
+        <td>8.640 + 4.800 &times; 2 &times; 5 &check;</td></tr>
+  </table>
+  </div>
+
+  <p>O <code>Custo fixo OS</code> da nossa execu&ccedil;&atilde;o saiu <strong>R$ 8.640</strong> sem
+  nenhum ajuste &mdash; a regra do prefixo (<code>ECM</code> &rarr; Gera&ccedil;&atilde;o
+  Descentralizada) acertou o tipo sozinha, e com ele as 24 h de escrit&oacute;rio da F16.</p>
+
+  <p><strong>Conclus&atilde;o:</strong> a diverg&ecirc;ncia n&atilde;o est&aacute; no pre&ccedil;o.
+  Est&aacute; inteira no <strong>dimensionamento</strong> &mdash; quantas equipes e quantos dias.</p>
+
+  <div class="scroll">
+  <table>
+    <tr><th>Estratos</th><th>Nosso (oficial)</th><th>Engenharia</th><th class="num">&Delta;</th></tr>
+    <tr><td>3</td><td>2 eq &times; 15 dias &middot; R$ 162.240</td>
+        <td>4 eq &times; 14 dias &middot; R$ 296.640</td><td class="num">&minus;45%</td></tr>
+    <tr><td>4</td><td>2 eq &times; 10 dias &middot; R$ 114.240</td>
+        <td>2 eq &times; 7 dias &middot; R$ 85.440</td><td class="num">+34%</td></tr>
+    <tr><td>5</td><td>2 eq &times; 9 dias &middot; R$ 104.640</td>
+        <td>2 eq &times; 5 dias &middot; R$ 66.240</td><td class="num">+58%</td></tr>
+    <tr><td>6</td><td>2 eq &times; 7 dias &middot; R$ 85.440</td>
+        <td>2 eq &times; 4 dias &middot; R$ 56.640</td><td class="num">+51%</td></tr>
+  </table>
+  </div>
+
+  <p>O sinal <strong>muda</strong>: subestimamos a amostra eleita e superestimamos as tr&ecirc;s
+  alternativas. N&atilde;o &eacute; vi&eacute;s de calibra&ccedil;&atilde;o; s&atilde;o duas causas
+  diferentes agindo em dire&ccedil;&otilde;es opostas (D1 e D7).</p>
+
+  <h2>As dez diverg&ecirc;ncias</h2>
+
+  <div class="gap metodo" id="d1">
+    <h3>D1 &mdash; O n&uacute;mero de equipes &eacute; constante aqui e derivado l&aacute;
+      <span class="selo aberta">aberta</span></h3>
+    <div class="tag">m&eacute;todo</div>
+    <p>Nosso oficial &eacute; sempre <code>config.N_EQUIPES_PADRAO = 2</code>. O deles sai da
+    geografia: <strong>equipes = n&uacute;mero de clusters log&iacute;sticos ativos</strong> &mdash;
+    4 em Rond&ocirc;nia (Norte/Capital, Oeste/Mamor&eacute;, BR-364, Vale do Guapor&eacute;), com a
+    regra expl&iacute;cita de uma equipe por cluster.</p>
+    <div class="efeito"><b>O detalhe que salva a nossa aba</b>
+    A linha <code>4 equipes &times; 14 dias</code> <strong>existe</strong> na nossa grade e
+    est&aacute; precificada em <strong>R$ 296.640</strong> &mdash; o n&uacute;mero deles, ao
+    centavo. N&atilde;o falta conta; falta a <strong>regra que aponta qual c&eacute;lula &eacute; a
+    resposta</strong>.</div>
+  </div>
+
+  <div class="gap fechada" id="d2">
+    <h3>D2 &mdash; A produtividade do MLA est&aacute; pela metade
+      <span class="selo ok">F18</span></h3>
+    <div class="tag">par&acirc;metro &middot; o achado mais forte</div>
+    <p><code>config.UCS_POR_DIA["MLA"] = 3,0</code>. Eles usam <strong>1,50 UC/equipe/dia</strong>,
+    derivada de hist&oacute;rico real (<code>ECM 015/2024</code>, RO 2&ordf; tranche: 18 UCs &divide;
+    (2 equipes &times; 6 dias efetivos), expurgando 2 dias de deslocamento dos 8 do prazo).</p>
+    <p>Trocando <strong>s&oacute; esse par&acirc;metro</strong> e for&ccedil;ando 4 equipes, o nosso
+    motor devolve <strong>14 dias e R$ 296.640</strong> &mdash; res&iacute;duo zero contra a amostra
+    eleita, por um caminho completamente independente do deles (roteiro guloso sobre coordenadas
+    &times; clusters e raios).</p>
+    <div class="fechada-nota"><b>Fechado em 2026-08-19 (F18)</b>
+    A aba <code>Cenarios</code> passou a varrer <strong>tamb&eacute;m</strong> 1,5 UC/dia
+    (<code>config.UCS_POR_DIA_ALTERNATIVAS</code>). A aba <code>Resumo</code> continua no default de
+    3,0 &mdash; decis&atilde;o do humano.</div>
+  </div>
+
+  <div class="gap metodo" id="d3">
+    <h3>D3 &mdash; O modelo de deslocamento &eacute; estruturalmente outro
+      <span class="selo aberta">aberta</span></h3>
+    <div class="tag">m&eacute;todo</div>
+    <div class="scroll">
+    <table>
+      <tr><th></th><th>N&oacute;s</th><th>Engenharia</th></tr>
+      <tr><td>Forma</td><td>roteiro guloso munic&iacute;pio a munic&iacute;pio, <strong>uma</strong>
+          volta &uacute;nica</td>
+          <td>por cluster: 2 &times; dist. rodovi&aacute;ria do munic&iacute;pio mais distante
+          &times; 1,30</td></tr>
+      <tr><td>Convers&atilde;o</td><td>&times; 1,40 &divide; 45 km/h &rarr;
+          <strong>360 km/dia</strong></td>
+          <td>&divide; <strong>480 km/dia</strong> (60 km/h &times; 8 h)</td></tr>
+      <tr class="hi"><td>Ao dividir</td><td><strong>cresce</strong></td>
+          <td><strong>constante</strong></td></tr>
+    </table>
+    </div>
+    <p>O deslocamento deles &eacute; de 12&ndash;14 equipe-dias <em>qualquer que seja o
+    n&uacute;mero de equipes</em>, porque cada cluster paga sua ida-e-volta de todo jeito. O nosso
+    cresce com a divis&atilde;o &mdash; no estrato 3, de 9,5 para 12,0 para 16,4 equipe-dias com 1,
+    2 e 4 equipes.</p>
+    <div class="efeito"><b>Curiosidade que desmonta a leitura f&aacute;cil</b>
+    Os km deles s&atilde;o <strong>maiores</strong> (5.534 contra nossos 4.323 no estrato 3). Eles
+    n&atilde;o andam menos &mdash; cada dia deles rende mais.</div>
+  </div>
+
+  <div class="gap metodo" id="d4">
+    <h3>D4 &mdash; O arredondamento acontece em granularidades diferentes
+      <span class="selo aberta">aberta</span></h3>
+    <div class="tag">m&eacute;todo</div>
+    <p>Eles aplicam teto <strong>por cluster</strong>, e duas vezes:
+    <code>&Sigma; ARRED.EXCESSO(UCs &divide; 1,5)</code> para inspe&ccedil;&atilde;o e
+    <code>&Sigma; ARRED.EXCESSO(rota &divide; 480)</code> para deslocamento. No estrato 3 isso
+    d&aacute; 31 equipe-dias de inspe&ccedil;&atilde;o onde a conta pura daria 30. N&oacute;s
+    aplicamos <strong>um &uacute;nico</strong> teto no fim, sobre a equipe mais lenta.</p>
+  </div>
+
+  <div class="gap parametro" id="d5">
+    <h3>D5 &mdash; Fator expl&iacute;cito de desbalanceamento de +10%
+      <span class="selo aberta">aberta</span></h3>
+    <div class="tag">par&acirc;metro &middot; = L9</div>
+    <p>Eles multiplicam o esfor&ccedil;o total por 1,10 antes de dividir pelas equipes
+    &mdash; <em>&ldquo;realoca&ccedil;&atilde;o imperfeita e retrabalho de rota&rdquo;</em>.
+    N&oacute;s n&atilde;o temos nenhum. &Eacute; a lacuna <strong>L9</strong> de
+    <code>LACUNAS_CENARIOS.md</code>, ainda aberta, e agora com um valor de refer&ecirc;ncia vindo de
+    fora.</p>
+  </div>
+
+  <div class="gap metodo" id="d6">
+    <h3>D6 &mdash; Eles realocam trabalho entre equipes; n&oacute;s pro&iacute;bimos
+      <span class="selo aberta">aberta</span></h3>
+    <div class="tag">m&eacute;todo</div>
+    <p>O prazo deles &eacute; <code>ARRED.EXCESSO(carga total &times; 1,10 &divide; equipes)</code>
+    &mdash; divisibilidade perfeita, com a recomenda&ccedil;&atilde;o escrita de
+    <em>&ldquo;realocar a equipe que concluir primeiro&rdquo;</em>. O nosso &eacute; o da
+    <strong>equipe mais lenta</strong>, sobre blocos geogr&aacute;ficos contíguos que nunca se
+    ajudam.</p>
+    <div class="efeito"><b>Efeito isolado</b>
+    &Eacute; a causa de, com as <strong>mesmas 2 equipes</strong>, darmos 10/9/7 dias onde eles
+    d&atilde;o 7/5/4.</div>
+  </div>
+
+  <div class="gap escopo" id="d7">
+    <h3>D7 &mdash; Nos estratos 4, 5 e 6 o <code>Resumo</code> deles ignora o deslocamento
+      <span class="selo aberta">n&atilde;o se aplica</span></h3>
+    <div class="tag">dado &middot; as duas abas do arquivo deles discordam</div>
+    <p>Os dias saem de <code>UCs &divide; (1,5 &times; 2 equipes)</code> &mdash; 22&rarr;7,
+    15&rarr;5, 12&rarr;4 &mdash; com res&iacute;duo zero e <strong>zero</strong> componente de
+    viagem. Mas a aba <code>Dimensionamento_Inspecao</code>, no mesmo arquivo, calcula 13/12/13
+    equipe-dias de deslocamento para essas mesmas amostras e recomenda <strong>4 equipes com 9, 8 e
+    8 dias</strong>.</p>
+    <p>Nenhuma calibra&ccedil;&atilde;o nossa reproduz essas tr&ecirc;s linhas, porque elas
+    n&atilde;o sa&iacute;ram de modelo nenhum: s&atilde;o o efetivo hist&oacute;rico de RO (2
+    equipes) vezes uma regra de bolso.</p>
+    <div class="efeito"><b>Consequ&ecirc;ncia pr&aacute;tica</b>
+    S&oacute; a amostra eleita recebeu dimensionamento de verdade. &Eacute; o motivo pelo qual o
+    alvo de calibra&ccedil;&atilde;o &eacute; a linha do estrato 3, e s&oacute; ela.</div>
+  </div>
+
+  <div class="gap metodo" id="d8">
+    <h3>D8 &mdash; &ldquo;1 equipe por cluster&rdquo; trava o prazo no caminho cr&iacute;tico
+      <span class="selo aberta">aberta</span></h3>
+    <div class="tag">m&eacute;todo</div>
+    <p>Com 4 equipes, o prazo de campo deles (13 dias) coincide exatamente com o cluster mais pesado
+    (C &mdash; eixo BR-364). &Eacute; uma &acirc;ncora geogr&aacute;fica que n&atilde;o temos: nossa
+    <code>dividir_roteiro</code> equilibra km acumulado, n&atilde;o regi&otilde;es operacionais.</p>
+  </div>
+
+  <div class="gap escopo" id="d9">
+    <h3>D9 &mdash; Eles escolhem a amostra; n&oacute;s listamos as quatro
+      <span class="selo aberta">escopo</span></h3>
+    <div class="tag">escopo</div>
+    <p>Uma matriz de decis&atilde;o ponderada &mdash; robustez amostral 30%, efici&ecirc;ncia
+    log&iacute;stica 25%, prazo 20%, esfor&ccedil;o total 15%, concentra&ccedil;&atilde;o
+    geogr&aacute;fica 10% &mdash; elege o estrato 3 com score 0,650. O <code>Resumo</code> deles
+    <strong>n&atilde;o &eacute; um comparativo de quatro alternativas</strong>: &eacute; uma
+    recomenda&ccedil;&atilde;o mais tr&ecirc;s refer&ecirc;ncias.</p>
+  </div>
+
+  <div class="gap parametro" id="d10">
+    <h3>D10 &mdash; Par&acirc;metros menores, todos na mesma dire&ccedil;&atilde;o
+      <span class="selo aberta">aberta</span></h3>
+    <div class="tag">par&acirc;metro &middot; = L8</div>
+    <div class="scroll">
+    <table>
+      <tr><th>Par&acirc;metro</th><th class="num">Nosso</th><th class="num">Engenharia</th></tr>
+      <tr><td><code>VELOCIDADE_KMH</code></td><td class="num">45</td><td class="num">60</td></tr>
+      <tr><td><code>FATOR_RODOVIARIO</code></td><td class="num">1,40</td><td class="num">1,35</td></tr>
+    </table>
+    </div>
+    <p>Sozinhos derrubam nosso prazo do estrato 3 de 15 para 13 dias &mdash; pouco perto de D2 e D6.</p>
+    <div class="efeito"><b>Id&ecirc;nticos nos dois modelos</b>
+    Base em Porto Velho (capital da UF), jornada de 8 h, 1 dia de mobiliza&ccedil;&atilde;o, e as
+    24 h de escrit&oacute;rio do MLA.</div>
+  </div>
+
+  <h2 id="unidade">Uma ressalva de unidade, ainda aberta</h2>
+  <p>R$ 4.800 por equipe-dia &eacute; <code>8 h &times; R$ 600</code> = <strong>uma
+  pessoa</strong>. Nosso <code>TAMANHO_EQUIPE = 1</code> casa com isso. Mas o texto deles chama o
+  cen&aacute;rio de 2 de <em>&ldquo;r&eacute;plica do efetivo de Rond&ocirc;nia &mdash; 2
+  equipes&rdquo;</em>, e no benchmark da PB (LPT) a mesma engenharia usou R$ 9.600/dia, que &eacute;
+  <strong>dupla</strong>.</p>
+  <div class="tldr">
+    <p>Se em campo a equipe for uma dupla, os pre&ccedil;os de RO est&atilde;o para
+    <strong>metade</strong> do efetivo. Confirmar antes de calibrar qualquer coisa &mdash; a
+    resposta muda o custo por um fator de 2, mais do que todas as dez diverg&ecirc;ncias
+    somadas.</p>
+  </div>
+
+  <h2 id="f18">O que a F18 fez (2026-08-19)</h2>
+  <p>Decis&atilde;o do humano, depois desta an&aacute;lise: <strong>os cen&aacute;rios passam a
+  considerar tamb&eacute;m <code>UCS_POR_DIA["MLA"] = 1,5</code>; o <code>Resumo</code> continua no
+  default de 3,0.</strong></p>
+
+<pre>config.<b>UCS_POR_DIA_ALTERNATIVAS</b> = {"MLA": [1.5]}   # a oficial entra sempre, sem repetir
+
+custo.<b>produtividades_da_grade</b>(tipo)   -> [oficial, ...alternativas], sem repetidas
+custo.<b>grade_cenarios</b>(...)             -> produtividade &times; equipes &times; prazo
+    so' a produtividade OFICIAL marca o cenario 'calculado' (a ponte com o Resumo)
+horas_por_uc / repartir_entre_equipes recebem <b>ucs_por_dia</b> opcional
+    (a varredura nao toca em config: vazaria para o custo oficial)</pre>
+
+  <p>Nova coluna <code>Produtividade (UCs/dia)</code> na aba <code>Cenarios</code>, antes de
+  <code>Equipes</code>, porque &eacute; a chave mais externa da grade.</p>
+
+  <p><strong>Por que uma coluna e n&atilde;o uma segunda planilha:</strong> a pergunta que a aba
+  responde deixou de ser &ldquo;quantas equipes e quantos dias&rdquo; e passou a ser
+  &ldquo;quantas equipes, quantos dias <strong>e sob qual premissa de produtividade</strong>&rdquo;.
+  Separar em dois arquivos obrigaria a comparar duas planilhas para responder a uma pergunta
+  s&oacute;.</p>
+
+  <div class="scroll">
+  <table>
+    <tr><th>Estratos</th><th class="num">Linhas 3,0</th><th class="num">Linhas 1,5</th>
+        <th>Prazo m&iacute;nimo com 4 equipes, a 1,5</th></tr>
+    <tr class="hi"><td>3</td><td class="num">64</td><td class="num">37</td>
+        <td><strong>14 dias &rarr; R$ 296.640</strong> &larr; o n&uacute;mero da engenharia</td></tr>
+    <tr><td>4</td><td class="num">87</td><td class="num">71</td><td>8</td></tr>
+    <tr><td>5</td><td class="num">93</td><td class="num">75</td><td>8</td></tr>
+    <tr><td>6</td><td class="num">99</td><td class="num">87</td><td>7</td></tr>
+  </table>
+  </div>
+
+  <p>A linha destacada &eacute; o resultado que d&aacute; confian&ccedil;a: <strong>a 1,5
+  UC/equipe/dia, 14 dias com 4 equipes &eacute; o m&iacute;nimo vi&aacute;vel do bloco</strong>
+  &mdash; o nosso modelo chega ao prazo recomendado pela engenharia por um caminho independente, e
+  n&atilde;o por ajuste.</p>
+
+  <p>O bloco alternativo tem sempre <strong>menos</strong> linhas: metade da produtividade dobra as
+  horas de inspe&ccedil;&atilde;o, e combina&ccedil;&otilde;es que cabiam em 20 dias deixam de
+  caber. A grade encolher numa produtividade e n&atilde;o na outra &eacute; informa&ccedil;&atilde;o,
+  n&atilde;o defeito &mdash; e o <code>Leia-me</code> diz isso.</p>
+
+  <h2 id="placar">Placar: o que fechar, em ordem de retorno</h2>
+  <div class="scroll">
+  <table>
+    <tr><th class="num">#</th><th>A&ccedil;&atilde;o</th><th>Fecha</th><th>Esfor&ccedil;o</th>
+        <th>Status</th></tr>
+    <tr class="hi"><td class="num">1</td><td>Varrer 1,5 UC/dia nos cen&aacute;rios</td>
+        <td>D2 (parcial)</td><td>1 par&acirc;metro + 1 la&ccedil;o</td>
+        <td><span class="selo ok">feito &middot; F18</span></td></tr>
+    <tr><td class="num">2</td><td>Regra de n&ordm; de equipes derivada da geografia</td>
+        <td>D1, D8</td><td>precisa de clusteriza&ccedil;&atilde;o</td><td>aberta</td></tr>
+    <tr><td class="num">3</td><td>Fator de desbalanceamento (+10%)</td>
+        <td>D5 (= L9)</td><td>1 par&acirc;metro</td><td>aberta</td></tr>
+    <tr><td class="num">4</td><td>Decidir a forma do deslocamento: por cluster ou por roteiro
+        dividido</td><td>D3, D6</td><td>decis&atilde;o de modelo</td><td>aberta</td></tr>
+    <tr><td class="num">5</td><td>Calibrar <code>VELOCIDADE_KMH</code> /
+        <code>FATOR_RODOVIARIO</code></td><td>D10 (= L8)</td><td>2 par&acirc;metros</td>
+        <td>aberta</td></tr>
+    <tr><td class="num">6</td><td>Confirmar se &ldquo;equipe&rdquo; &eacute; 1 ou 2 pessoas</td>
+        <td>ressalva de unidade</td><td>1 pergunta</td><td><strong>bloqueia tudo</strong></td></tr>
+  </table>
+  </div>
+  <p>O item 6 vem antes de todos na pr&aacute;tica, mesmo estando por &uacute;ltimo na tabela: ele
+  multiplica ou divide o resultado dos outros cinco por 2.</p>
+  <p><strong>D7 e D9 n&atilde;o entram no placar.</strong> D7 porque n&atilde;o h&aacute; o que
+  reproduzir (as tr&ecirc;s linhas alternativas n&atilde;o vieram de modelo); D9 porque escolher a
+  amostra &eacute; decis&atilde;o de escopo, n&atilde;o de custo &mdash; se um dia entrar, entra
+  como funcionalidade nova, n&atilde;o como calibra&ccedil;&atilde;o.</p>
+
+  <h2>Como refazer esta compara&ccedil;&atilde;o</h2>
+<pre># 1. Entrada/ com a tranche certa (Anexo V + as N planilhas de estratificacao)
+# 2. rodar o estimador
+.\executar.bat            <b>contrato: ECM 022-2025 &middot; amostra: 1</b>
+
+# 3. abrir lado a lado
+#    saida/Resumo_Custos.xlsx                              abas Resumo + Cenarios
+#    suporte_contexto/Tabela_Resumo_...xlsx                abas Resumo + Dimensionamento_Inspecao</pre>
+  <p>As abas de amostra do arquivo da engenharia (<code>Amostra 1_K_extrato_erro_5%</code>) trazem
+  <code>Latitude_UC</code>/<code>Longitude_UC</code> e <code>STATUS</code>, ent&atilde;o d&aacute;
+  para alimentar <code>distancias.resumo_por_odi</code> direto delas, sem o Anexo V. Os dois
+  caminhos produzem os mesmos km, d&iacute;gito por d&iacute;gito.</p>
+
+  <footer>
+    Companion de <code>planning/CALIBRACAO_ENGENHARIA_RO.md</code> &middot; 2026-08-19 &middot;
+    relacionado: <code>planning/LACUNAS_CENARIOS.md</code> (L8, L9),
+    <code>planning/MODELO_CUSTO.md</code>.
+  </footer>
+</main>
+</div>
+</body>
+</html>

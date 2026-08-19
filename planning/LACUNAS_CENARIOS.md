@@ -207,6 +207,10 @@ declarada em `config.py` por porte de amostra).
 
 ## L8 — Velocidade e fator rodoviário continuam sendo chutes da F1
 
+> **2026-08-19:** agora há um segundo par de valores para comparar. A engenharia usa
+> **60 km/h** e **1,35** no dimensionamento de RO (`planning/CALIBRACAO_ENGENHARIA_RO.md`, D10).
+> Sozinhos, derrubam o nosso prazo do estrato 3 de 15 para 13 dias.
+
 `VELOCIDADE_KMH = 45` e `FATOR_RODOVIARIO = 1,40` (decisão G4, nunca calibrados) entram em
 `horas_roteiro`, que é metade de `horas_campo`, que é a entrada de **todos** os cenários.
 
@@ -218,6 +222,11 @@ entre cenários** sobrevive. O que não sobrevive é o **valor absoluto**.
 ---
 
 ## L9 — Não há contingência, e há evidência de que a engenharia usa uma
+
+> **2026-08-19: a evidência deixou de ser indireta e ganhou um número.** O dimensionamento de RO
+> aplica um **fator de desbalanceamento de +10%** sobre o esforço total antes de dividir pelas
+> equipes, com justificativa escrita ("realocação imperfeita e retrabalho de rota"). Ver
+> `planning/CALIBRACAO_ENGENHARIA_RO.md`, D5.
 
 A aba não reserva nada para chuva, acesso impedido, obra não localizada ou retrabalho. O modelo é
 determinístico: mesma geometria, mesmo prazo, sempre.
@@ -233,6 +242,11 @@ tabela quando ela for apresentada.
 ---
 
 ## L10 — Os cenários variam só o prazo
+
+> **2026-08-19 — parcialmente fechada (F18).** A grade ganhou uma terceira dimensão: além de
+> equipes × prazo, ela varre agora a **produtividade** (`UCS_POR_DIA_ALTERNATIVAS`; hoje, no MLA,
+> 3,0 oficial e 1,5 da engenharia). Continuam fora o **perfil da equipe** e a **escolha da
+> estratificação cruzada com prazo**.
 
 Ficam fora todas as outras alavancas: perfil da equipe (`TECNICO` custa R$513,22/h de campo contra
 R$600 do `ENGENHEIRO`), produtividade (`UCS_POR_DIA`), e a escolha da estratificação em si — que
