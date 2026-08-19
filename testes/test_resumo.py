@@ -59,6 +59,28 @@ def test_gravar_resumo_cenarios(tmp_path):
     assert base["Equipes"] == oficial["Equipes"]
 
 
+def test_cenarios_nao_mostra_dias_faturados_mas_cobra_por_eles(tmp_path):
+    # Decisao do humano (2026-08-19): a coluna 'Dias faturados' saiu da aba Cenarios porque
+    # confundia - duas colunas de dias lado a lado, sempre com um de diferenca. O que NAO pode
+    # sair e' o dia de mobilizacao de dentro do custo: este teste prende as duas coisas juntas,
+    # para uma nao ser desfeita achando que desfaz a outra.
+    destino = tmp_path / "Resumo_Custos.xlsx"
+    gravar_resumo([_resultado(3)], destino)
+    cenarios = pd.read_excel(destino, sheet_name="Cenarios")
+    assert "Dias faturados (por equipe)" not in cenarios.columns
+    # Na aba Resumo ela FICA: la ha uma linha por estratificacao, e a diferenca informa.
+    resumo = pd.read_excel(destino, sheet_name="Resumo")
+    assert "Dias faturados (por equipe)" in resumo.columns
+    # E o custo de cada linha da grade continua sendo cobrado sobre dias + mobilizacao.
+    tarifa = config.TARIFAS_HORA["LPT"][config.PERFIL_EQUIPE]["campo"] + (
+        config.CUSTO_DIARIA / config.HORAS_DIA_CAMPO)
+    for _, linha in cenarios.iterrows():
+        faturados = linha["Dias trabalho (por equipe)"] + config.DIAS_MOBILIZACAO
+        assert linha["Custo campo (R$)"] == pytest.approx(
+            linha["Equipes"] * config.TAMANHO_EQUIPE * faturados
+            * config.HORAS_DIA_CAMPO * tarifa)
+
+
 def test_gravar_resumo_cenarios_tem_a_coluna_de_produtividade(tmp_path, monkeypatch):
     # A grade tem tres dimensoes desde 2026-08-19, e a terceira precisa APARECER: sem a
     # coluna, dois blocos de produtividades diferentes viram linhas repetidas e

@@ -57,7 +57,12 @@ COLUNAS_CENARIOS = {
     "produtividade": "Produtividade (UCs/dia)",
     "n_equipes": "Equipes",
     "dias_trabalho": "Dias trabalho (por equipe)",
-    "dias_faturados": "Dias faturados (por equipe)",
+    # 'dias_faturados' EXISTE em cada linha da grade e continua sendo o que multiplica a
+    # tarifa - o que saiu (2026-08-19, decisao do humano) foi a COLUNA. Numa grade em que o
+    # prazo e' a entrada, duas colunas de dias lado a lado, sempre com um de diferenca,
+    # faziam o leitor procurar um significado que nao existe. Na aba 'Resumo' ela fica: la
+    # ha uma linha por estratificacao, e a diferenca entre trabalhar e faturar e' a
+    # informacao. O 'Leia-me' avisa que o custo usa dias de trabalho + mobilizacao.
     "km_roteiro": "Roteiro somado (km estrada)",
     "ocupacao": "Ocupacao da equipe",
     "custo_campo": "Custo campo (R$)",
@@ -133,7 +138,13 @@ def _texto_leia_me(tipo_contrato=None):
         "A aba 'Cenarios' mostra SO o que e' viavel. Combinacao que passa do teto de dias",
         "por equipe nao aparece - nao foi omitida, foi descartada por inviabilidade.",
         "Prazos maiores que o minimo de cada linha sao folga deliberada: a equipe fica mais",
-        "ociosa (veja 'Ocupacao') e o custo sobe, porque ha mais dias faturados.",
+        "ociosa (veja 'Ocupacao') e o custo sobe, porque ha mais dias a faturar.",
+        "",
+        "Na aba 'Cenarios', 'Dias trabalho (por equipe)' e' o unico numero de dias que aparece.",
+        "O que se FATURA sao esses dias MAIS a mobilizacao (veja o parametro abaixo) - o custo",
+        "da linha ja esta com essa soma dentro. A coluna de dias faturados existia ao lado e",
+        "saiu: numa grade em que o prazo e' a entrada, duas colunas de dias sempre com um de",
+        "diferenca so faziam procurar um sentido que nao ha. Na aba 'Resumo' ela continua.",
         "",
         "A coluna 'Produtividade (UCs/dia)' da aba 'Cenarios' e' a TERCEIRA dimensao da",
         "grade. A aba 'Resumo' usa so a produtividade OFICIAL (a primeira da lista abaixo);",
