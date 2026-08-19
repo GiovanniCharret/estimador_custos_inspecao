@@ -56,6 +56,9 @@ x F18 — **Produtividade como terceira dimensão da grade** (decisão G12): a a
     varre também `UCS_POR_DIA_ALTERNATIVAS` (hoje MLA 1,5 UC/equipe/dia, o número da
     engenharia); a aba `Resumo` continua no default de 3,0 — 2026-08-19.
     Motivação e memória da comparação: `planning/CALIBRACAO_ENGENHARIA_RO.md`
+x F19 — **Espectro inteiro de prazos na aba `Cenarios`** (decisão G13): a grade varre de 1 dia ao
+    teto, inclusive o que o modelo diz que não cabe, com a coluna `Cabe no prazo?`. Saiu também a
+    coluna `Dias faturados (por equipe)` da mesma aba — 2026-08-19
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
@@ -188,6 +191,20 @@ x F18 — **Produtividade como terceira dimensão da grade** (decisão G12): a a
   equipes é **14 dias, R$ 296.640** — exatamente a recomendação da engenharia, por um caminho
   independente (roteiro guloso sobre coordenadas × clusters e raios).
   As nove divergências restantes estão catalogadas em `planning/CALIBRACAO_ENGENHARIA_RO.md`.
+- **G13 — O VEREDITO DO MODELO É DADO, NÃO FILTRO (F19, decisão do humano em 2026-08-19):** a F18
+  não resolveu, e o motivo era outro: a linha `2 equipes × 4 dias` das 12 UCs do estrato 6 não
+  existia na aba em produtividade nenhuma, porque a grade começava no **mínimo geométrico**
+  (7 dias com 2 equipes) e o número da engenharia está *abaixo* dele.
+  *"Essa tabela precisa calcular o espectro todo de possibilidades."*
+  A grade passou a varrer **de 1 dia ao teto**, com a coluna `Cabe no prazo?` (`sim`/`nao`)
+  carregando o veredito. O preço é exato nas duas — o contrato paga pela hora-profissional
+  contratada, dando a equipe conta do serviço ou não; um `nao` diz que **alguma premissa deste
+  modelo teria de mudar**, não que o número esteja errado.
+  **A regra da F15 sobrevive inteira** porque fala de outra coisa: número de equipes sem nenhum
+  prazo viável continua fora. Resultado: as **quatro** linhas da engenharia agora existem na aba,
+  com o preço exato (296.640 / 85.440 / 66.240 / 56.640).
+  Na mesma decisão saiu a coluna `Dias faturados (por equipe)` da aba `Cenarios` (fica no
+  `Resumo`), e ficou registrado que **`Ocupacao` é média e não decide se cabe**.
 - **G9 — O TIPO DE OBRA MUDA AS HORAS DE ESCRITÓRIO (F16, achado do humano em 2026-08-13):** o
   Formulário de OS tem um parâmetro binário que o modelo ignorava — `Tipo de obra` (célula `E48`
   da aba `Ordem de Serviço Emissão`), lido pelas fórmulas `E26:E29` da aba `Custos Inspeções`:

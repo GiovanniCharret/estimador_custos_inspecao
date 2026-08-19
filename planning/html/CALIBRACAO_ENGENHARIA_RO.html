@@ -116,6 +116,7 @@
   <a href="#d10">D10 &middot; velocidade/fator</a>
   <div class="label" style="margin-top:22px">Depois</div>
   <a href="#unidade">Ressalva de unidade</a>
+  <a href="#f19" class="hot">O que a F19 fez</a>
   <a href="#f18">O que a F18 fez</a>
   <a href="#placar">Placar</a>
   <div class="files">
@@ -305,6 +306,11 @@
     <div class="efeito"><b>Consequ&ecirc;ncia pr&aacute;tica</b>
     S&oacute; a amostra eleita recebeu dimensionamento de verdade. &Eacute; o motivo pelo qual o
     alvo de calibra&ccedil;&atilde;o &eacute; a linha do estrato 3, e s&oacute; ela.</div>
+    <div class="fechada-nota"><b>Desde a F19</b>
+    As tr&ecirc;s linhas <strong>aparecem</strong> na aba <code>Cenarios</code>, com o pre&ccedil;o
+    exato e <code>Cabe no prazo? = nao</code>. &Eacute; a forma honesta de trat&aacute;-las:
+    mostrar o n&uacute;mero que a engenharia adotou e discordar em voz alta, em vez de omitir a
+    linha.</div>
   </div>
 
   <div class="gap metodo" id="d8">
@@ -357,6 +363,71 @@
     somadas.</p>
   </div>
 
+  <h2 id="f19">O que a F19 fez (2026-08-19, mesma sess&atilde;o)</h2>
+  <p>A F18 <strong>n&atilde;o resolveu</strong> o problema, e o humano apontou por qu&ecirc;: a
+  linha <code>2 equipes &times; 4 dias</code> para as 12 UCs do estrato 6 continuava n&atilde;o
+  existindo na aba. Nem a 3,0 nem a 1,5 UC/dia &mdash; porque o corte n&atilde;o era de
+  produtividade, era de <strong>prazo</strong>: a grade come&ccedil;ava no m&iacute;nimo que a
+  nossa geometria exige (7 dias com 2 equipes), e o n&uacute;mero da engenharia est&aacute;
+  <em>abaixo</em> dele.</p>
+
+  <div class="tldr">
+    <p><em>&ldquo;Essa tabela precisa calcular o espectro todo de possibilidades.&rdquo;</em></p>
+    <p>Uma aba chamada <code>Cenarios</code> que n&atilde;o cont&eacute;m o cen&aacute;rio que a
+    engenharia adotou n&atilde;o est&aacute; protegendo ningu&eacute;m do imposs&iacute;vel &mdash;
+    est&aacute; escondendo o n&uacute;mero que a mesa de decis&atilde;o precisa ver. O erro de
+    projeto foi usar o veredito do modelo como <strong>filtro</strong> em vez de como
+    <strong>dado</strong>.</p>
+  </div>
+
+  <p>A grade passou a varrer <strong>de 1 dia ao teto, para todo n&uacute;mero de equipes</strong>,
+  com uma coluna nova <code>Cabe no prazo?</code> (<code>sim</code>/<code>nao</code>) dizendo o que
+  o modelo acha. O pre&ccedil;o &eacute; exato nos dois casos &mdash; o contrato paga pela
+  hora-profissional contratada, dando a equipe conta do servi&ccedil;o ou n&atilde;o.</p>
+
+  <p><strong>A regra da F15 (&ldquo;sequer calcule&rdquo;) sobrevive inteira</strong>, porque ela
+  fala de outra coisa: um <em>n&uacute;mero de equipes</em> sem <strong>nenhum</strong> prazo
+  vi&aacute;vel dentro do teto continua fora da aba. O que mudou &eacute; o de dentro &mdash;
+  escolhido um n&uacute;mero de equipes que funciona, todos os prazos aparecem, porque a&iacute; o
+  prazo &eacute; alavanca do usu&aacute;rio.</p>
+
+  <p>Resultado: <strong>as quatro linhas da engenharia agora existem na aba, com o pre&ccedil;o
+  exato.</strong></p>
+
+  <div class="scroll">
+  <table>
+    <tr><th>Estratos</th><th>Combina&ccedil;&atilde;o da engenharia</th><th class="num">Na aba</th>
+        <th>Cabe no prazo?</th><th>Ocupa&ccedil;&atilde;o (3,0 &middot; 1,5)</th></tr>
+    <tr><td>3</td><td>4 eq &times; 14 dias</td><td class="num">296.640 &check;</td><td>sim</td>
+        <td>0,56 &middot; 0,83</td></tr>
+    <tr class="hi"><td>4</td><td>2 eq &times; 7 dias</td><td class="num">85.440 &check;</td>
+        <td><strong>n&atilde;o</strong></td><td>1,34 &middot; 1,86</td></tr>
+    <tr class="hi"><td>5</td><td>2 eq &times; 5 dias</td><td class="num">66.240 &check;</td>
+        <td><strong>n&atilde;o</strong></td><td>1,54 &middot; 2,04</td></tr>
+    <tr class="hi"><td>6</td><td>2 eq &times; 4 dias</td><td class="num">56.640 &check;</td>
+        <td><strong>n&atilde;o</strong></td><td>1,64 &middot; 2,14</td></tr>
+  </table>
+  </div>
+
+  <p>Os tr&ecirc;s <code>nao</code> s&atilde;o exatamente <a href="#d7">D7</a> aparecendo como
+  n&uacute;mero: s&atilde;o as estratifica&ccedil;&otilde;es cujo <code>Resumo</code> da engenharia
+  ignora o deslocamento.</p>
+
+  <div class="gap parametro">
+    <h3>Uma armadilha descoberta ao escrever o teste</h3>
+    <div class="tag">o Leia-me chegou a mentir sobre isto</div>
+    <p><code>Ocupacao da equipe</code> &eacute; a <strong>m&eacute;dia</strong> das equipes;
+    <code>Cabe no prazo?</code> olha a <strong>mais lenta</strong>. Com blocos desiguais &mdash; o
+    normal &mdash;, <strong>uma linha pode n&atilde;o caber com ocupa&ccedil;&atilde;o abaixo de
+    100%</strong>.</p>
+    <p>A primeira vers&atilde;o do <code>Leia-me</code> afirmava que ocupa&ccedil;&atilde;o acima de
+    100% era o sinal de inviabilidade. Era falso.
+    <code>test_ocupacao_nao_decide_se_cabe</code> existe para o texto n&atilde;o voltar a
+    mentir.</p>
+  </div>
+
+  <p>A aba passou de 613 para <strong>1.040 linhas</strong> na tranche real.</p>
+
   <h2 id="f18">O que a F18 fez (2026-08-19)</h2>
   <p>Decis&atilde;o do humano, depois desta an&aacute;lise: <strong>os cen&aacute;rios passam a
   considerar tamb&eacute;m <code>UCS_POR_DIA["MLA"] = 1,5</code>; o <code>Resumo</code> continua no
@@ -406,6 +477,10 @@ horas_por_uc / repartir_entre_equipes recebem <b>ucs_por_dia</b> opcional
   <table>
     <tr><th class="num">#</th><th>A&ccedil;&atilde;o</th><th>Fecha</th><th>Esfor&ccedil;o</th>
         <th>Status</th></tr>
+    <tr class="hi"><td class="num">0</td><td>Varrer o espectro inteiro de prazos, com
+        <code>Cabe no prazo?</code></td>
+        <td>nenhuma &mdash; mas &eacute; o que faz as linhas da engenharia <strong>existirem</strong></td>
+        <td>1 la&ccedil;o + 1 coluna</td><td><span class="selo ok">feito &middot; F19</span></td></tr>
     <tr class="hi"><td class="num">1</td><td>Varrer 1,5 UC/dia nos cen&aacute;rios</td>
         <td>D2 (parcial)</td><td>1 par&acirc;metro + 1 la&ccedil;o</td>
         <td><span class="selo ok">feito &middot; F18</span></td></tr>

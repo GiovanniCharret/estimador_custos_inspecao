@@ -324,12 +324,26 @@ def grade_cenarios(df_odis, uf, tipo_contrato):
     conversa deixa de exigir uma segunda execucao com o config editado. A aba 'Resumo'
     nao muda: continua saindo so da produtividade oficial.
 
-    Duas regras de corte, ambas decisao do humano:
+    Desde 2026-08-19 (segunda rodada) a grade varre o ESPECTRO INTEIRO de prazos, de 1 dia
+    ao teto - inclusive os prazos que o nosso proprio modelo diz que nao cabem. Motivo, e
+    e' o motivo que mais importa neste arquivo: a engenharia dimensionou 12 UCs em
+    2 equipes x 4 dias, e essa linha simplesmente NAO EXISTIA na aba, porque o nosso
+    minimo geometrico para 2 equipes era 7 dias. Uma aba que se chama 'Cenarios' e nao
+    contem o cenario que a engenharia adotou nao esta protegendo ninguem do impossivel:
+    esta escondendo o numero que a mesa de decisao precisa ver.
+    A linha aparece com a coluna 'cabe' em False e a 'ocupacao' acima de 100%, que e' o
+    quanto falta. O preco continua exato: o custo nao depende de a equipe dar conta.
+
+    Duas regras de corte sobrevivem, ambas decisao do humano:
       - de N_EQUIPES_MIN a N_EQUIPES_MAX equipes;
-      - no maximo MAX_DIAS_POR_EQUIPE dias para cada equipe.
+      - numero de equipes cujo prazo minimo passa de MAX_DIAS_POR_EQUIPE nao entra na aba.
+    A segunda e' a regra da F15 ("sequer calcule") e continua valendo INTEIRA: ela fala de
+    um numero de equipes que nao tem NENHUM prazo viavel dentro do teto - nao ha o que
+    apresentar. O que mudou e' o de dentro: escolhido um numero de equipes que funciona,
+    todos os prazos ate o teto aparecem, porque ai o prazo e' alavanca do usuario.
     Elas valem por produtividade: metade da produtividade dobra as horas de inspecao,
-    entao combinacoes que cabem em 20 dias com 3 UCs/dia somem com 1,5. A grade encolher
-    numa produtividade e nao na outra e' informacao, nao defeito.
+    entao numeros de equipes que cabem em 20 dias com 3 UCs/dia somem com 1,5. A grade
+    encolher numa produtividade e nao na outra e' informacao, nao defeito.
     Combinacao que estoura o teto NAO e' calculada nem exibida. O caso que motivou a
     regra: 80 UCs de MLA (3 UCs/dia) sao 27 dias so de inspecao para uma equipe -
     flagrantemente inviavel, e nao ha o que apresentar. O pre-filtro usa exatamente
@@ -339,8 +353,9 @@ def grade_cenarios(df_odis, uf, tipo_contrato):
     Logica: Entrada (df por ODI, uf, tipo) -> Fase 1: amostra vazia nao tem grade ->
     Fase 2: um bloco por PRODUTIVIDADE varrida -> Fase 3: para cada numero de equipes,
     descarta pelo limite inferior de inspecao sem rotear -> Fase 4: reparte de fato e
-    acha o prazo minimo daquele numero de equipes -> Fase 5: uma linha por prazo entre o
-    minimo e o teto -> Saida: lista de dicts.
+    acha o prazo minimo daquele numero de equipes (numero de equipes sem nenhum prazo
+    viavel sai aqui) -> Fase 5: uma linha por prazo, de 1 ao teto, marcando quais cabem
+    -> Saida: lista de dicts.
     """
     # Fase 1: sem obra nao ha prazo a explorar.
     if not len(df_odis):
@@ -378,10 +393,12 @@ def grade_cenarios(df_odis, uf, tipo_contrato):
             # O fixo nao depende do prazo, do numero de equipes nem da produtividade -
             # so do tipo do contrato.
             custo_fixo = _custo_fixo(tipo_contrato)
-            # Fase 5: do prazo mais apertado que cabe ate o teto. Prazos maiores que o
-            # minimo sao folga deliberada: a equipe fica ociosa e o custo sobe (mais
-            # dias faturados).
-            for dias in range(max(1, dias_minimo), config.MAX_DIAS_POR_EQUIPE + 1):
+            # Fase 5: o espectro inteiro de prazos, de 1 dia ao teto. Abaixo do minimo a
+            # linha sai com 'cabe' False (o modelo diz que a equipe nao termina); acima do
+            # minimo e' folga deliberada - a equipe fica ociosa e o custo sobe, porque ha
+            # mais dias faturados. Nos dois casos o PRECO e' exato: o contrato paga por
+            # hora-profissional contratada, dando ela conta do servico ou nao.
+            for dias in range(1, config.MAX_DIAS_POR_EQUIPE + 1):
                 dias_faturados = dias + config.DIAS_MOBILIZACAO
                 custo_campo = _custo_campo(n_efetivo, dias_faturados, tipo_contrato)
                 linhas.append({
@@ -389,9 +406,13 @@ def grade_cenarios(df_odis, uf, tipo_contrato):
                     "n_equipes": n_efetivo,
                     "dias_trabalho": dias,
                     "dias_faturados": dias_faturados,
+                    # O veredito do modelo sobre esta combinacao, como DADO e nao como
+                    # filtro: cabe se o prazo alcanca o minimo que a geometria exige.
+                    "cabe": dias >= dias_minimo,
                     "km_roteiro": km_somado,
-                    # Ocupacao = quanto da capacidade contratada e' realmente usada.
-                    # Baixa demais significa que o prazo esta pagando por gente parada.
+                    # Ocupacao = quanto da capacidade contratada e' realmente usada. Baixa
+                    # demais significa que o prazo esta pagando por gente parada; ACIMA DE
+                    # 100% e' o tanto que falta para o prazo caber.
                     "ocupacao": horas_totais / (n_efetivo * capacidade_dia * dias),
                     "custo_campo": custo_campo,
                     "custo_fixo": custo_fixo,

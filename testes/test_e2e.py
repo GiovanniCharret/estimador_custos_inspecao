@@ -253,6 +253,33 @@ def test_e2e_grade_de_cenarios_respeita_os_limites(tmp_path):
     assert marcadas.iloc[0]["Custo total (R$)"] == pytest.approx(oficial["Custo total (R$)"])
 
 
+def test_e2e_cenarios_varrem_o_espectro_inteiro_de_prazos(tmp_path):
+    # O pedido do humano (2026-08-19, 2a rodada): a aba precisa conter TODA combinacao, nao
+    # so as que o nosso modelo aprova. O caso real: a engenharia dimensionou 12 UCs em
+    # 2 equipes x 4 dias e essa linha nao existia - o nosso minimo era maior. Sem ela, a aba
+    # nao consegue responder "quanto custa o cenario que eles adotaram".
+    _monta_entrada(tmp_path, municipios={odi: f"MUNICIPIO {i}" for i, odi in enumerate(ODIS)})
+    assert executar(tmp_path) == 0
+    cenarios = pd.read_excel(tmp_path / "saida" / "Resumo_Custos.xlsx", sheet_name="Cenarios")
+    assert "Cabe no prazo?" in cenarios.columns
+    assert set(cenarios["Cabe no prazo?"]) <= {"sim", "nao"}
+    # Todo numero de equipes traz os prazos de 1 ao teto, sem buraco nenhum.
+    for (estratos, equipes), bloco in cenarios.groupby(["Estratos", "Equipes"]):
+        prazos = sorted(bloco["Dias trabalho (por equipe)"])
+        assert prazos == list(range(1, config.MAX_DIAS_POR_EQUIPE + 1)), (estratos, equipes)
+        # E ao menos um prazo daquele numero de equipes cabe (senao ele nem apareceria).
+        assert (bloco["Cabe no prazo?"] == "sim").any()
+    # A amostra sintetica e' pequena (10 UCs, ~154 km) e cabe em 1 dia com qualquer numero de
+    # equipes, entao aqui NAO ha linha 'nao' para conferir - o caso apertado e' coberto em
+    # testes/test_custo.py, com a geometria montada para isso. O que este e2e prova e' que a
+    # coluna atravessa o pipeline inteiro e chega ao Excel com o dominio certo.
+    # E o custo cresce com o prazo mesmo nas linhas que nao cabem: o preco e' do contrato,
+    # nao do sucesso da equipe.
+    for _, bloco in cenarios.groupby(["Estratos", "Equipes"]):
+        ordenado = bloco.sort_values("Dias trabalho (por equipe)")
+        assert ordenado["Custo total (R$)"].is_monotonic_increasing
+
+
 def test_e2e_cenarios_trazem_as_duas_produtividades(tmp_path, monkeypatch):
     # Pedido do humano (2026-08-19): a grade compara a produtividade OFICIAL com a que a
     # engenharia usa, na mesma aba. A execucao inteira precisa carregar essa terceira

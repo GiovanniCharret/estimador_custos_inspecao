@@ -33,7 +33,7 @@ entre amostras, coordenadas e custos; uma ODI tem N UCs (unidades consumidoras).
 
 ## Estado atual (2026-08-19)
 
-**Fases F0–F18 completas; 122 testes passando.** O pipeline roda ponta a ponta com **dados reais**
+**Fases F0–F19 completas; 128 testes passando.** O pipeline roda ponta a ponta com **dados reais**
 de duas tranches de tipos diferentes — `ECO 037/2025` (ENERGISA/PB, LPT, 3 estratificações) e
 `ECM 022/2025` (ENERGISA/RO, MLA, 4 estratificações):
 `executar.bat` → `_exec.ps1` → `src/estimar_custos.py` → `saida/`.
@@ -168,12 +168,30 @@ Detalhes que não se deduzem lendo um arquivo só:
   ida-e-volta, o dia de mobilização de cada equipe, e o arredondamento para dia inteiro. Na
   sondagem de 26 obras na PB: 1 equipe R$ 41.760 (1.220 km) → 2 equipes R$ 60.960 (1.663 km) →
   3 equipes R$ 70.560 (2.010 km).
-- **A aba `Cenarios` é uma GRADE de TRÊS dimensões (produtividade × equipes × prazo)**, não uma
-  faixa de prazos. Varre `N_EQUIPES_MIN..N_EQUIPES_MAX` (1 a 7) e, para cada, os prazos do mínimo
-  viável até `MAX_DIAS_POR_EQUIPE` (20). **Combinação inviável não aparece nem é calculada**: um
-  pré-filtro descarta pelo limite inferior (só horas de inspeção, divididas igualmente) *antes* de
-  rotear, que é a parte cara. Caso que motivou a regra: 80 UCs de MLA a 3 UCs/dia são 213h = 27
-  dias só de inspeção para uma equipe — não há o que apresentar.
+- **A aba `Cenarios` é uma GRADE de TRÊS dimensões (produtividade × equipes × prazo)** e varre o
+  **espectro inteiro de prazos: de 1 dia a `MAX_DIAS_POR_EQUIPE` (20)**, para cada número de
+  equipes de `N_EQUIPES_MIN` a `N_EQUIPES_MAX` (1 a 7) — **inclusive os prazos que o próprio
+  modelo diz que não cabem**, marcados na coluna `Cabe no prazo?` (`sim`/`nao`). O caso que
+  motivou (2026-08-19): a engenharia dimensionou 12 UCs em `2 equipes × 4 dias` e essa linha não
+  existia, porque a grade começava no mínimo geométrico (7 dias). Uma aba chamada `Cenarios` sem o
+  cenário que a engenharia adotou não protege do impossível — esconde o número que a mesa precisa
+  ver. **O veredito do modelo é DADO, não filtro.** O preço é exato nas duas: o contrato paga pela
+  hora-profissional contratada, dando a equipe conta ou não.
+- **A regra da F15 (`sequer calcule`) continua inteira, e fala de outra coisa:** um **número de
+  equipes** sem **nenhum** prazo viável dentro do teto não aparece nem é calculado — um pré-filtro
+  descarta pelo limite inferior (só horas de inspeção, divididas igualmente) *antes* de rotear,
+  que é a parte cara. Caso que a fixou: 80 UCs de MLA a 3 UCs/dia são 213h = 27 dias só de
+  inspeção para uma equipe. O que mudou em 2026-08-19 foi o *de dentro*: escolhido um número de
+  equipes que funciona, todos os prazos aparecem, porque aí o prazo é alavanca do usuário.
+- **`Ocupacao da equipe` NÃO decide se cabe.** Ela é a **média** das equipes; `Cabe no prazo?`
+  olha a **mais lenta**. Com blocos desiguais — o normal —, uma linha pode não caber com ocupação
+  **abaixo** de 100%. O `Leia-me` chegou a afirmar o contrário; `test_ocupacao_nao_decide_se_cabe`
+  existe para o texto não voltar a mentir.
+- **A coluna `Dias faturados (por equipe)` existe no `Resumo` e NÃO no `Cenarios`** (decisão do
+  humano, 2026-08-19: confundia). Na grade o prazo é *entrada*, então duas colunas de dias sempre
+  com um de diferença faziam procurar um sentido que não há; no `Resumo` o prazo é *resultado* e a
+  diferença é a informação. Saiu a coluna, não o dia: `dias_faturados` continua em cada linha da
+  grade e continua sendo o que multiplica a tarifa.
 - **A PRODUTIVIDADE é a terceira dimensão da grade, e só dela** (F18, 2026-08-19). A aba `Resumo`
   usa **só** `UCS_POR_DIA` (MLA 3,0); a grade varre também `UCS_POR_DIA_ALTERNATIVAS` (MLA 1,5 —
   o valor que a engenharia usa, do histórico do `ECM 015/2024`). A oficial entra sempre e **não se

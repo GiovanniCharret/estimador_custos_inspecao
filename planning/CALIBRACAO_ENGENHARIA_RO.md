@@ -140,6 +140,10 @@ outras três são referência de comparação.
 Isso não é defeito a corrigir do lado deles nem do nosso: é **o motivo pelo qual o alvo de
 calibração é a linha do estrato 3, e só ela**.
 
+> **Desde a F19 as três linhas aparecem na aba `Cenarios`, com o preço exato e
+> `Cabe no prazo? = nao`.** É a forma honesta de tratá-las: mostrar o número que a engenharia
+> adotou e discordar em voz alta, em vez de omitir a linha.
+
 ### D8 — "1 equipe por cluster" trava o prazo no caminho crítico `MÉTODO`
 
 Com 4 equipes, o prazo de campo deles (13 dias) coincide exatamente com o cluster mais pesado
@@ -224,10 +228,57 @@ e não na outra é informação, não defeito — e o `Leia-me` diz isso.
 
 ---
 
+## O que a F19 fez (2026-08-19, mesma sessão)
+
+A F18 não resolveu o problema, e o humano apontou por quê: **a linha `2 equipes × 4 dias` para
+as 12 UCs do estrato 6 continuava não existindo na aba.** Nem a 3,0 nem a 1,5 UC/dia — porque o
+corte não era de produtividade, era de **prazo**: a grade começava no mínimo que a nossa
+geometria exige (7 dias com 2 equipes), e o número da engenharia está *abaixo* dele.
+
+> *"Essa tabela precisa calcular o espectro todo de possibilidades."*
+
+Uma aba chamada `Cenarios` que não contém o cenário que a engenharia adotou não está protegendo
+ninguém do impossível — está escondendo o número que a mesa de decisão precisa ver. O erro de
+projeto foi usar o veredito do modelo como **filtro** em vez de como **dado**.
+
+**A grade passou a varrer de 1 dia ao teto, para todo número de equipes**, com uma coluna nova
+`Cabe no prazo?` (`sim`/`nao`) dizendo o que o modelo acha. O preço é exato nos dois casos — o
+contrato paga pela hora-profissional contratada, dando a equipe conta do serviço ou não.
+
+**A regra da F15 ("sequer calcule") sobrevive inteira**, porque ela fala de outra coisa: um
+*número de equipes* sem **nenhum** prazo viável dentro do teto continua fora da aba. O que mudou
+é o de dentro — escolhido um número de equipes que funciona, todos os prazos aparecem, porque aí
+o prazo é alavanca do usuário.
+
+Resultado: **as quatro linhas da engenharia agora existem na aba, com o preço exato.**
+
+| Estratos | Combinação da engenharia | Na aba | `Cabe no prazo?` | Ocupação |
+| --- | --- | --- | --- | --- |
+| 3 | 4 eq × 14 dias | R$ 296.640 ✓ | sim | 0,56 (3,0) · 0,83 (1,5) |
+| 4 | 2 eq × 7 dias | R$ 85.440 ✓ | **não** | 1,34 · 1,86 |
+| 5 | 2 eq × 5 dias | R$ 66.240 ✓ | **não** | 1,54 · 2,04 |
+| 6 | 2 eq × 4 dias | R$ 56.640 ✓ | **não** | 1,64 · 2,14 |
+
+Os três `não` são exatamente D7 aparecendo como número: são as estratificações cujo `Resumo` da
+engenharia ignora o deslocamento. A aba agora **mostra o preço deles e discorda em voz alta**, em
+vez de omitir a linha.
+
+### Uma armadilha descoberta ao escrever o teste
+
+`Ocupacao da equipe` é a **média** das equipes; `Cabe no prazo?` olha a **mais lenta**. Com blocos
+desiguais — o normal —, **uma linha pode não caber com ocupação abaixo de 100%**. A primeira
+versão do `Leia-me` afirmava que ocupação acima de 100% era o sinal de inviabilidade; era falso, e
+o teste `test_ocupacao_nao_decide_se_cabe` existe para o texto não voltar a mentir.
+
+A aba passou de 613 para **1.040 linhas** na tranche real.
+
+---
+
 ## Placar: o que fechar, em ordem de retorno
 
 | # | Ação | Divergências que fecha | Esforço | Status |
 | --- | --- | --- | --- | --- |
+| 0 | Varrer o espectro inteiro de prazos, com `Cabe no prazo?` | nenhuma — mas é o que faz as linhas da engenharia **existirem** | 1 laço + 1 coluna | **feito (F19)** |
 | 1 | Varrer 1,5 UC/dia nos cenários | D2 (parcial) | 1 parâmetro + 1 laço | **feito (F18)** |
 | 2 | Regra de nº de equipes derivada da geografia | D1, D8 | precisa de clusterização | aberta |
 | 3 | Fator de desbalanceamento (+10%) | D5 (= L9) | 1 parâmetro | aberta |

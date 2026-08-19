@@ -207,6 +207,86 @@ def test_grade_varre_equipes_e_prazos(monkeypatch):
         assert c["custo_total"] == pytest.approx(c["custo_campo"] + c["custo_fixo"])
 
 
+def test_grade_varre_o_espectro_inteiro_de_prazos(monkeypatch):
+    # O caso que motivou a mudanca (2026-08-19): a engenharia dimensionou 12 UCs em 2 equipes
+    # x 4 dias e essa linha NAO EXISTIA na aba, porque o nosso minimo geometrico era maior.
+    # Uma aba chamada 'Cenarios' sem o cenario que a engenharia adotou nao protege ninguem do
+    # impossivel - esconde o numero que a mesa de decisao precisa ver.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "N_EQUIPES_MAX", 3)
+    monkeypatch.setattr(config, "MAX_DIAS_POR_EQUIPE", 8)
+    linhas = grade_cenarios(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    # Todo numero de equipes que aparece traz TODOS os prazos de 1 ao teto - sem buracos.
+    for n in {c["n_equipes"] for c in linhas}:
+        prazos = sorted(c["dias_trabalho"] for c in linhas if c["n_equipes"] == n)
+        assert prazos == list(range(1, 9))
+    # O prazo de 1 dia existe e e' marcado como inviavel (nenhuma amostra cabe num dia).
+    um_dia = [c for c in linhas if c["dias_trabalho"] == 1]
+    assert um_dia and all(not c["cabe"] for c in um_dia)
+    # 'cabe' e' monotono dentro de um numero de equipes: uma vez que cabe, nao volta a nao
+    # caber - se voltasse, a coluna estaria dizendo qualquer coisa.
+    for n in {c["n_equipes"] for c in linhas}:
+        bloco = sorted((c for c in linhas if c["n_equipes"] == n),
+                       key=lambda c: c["dias_trabalho"])
+        cabem = [c["cabe"] for c in bloco]
+        assert cabem == sorted(cabem)
+
+
+def test_linha_que_nao_cabe_tem_preco_exato(monkeypatch):
+    # Nao caber nao e' nao ter preco: o contrato paga pela hora-profissional contratada,
+    # dando a equipe conta do servico ou nao. E' o que permite a aba responder "quanto
+    # custaria fazer em 4 dias" mesmo quando o modelo diz que 4 dias nao dao.
+    _config_redonda(monkeypatch)
+    linhas = grade_cenarios(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    apertadas = [c for c in linhas if not c["cabe"]]
+    assert apertadas
+    for c in apertadas:
+        assert c["custo_campo"] == pytest.approx(
+            c["n_equipes"] * config.TAMANHO_EQUIPE * c["dias_faturados"] * 8.0 * 100.0)
+        assert c["custo_total"] == pytest.approx(c["custo_campo"] + c["custo_fixo"])
+
+
+def test_ocupacao_nao_decide_se_cabe(monkeypatch):
+    # Armadilha achada ao escrever o teste anterior, e que o Leia-me agora avisa: 'ocupacao'
+    # e' a MEDIA das equipes, enquanto 'cabe' olha a MAIS LENTA. Com blocos desiguais - o
+    # normal - uma linha pode nao caber com ocupacao abaixo de 100%. Quem ler a aba julgando
+    # pela ocupacao erra, e esse teste existe para o texto do Leia-me nao voltar a mentir.
+    _config_redonda(monkeypatch)
+    linhas = grade_cenarios(_odis_teste(), uf="PA", tipo_contrato="LPT")
+    assert any(not c["cabe"] and c["ocupacao"] < 1.0 for c in linhas)
+    # O que vale sempre: dentro de um numero de equipes, 'cabe' e' exatamente "o prazo
+    # alcancou o minimo", e o minimo e' o primeiro 'sim'.
+    for n in {c["n_equipes"] for c in linhas}:
+        bloco = [c for c in linhas if c["n_equipes"] == n]
+        minimo = min(c["dias_trabalho"] for c in bloco if c["cabe"])
+        assert all(c["cabe"] == (c["dias_trabalho"] >= minimo) for c in bloco)
+
+
+def test_espectro_nao_ressuscita_o_numero_de_equipes_inviavel(monkeypatch):
+    # A regra da F15 ("sequer calcule") continua inteira: ela fala de um numero de equipes
+    # sem NENHUM prazo viavel dentro do teto. Varrer o espectro de PRAZOS nao pode trazer de
+    # volta as 20 linhas invaveis desse numero de equipes.
+    _config_redonda(monkeypatch)
+    monkeypatch.setattr(config, "UCS_POR_DIA", {"LPT": 30.0, "MLA": 3.0})
+    monkeypatch.setattr(config, "N_EQUIPES_MAX", 7)
+    monkeypatch.setattr(config, "MAX_DIAS_POR_EQUIPE", 20)
+    oitenta = pd.DataFrame({
+        "ODI": [f"O{i}" for i in range(8)],
+        "Estrato": [1] * 8,
+        "Municipio": [f"M{i}" for i in range(8)],
+        "n_ucs": [10] * 8,
+        "lat_centro": [-1.50 - 0.02 * i for i in range(8)],
+        "lon_centro": [-48.55 - 0.02 * i for i in range(8)],
+        "dist_interna_km": [1.0] * 8,
+    })
+    linhas = grade_cenarios(oitenta, uf="PA", tipo_contrato="MLA")
+    # 213h de inspecao / (1 equipe x 8h) = 26,7 dias: uma equipe nao aparece de forma nenhuma.
+    assert 1 not in {c["n_equipes"] for c in linhas}
+    # E todo numero de equipes que aparece tem ao menos um prazo que cabe.
+    for n in {c["n_equipes"] for c in linhas}:
+        assert any(c["cabe"] for c in linhas if c["n_equipes"] == n)
+
+
 def test_grade_marca_a_linha_que_e_o_numero_oficial(monkeypatch):
     # A grade e o Resumo tem de falar do mesmo caso: a linha 'calculado' e' o padrao de
     # equipes no seu prazo minimo, e o custo dela bate com o da aba Resumo.
@@ -325,9 +405,12 @@ def test_produtividade_menor_so_mexe_na_inspecao(monkeypatch):
             continue
         # Os km sao os mesmos: a divisao em blocos e' pura geometria.
         assert do_bloco[1.0][0]["km_roteiro"] == pytest.approx(do_bloco[2.0][0]["km_roteiro"])
-        # E o prazo minimo so pode piorar (ou empatar, pelo arredondamento para dia).
-        assert (min(c["dias_trabalho"] for c in do_bloco[1.0])
-                >= min(c["dias_trabalho"] for c in do_bloco[2.0]))
+        # E o prazo minimo que CABE so pode piorar (ou empatar, pelo arredondamento para
+        # dia). Compara os que cabem, nao os que existem: desde a varredura do espectro
+        # inteiro, os dois blocos comecam em 1 dia e a comparacao crua nao diria nada.
+        cabem = {p: [c["dias_trabalho"] for c in do_bloco[p] if c["cabe"]] for p in (2.0, 1.0)}
+        if cabem[2.0] and cabem[1.0]:
+            assert min(cabem[1.0]) >= min(cabem[2.0])
 
 
 def test_so_a_produtividade_oficial_marca_o_cenario_calculado(monkeypatch):

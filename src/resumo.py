@@ -57,6 +57,11 @@ COLUNAS_CENARIOS = {
     "produtividade": "Produtividade (UCs/dia)",
     "n_equipes": "Equipes",
     "dias_trabalho": "Dias trabalho (por equipe)",
+    # Veredito do modelo sobre a combinacao, como DADO e nao como filtro. A aba varre o
+    # espectro inteiro de prazos (1 ate o teto), inclusive os que a geometria nao alcanca -
+    # foi a ausencia da linha '2 equipes x 4 dias' que motivou a mudanca, porque era
+    # justamente o que a engenharia adotou. Fica ao lado dos dias, que e' o que ela julga.
+    "cabe": "Cabe no prazo?",
     # 'dias_faturados' EXISTE em cada linha da grade e continua sendo o que multiplica a
     # tarifa - o que saiu (2026-08-19, decisao do humano) foi a COLUNA. Numa grade em que o
     # prazo e' a entrada, duas colunas de dias lado a lado, sempre com um de diferenca,
@@ -135,10 +140,25 @@ def _texto_leia_me(tipo_contrato=None):
         "carrega o seu dia de mobilizacao e o seu deslocamento, e o arredondamento para dia",
         "inteiro desperdica mais quanto mais equipes houver.",
         "",
-        "A aba 'Cenarios' mostra SO o que e' viavel. Combinacao que passa do teto de dias",
-        "por equipe nao aparece - nao foi omitida, foi descartada por inviabilidade.",
-        "Prazos maiores que o minimo de cada linha sao folga deliberada: a equipe fica mais",
-        "ociosa (veja 'Ocupacao') e o custo sobe, porque ha mais dias a faturar.",
+        "A aba 'Cenarios' varre o ESPECTRO INTEIRO de prazos: de 1 dia ate o teto, para cada",
+        "numero de equipes. Ela nao esconde o prazo apertado - ela o PRECIFICA e diz, na",
+        "coluna 'Cabe no prazo?', se a equipe daria conta:",
+        "  sim = o prazo alcanca o que a geometria exige;",
+        "  nao = pelo nosso modelo a equipe MAIS LENTA nao termina nesse prazo. O menor prazo",
+        "        que cabe e' a primeira linha 'sim' do mesmo numero de equipes, logo abaixo.",
+        "CUIDADO ao julgar pela 'Ocupacao': ela e' a MEDIA das equipes, e pode ficar abaixo de",
+        "100% numa linha que NAO cabe - basta os blocos serem desiguais, que e' o normal. Quem",
+        "responde se cabe e' a coluna 'Cabe no prazo?', que olha a equipe mais lenta; a ocupacao",
+        "responde outra coisa: quanto da capacidade contratada esta sendo usada.",
+        "O PRECO da linha e' exato nos dois casos: o contrato paga pela hora-profissional",
+        "contratada, dando ela conta do servico ou nao. Um 'nao' quer dizer que alguma premissa",
+        "deste modelo teria de mudar - produtividade, rota ou tamanho de equipe -, nao que o",
+        "numero esteja errado.",
+        "",
+        "O que continua NAO aparecendo e' um numero de equipes sem NENHUM prazo viavel dentro",
+        "do teto: ai nao ha o que apresentar, e a combinacao nem chega a ser calculada.",
+        "Prazos acima do minimo sao folga deliberada: a equipe fica mais ociosa (veja",
+        "'Ocupacao') e o custo sobe, porque ha mais dias a faturar.",
         "",
         "Na aba 'Cenarios', 'Dias trabalho (por equipe)' e' o unico numero de dias que aparece.",
         "O que se FATURA sao esses dias MAIS a mobilizacao (veja o parametro abaixo) - o custo",
@@ -276,6 +296,11 @@ def gravar_resumo(resultados, caminho, perfis=None):
     # Monta os dataframes ja com as colunas na ordem de apresentacao.
     resumo = pd.DataFrame(linhas_resumo).reindex(columns=list(COLUNAS_RESUMO))
     cenarios = pd.DataFrame(linhas_cenarios).reindex(columns=list(COLUNAS_CENARIOS))
+    # 'cabe' vem booleano do motor e viraria VERDADEIRO/FALSO no Excel - que o usuario le
+    # como formula, nao como resposta. Vira 'sim'/'nao', que e' como a pergunta do
+    # cabecalho ('Cabe no prazo?') pede para ser respondida.
+    if "cabe" in cenarios.columns:
+        cenarios["cabe"] = cenarios["cabe"].map({True: "sim", False: "nao"})
     detalhe = pd.concat(detalhes, ignore_index=True) if detalhes else pd.DataFrame()
     detalhe = detalhe.reindex(columns=[c for c in COLUNAS_DETALHE if c in detalhe.columns])
     try:

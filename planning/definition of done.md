@@ -23,6 +23,21 @@ x F6 — mapas HTML gerados com camadas por estrato e popup de custo; teste pass
 x F7 — e2e feliz + 8 bordas passam (16 testes); `planning/TESTES.md` escrito;
     status report `planning/html/STATUS_F7.html` gerado; `executar.bat` validado
     (sem entrada → "Lote.xlsx nao encontrado", exit 1, sem traceback).
+x F19 — espectro inteiro de prazos na aba `Cenarios` (2026-08-19). Critérios:
+    - todo número de equipes que aparece traz **todos** os prazos de 1 ao teto, sem buraco;
+    - a coluna `Cabe no prazo?` só tem `sim`/`nao`, e é monótona dentro de cada número de
+      equipes (uma vez que cabe, não volta a não caber);
+    - número de equipes **sem nenhum** prazo viável continua fora da aba (regra da F15 intacta);
+    - o custo de uma linha que **não** cabe é exato e cresce com o prazo — o preço é do
+      contrato, não do sucesso da equipe;
+    - `Ocupacao` **não** decide se cabe (é média; `Cabe no prazo?` olha a equipe mais lenta), e
+      há teste prendendo o `Leia-me` a essa verdade;
+    - a coluna `Dias faturados (por equipe)` saiu do `Cenarios` e permanece no `Resumo`;
+    - 128 testes passando (123 → 128);
+    - execução real (`ECM 022/2025`, amostra 1): as **quatro** combinações da engenharia
+      presentes na aba com o preço exato — 296.640 (cabe) / 85.440 / 66.240 / 56.640 (não cabem).
+    [ ] **Falta a parte humana:** abrir a aba (1.040 linhas) e dizer se o volume ficou utilizável
+        ou se convém filtrar por `Cabe no prazo?` na entrega.
 x F18 — produtividade como terceira dimensão da grade (2026-08-19). Critérios:
     - a aba `Cenarios` tem a coluna `Produtividade (UCs/dia)` **antes** de `Equipes`, e no MLA
       traz dois blocos: 3,0 (oficial) e 1,5 (o número da engenharia);
