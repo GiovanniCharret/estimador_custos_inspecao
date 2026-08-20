@@ -3,7 +3,10 @@
 import folium
 
 # Cor unica dos pontos: o mapa nao categoriza nada, so localiza.
-COR_PONTO = "#1f77b4"
+# Vermelho desde 2026-08-20 (decisao do humano): era azul (#1f77b4) e se perdia sobre a
+# agua e as vias do mapa-base, que tambem sao azuis. O vermelho e' a cor mais distante do
+# fundo do OpenStreetMap, entao o ponto sobressai sem precisar aumentar o raio.
+COR_PONTO = "#e31a1c"
 
 
 def gravar_mapa(df_ucs, lat_origem, lon_origem, caminho):

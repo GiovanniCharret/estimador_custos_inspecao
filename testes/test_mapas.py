@@ -3,7 +3,7 @@
 import pandas as pd
 
 from src import config
-from src.mapas import gravar_mapa
+from src.mapas import COR_PONTO, gravar_mapa
 
 
 def _ucs_teste():
@@ -57,3 +57,17 @@ def test_gravar_mapa_amostra_vazia(tmp_path):
     assert destino.exists()
     assert "Base da equipe" in html
     assert "UC(s) na obra" not in html
+
+
+def test_gravar_mapa_pontos_sao_vermelhos(tmp_path):
+    # Decisao do humano (2026-08-20): o ponto e' vermelho porque o azul antigo (#1f77b4)
+    # se confundia com a agua e as vias do mapa-base. Este teste prende as duas pontas -
+    # a constante ser vermelha E ela chegar ao HTML - para uma mudanca em COR_PONTO nao
+    # passar despercebida por o desenho ler outra cor.
+    destino = tmp_path / "Mapa_Estratos_3.html"
+    gravar_mapa(_ucs_teste(), *config.CAPITAIS_UF["PA"], destino)
+    html = destino.read_text(encoding="utf-8")
+    assert COR_PONTO.lower() == "#e31a1c"
+    assert COR_PONTO.lower() in html.lower()
+    # E o azul de antes nao sobrou em lugar nenhum do desenho dos pontos.
+    assert "#1f77b4" not in html.lower()

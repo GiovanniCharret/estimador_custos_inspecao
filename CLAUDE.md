@@ -103,7 +103,7 @@ Cada seta abaixo é um **contrato de dataframe** — mudar uma coluna quebra o m
 | `custo.py` | `repartir_entre_equipes(df_odis, uf, tipo, n)` → lista com o campo de **cada equipe** (km, UCs, horas) · `custo_amostra(df_odis, uf, tipo_contrato, n_equipes=None)` → `(dict com os números da AMOSTRA, df do detalhe por obra com a coluna `equipe`)` · `produtividades_da_grade(tipo)` → oficial + alternativas · `grade_cenarios(df_odis, uf, tipo)` → **grade produtividade × equipes × prazo**, só as combinações viáveis |
 | `beneficiarios.py` | `perfil_da_amostra(df_ucs, dominios, n_estratos, amostra)` → 1 linha da aba `Resumo beneficiarios` · `contar_por_dominio` → `({rótulo: contagem}, n fora do domínio)`. **Único módulo que não fala de custo** |
 | `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, cenarios, **números}, ...], caminho, perfis=None)` → `saida/Resumo_Custos.xlsx` com **4 abas fixas** — `Leia-me` + `Resumo` (1 linha por estratificação) + `Cenarios` (grade produtividade × equipes × prazo) + `Detalhe` (1 linha por obra, com a equipe dona e a ordem dela) — **mais `Resumo beneficiarios`, que só existe se o Anexo V trouxer a classificação** |
-| `mapas.py` | `gravar_mapa(df_ucs, lat0, lon0, caminho)` → `saida/Mapa_Estratos_N.html` (folium; **um ponto por UC**, todos iguais, mais o marcador da base. Sem rota, sem camadas) |
+| `mapas.py` | `gravar_mapa(df_ucs, lat0, lon0, caminho)` → `saida/Mapa_Estratos_N.html` (folium; **um ponto por UC**, todos vermelhos e iguais, mais o marcador da base. Sem rota, sem camadas) |
 
 Detalhes que não se deduzem lendo um arquivo só:
 
@@ -205,7 +205,9 @@ Detalhes que não se deduzem lendo um arquivo só:
   existe de qualquer forma. A produtividade vigente continua declarada no `Leia-me`.
   A comparação com a engenharia e as dez divergências: `planning/CALIBRACAO_ENGENHARIA_RO.md`.
 - **O mapa NÃO desenha itinerário** (desde 2026-08-13, decisão do humano). Ele marca um ponto por
-  UC, todos da mesma cor, mais a base. A rota gulosa continua existindo em `distancias.py` e
+  UC, todos da mesma cor — **vermelho `#e31a1c` desde 2026-08-20**, porque o azul anterior
+  (`#1f77b4`) se perdia sobre a água e as vias do mapa-base —, mais a base. A rota gulosa
+  continua existindo em `distancias.py` e
   alimentando o custo — o que saiu foi o **desenho**: a linha era hipótese do modelo traçada com a
   mesma tinta dos fatos (as coordenadas), e ninguém decidia nada com a ordem das paradas. Sem
   rota não há o que repartir entre equipes, então o radio `GroupedLayerControl` saiu junto e o
