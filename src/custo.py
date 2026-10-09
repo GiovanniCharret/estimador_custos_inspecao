@@ -71,6 +71,7 @@ def tarifa_campo(tipo_contrato, perfil=None):
     """
     # Fase 1: tarifa de campo (COM deslocamento) do perfil pedido; sem pedido, o ativo (G1).
     perfil = config.PERFIL_EQUIPE if perfil is None else perfil
+    # Busca a tarifa na tabela do Formulario de OS: tipo de obra -> perfil -> 'campo'.
     base = config.TARIFAS_HORA[tipo_contrato][perfil]["campo"]
     # Fase 2: diaria (G2: 0 por padrao) diluida pelas horas do dia de campo.
     return base + config.CUSTO_DIARIA / config.HORAS_DIA_CAMPO
@@ -305,27 +306,39 @@ def custo_grade(equipes, tipo_contrato):
     da equipe = custo/hora x dias faturados x jornada -> Fase 4: soma o campo e o fixo de
     escritorio -> Saida: dict com por_equipe, campo, escritorio e total.
     """
+    # Acumula uma linha de resultado por equipe, na mesma ordem em que a grade chegou.
     por_equipe = []
+    # Percorre a grade: cada item e uma equipe (uma linha da tela do coordenador).
     for equipe in equipes:
+        # Dias de TRABALHO digitados; chave ausente vale 0 (equipe que nao vai a campo).
         dias = equipe.get("dias", 0)
+        # Total de pessoas da equipe: soma de todos os perfis da grade (perfil ausente = 0).
         pessoas = sum(equipe.get(chave, 0) for chave in PERFIS_DA_GRADE)
         # Fase 1: so vai a campo quem tem dias E gente - so esse fatura a mobilizacao.
         vai_a_campo = dias > 0 and pessoas > 0
+        # Dias faturados = trabalho + mobilizacao, ou zero para quem fica na capital.
         dias_faturados = dias + config.DIAS_MOBILIZACAO if vai_a_campo else 0
         # Fase 2: cada perfil cobra a propria tarifa - nao da para multiplicar o total de
-        # pessoas por uma tarifa so.
+        # pessoas por uma tarifa so. Soma, perfil a perfil, pessoas x tarifa de campo do tipo.
         por_hora = sum(equipe.get(chave, 0) * tarifa_campo(tipo_contrato, perfil)
+                       # Uma parcela por perfil: chave da tela -> chave de TARIFAS_HORA.
                        for chave, perfil in PERFIS_DA_GRADE.items())
         # Fase 3: cada pessoa cobra a jornada inteira de cada dia faturado.
+        # Horas-profissional contratadas da equipe (informativo, nao entra no custo direto).
         horas = pessoas * dias_faturados * config.HORAS_DIA_CAMPO
+        # Custo da equipe: custo/hora da equipe x dias faturados x jornada de campo.
         custo = por_hora * dias_faturados * config.HORAS_DIA_CAMPO
+        # Registra a linha da equipe com o que a tela precisa mostrar.
         por_equipe.append({"dias_trabalho": dias, "dias_faturados": dias_faturados,
+                           # Pessoas, horas e custo completam a linha da equipe.
                            "pessoas": pessoas, "horas": horas, "custo": custo})
     # Fase 4: o campo e a soma das equipes; o escritorio, uma vez por amostra.
     campo = sum(e["custo"] for e in por_equipe)
+    # Fixo de escritorio do TIPO (36 h LPT / 24 h MLA), cobrado mesmo com a grade vazia.
     escritorio = _custo_fixo(tipo_contrato)
-    # Saida.
+    # Saida: detalhe por equipe, os dois blocos de custo e o total da OS.
     return {"por_equipe": por_equipe, "campo": campo, "escritorio": escritorio,
+            # Total = campo + escritorio, sem nenhum termo escondido.
             "total": campo + escritorio}
 
 
