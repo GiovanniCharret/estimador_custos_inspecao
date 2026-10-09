@@ -61,6 +61,10 @@ x F19 — **Espectro inteiro de prazos na aba `Cenarios`** (decisão G13): a gra
     coluna `Dias faturados (por equipe)` da mesma aba — 2026-08-19
 r F20 — **Rollback da F18**: a coluna `Produtividade (UCs/dia)` e a varredura que a gerava saíram
     da aba `Cenarios`, a pedido do humano. A F19 tornou-as redundantes (ver G14) — 2026-08-19
+x F21 — **Grade do coordenador** (`custo.custo_grade`): o custo aberto equipe por equipe, com
+    engenheiro e técnico na mesma equipe, cada perfil na sua tarifa; `tarifa_campo` ganha `perfil`
+    opcional. Pedido do sistema web, que copia `src/custo.py` verbatim — aplicado sem alteração a
+    partir de `suporte_contexto/handoff_custos_F21/`. Nenhum número existente muda; 136 testes — 2026-10-09
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente

@@ -25,15 +25,15 @@ Entrada/*Painel de Monitoramento*.xlsx (LATITUDE/LONGITUDE por UC)
                                     │
                        ┌────────────┴────────────┐
                        ▼                         ▼
-        saida/Resumo_Custos.xlsx      saida/Mapa_Amostra_K.html
+        saida/Resumo_Custos.xlsx      saida/Mapa_Estratos_N.html
 ```
 
 Cada estrato gera 3 amostras (1 principal + 2 reservas). **`ODI` é a chave de junção**
 entre amostras, coordenadas e custos; uma ODI tem N UCs (unidades consumidoras).
 
-## Estado atual (2026-08-19)
+## Estado atual (2026-10-09)
 
-**Fases F0–F20 completas; 122 testes passando.** O pipeline roda ponta a ponta com **dados reais**
+**Fases F0–F21 completas; 136 testes passando.** O pipeline roda ponta a ponta com **dados reais**
 de duas tranches de tipos diferentes — `ECO 037/2025` (ENERGISA/PB, LPT, 3 estratificações) e
 `ECM 022/2025` (ENERGISA/RO, MLA, 4 estratificações):
 `executar.bat` → `_exec.ps1` → `src/estimar_custos.py` → `saida/`.
@@ -55,10 +55,18 @@ por estratificação.
 contra o benchmark da engenharia (F5) e abrir um mapa no browser (F6). Ver
 `planning/definition of done.md` § Placar e `planning/TESTES.md`.
 
-Armadilha de leitura da saída: **somar a coluna de custo da aba `Detalhe K` não dá o custo da
-amostra** — o detalhe é só campo; o fixo de escritório entra por estrato. O número válido é a
-linha `TOTAL` da aba `Amostra K`. O plano original tinha uma asserção e2e errada nisso (erro de
-R$ 38.880); o teste corrigido está em `test_e2e_total_bate_com_detalhe_mais_fixo`.
+Armadilha de leitura da saída: **somar a coluna de custo da aba `Detalhe` não dá o custo da
+amostra** — o detalhe é só campo; o fixo de escritório entra **uma vez por amostra**. O número
+válido é `Custo total (R$)` da aba `Resumo` (= `Custo campo` + `Custo fixo OS`), invariante
+guardado por `test_e2e_custo_e_por_amostra_nao_por_estrato`.
+
+**`src/custo.py` tem um consumidor externo que o copia VERBATIM** (desde 2026-10-09): o sistema
+web de Monitoramento LPT/amostragem roda o motor de custos a partir do arquivo deste repo, e os
+dois **não podem divergir** — mudança no motor nasce aqui e o outro projeto recopia do commit.
+Consequência prática: mantenha `custo.py` autocontido (só depende de `config` e `distancias`) e
+não quebre a assinatura das funções públicas sem avisar o humano. Pedidos do outro lado chegam
+como patch em `suporte_contexto/handoff_custos_F*/` e são aplicados **sem alteração** (foi assim
+na F21); depois do commit, informe o hash — é dele que o sistema web recopia.
 
 **Não são código do produto** (não trate como fontes a manter):
 `ecc_dashboard.py` (GUI de outro contexto, import quebrado) · `claude resume.txt` (vazio) ·
@@ -100,9 +108,9 @@ Cada seta abaixo é um **contrato de dataframe** — mudar uma coluna quebra o m
 | `io_amostras.py` | `Entrada/` → `achar_entradas` → `([(n_estratos, caminho), ...], painel)` (descobre **todas** as estratificações pelo conteúdo) · `ler_n_estratos` · `ler_amostras` `{k: df[ODI,Estrato,Municipio,Cons]}` · `ler_painel` `df[ODI,UC,Municipio,LATITUDE,LONGITUDE,TipoComunidade,Enquadramento]` · `ler_dominios` → `{tipo_comunidade: [...], enquadramento: [...]}` → `juntar_amostras_painel` `{k: df 1 linha por UC}` |
 | `distancias.py` | df de UCs → `resumo_por_odi` → **1 linha por ODI** (colunas fixas, mesmo vazio): `n_ucs`, `lat_centro`, `lon_centro`, `dist_interna_km` · `montar_roteiro(df_odis, lat0, lon0)` → `(df com ordem/km_trecho, km_total)` = **itinerário único** · `dividir_roteiro(..., n_equipes)` → `[(roteiro, km), ...]`, um por equipe |
 | `config.py` | **todos** os números do modelo (G1–G5 do gate F1 + F9). Zero números mágicos fora daqui |
-| `custo.py` | `repartir_entre_equipes(df_odis, uf, tipo, n)` → lista com o campo de **cada equipe** (km, UCs, horas) · `custo_amostra(df_odis, uf, tipo_contrato, n_equipes=None)` → `(dict com os números da AMOSTRA, df do detalhe por obra com a coluna `equipe`)` · `produtividades_da_grade(tipo)` → oficial + alternativas · `grade_cenarios(df_odis, uf, tipo)` → **grade produtividade × equipes × prazo**, só as combinações viáveis |
+| `custo.py` | `repartir_entre_equipes(df_odis, uf, tipo, n)` → lista com o campo de **cada equipe** (km, UCs, horas) · `custo_amostra(df_odis, uf, tipo_contrato, n_equipes=None)` → `(dict com os números da AMOSTRA, df do detalhe por obra com a coluna `equipe`)` · `grade_cenarios(df_odis, uf, tipo)` → **grade equipes × prazo** (prazos de 1 a `MAX_DIAS_POR_EQUIPE`, com `cabe` como dado) · `tabela_resumo(resultados)` · `custo_grade(equipes, tipo)` (F21) → custo **equipe por equipe** a partir de `[{dias, engenheiro, tecnico}]`, cada perfil na sua tarifa; não usa geometria e não valida faixas (quem valida é a tela do sistema web). Teste-âncora: a grade "como o automático" dá exatamente o `custo_total` de `custo_amostra` |
 | `beneficiarios.py` | `perfil_da_amostra(df_ucs, dominios, n_estratos, amostra)` → 1 linha da aba `Resumo beneficiarios` · `contar_por_dominio` → `({rótulo: contagem}, n fora do domínio)`. **Único módulo que não fala de custo** |
-| `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, cenarios, **números}, ...], caminho, perfis=None)` → `saida/Resumo_Custos.xlsx` com **4 abas fixas** — `Leia-me` + `Resumo` (1 linha por estratificação) + `Cenarios` (grade produtividade × equipes × prazo) + `Detalhe` (1 linha por obra, com a equipe dona e a ordem dela) — **mais `Resumo beneficiarios`, que só existe se o Anexo V trouxer a classificação** |
+| `resumo.py` | `gravar_resumo([{n_estratos, amostra, roteiro, cenarios, **números}, ...], caminho, perfis=None)` → `saida/Resumo_Custos.xlsx` com **4 abas fixas** — `Leia-me` + `Resumo` (1 linha por estratificação) + `Cenarios` (grade equipes × prazo) + `Detalhe` (1 linha por obra, com a equipe dona e a ordem dela) — **mais `Resumo beneficiarios`, que só existe se o Anexo V trouxer a classificação** |
 | `mapas.py` | `gravar_mapa(df_ucs, lat0, lon0, caminho)` → `saida/Mapa_Estratos_N.html` (folium; **um ponto por UC**, todos vermelhos e iguais, mais o marcador da base. Sem rota, sem camadas) |
 
 Detalhes que não se deduzem lendo um arquivo só:
@@ -331,14 +339,14 @@ como conferência que gera `AVISO` quando discorda. Três cuidados:
 
 ## Governança e documentação
 
-- `planning/PLAN.md` — **documento-chave**: macrofases F0–F7, decisões e pendências. Registre progresso aqui.
+- `planning/PLAN.md` — **documento-chave**: fases F0–F20 (o plano original previa F0–F7), decisões e pendências. Registre progresso aqui.
 - `planning/DESIGN.md` (D1–D8) · `planning/MODELO_CUSTO.md` (fórmula e fontes) ·
   `planning/PLANO_IMPLEMENTACAO.md` (plano passo a passo com código de cada task) ·
   `planning/definition of done.md` (critério de aceite por fase, para o humano acompanhar).
 - `planning/LACUNAS_CENARIOS.md` — as 10 coisas que a aba `Cenarios` não modelava (L1–L10), com
   efeito em R$ e prioridade. **A F15 fechou cinco** (L1 km de dividir, L2 `Equipes` contando
-  pessoas, L3 ocupação, L4 teto de equipes, L7 faixa fixa) e **a F18 fechou parte da L10** (a
-  grade passou a variar a produtividade, não só o prazo); as demais continuam ali, com o status
+  pessoas, L3 ocupação, L4 teto de equipes, L7 faixa fixa) e a F18 tocou a L10
+  (produtividade na grade), **revertida pela F20**; as demais continuam ali, com o status
   marcado no topo de cada uma. **L8 e L9 ganharam valores de referência** vindos da engenharia.
 - `planning/CALIBRACAO_ENGENHARIA_RO.md` — a comparação do nosso `Resumo_Custos.xlsx` com o
   dimensionamento real da engenharia para a 3ª tranche de RO (`ECM 022/2025`), em
@@ -354,9 +362,9 @@ como conferência que gera `AVISO` quando discorda. Três cuidados:
 - Glossário de status: `x` concluído · `f` revisão futura · `a` anulado · `n` não se aplica ·
   `r` rollback (falhou) · `[ ]` pendente.
 - `suporte_contexto/` — contexto de apoio/bugfix depositado pelo humano, **nunca lido em
-  execução** (hoje fora do git, e sem entrada no `.gitignore` — decisão de versionar ainda
-  pendente). Hoje tem `Tabela_Resumo_Extratos_Amostra.xlsx` (o dimensionamento da
-  engenharia para RO, insumo da `CALIBRACAO_ENGENHARIA_RO.md`). Ainda não escrito:
+  execução** (versionamento parcial: `Tabela_Resumo_Extratos_Amostra.xlsx` — o dimensionamento da
+  engenharia para RO, insumo da `CALIBRACAO_ENGENHARIA_RO.md` — entrou no git em `f1f65e6` e
+  hoje está apagado do disco; `handoff_custos_F21/` está fora do git). Ainda não escrito:
   `planning/ADVERSARIAL_REVIEW.md` (D8).
 
 ## Insumos: `Entrada/` + `dados/` (runtime) vs `minhas_notas/` (pesquisa)

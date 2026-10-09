@@ -53,19 +53,25 @@ from src import config
 from src.distancias import dividir_roteiro
 
 
-def tarifa_campo(tipo_contrato):
-    """Tarifa horaria de campo do perfil ativo, com diaria diluida por hora.
+def tarifa_campo(tipo_contrato, perfil=None):
+    """Tarifa horaria de campo de um perfil, com diaria diluida por hora.
 
     Por que existe: G1/G2 do gate viram parametros; le config NA CHAMADA (nao no
     import) para monkeypatch e ajustes sem rebuild funcionarem. Recebe o tipo do
     contrato porque o Formulario de OS tem uma tabela de perfil por tipo de obra -
     o engenheiro custa igual nos dois, o tecnico nao.
 
-    Logica: Entrada (tipo do contrato) -> Fase 1: tarifa 'campo' do perfil ativo naquele
-    tipo -> Fase 2: soma CUSTO_DIARIA diluida pela jornada -> Saida: R$/hora.
+    O 'perfil' entrou na F21 (grade do coordenador): a grade tem engenheiro E tecnico na
+    mesma equipe, e cada um cobra a sua tarifa. Sem perfil, vale o perfil ativo (G1) - por
+    isso nenhuma chamada antiga muda de numero.
+
+    Logica: Entrada (tipo do contrato, perfil opcional) -> Fase 1: tarifa 'campo' do perfil
+    pedido (ou do ativo) naquele tipo -> Fase 2: soma CUSTO_DIARIA diluida pela jornada ->
+    Saida: R$/hora.
     """
-    # Fase 1: tarifa de campo (COM deslocamento) do perfil ativo (G1: ENGENHEIRO).
-    base = config.TARIFAS_HORA[tipo_contrato][config.PERFIL_EQUIPE]["campo"]
+    # Fase 1: tarifa de campo (COM deslocamento) do perfil pedido; sem pedido, o ativo (G1).
+    perfil = config.PERFIL_EQUIPE if perfil is None else perfil
+    base = config.TARIFAS_HORA[tipo_contrato][perfil]["campo"]
     # Fase 2: diaria (G2: 0 por padrao) diluida pelas horas do dia de campo.
     return base + config.CUSTO_DIARIA / config.HORAS_DIA_CAMPO
 
@@ -261,6 +267,66 @@ def custo_amostra(df_odis, uf, tipo_contrato, n_equipes=None):
         "custo_fixo": custo_fixo,
         "custo_total": custo_campo + custo_fixo,
     }, detalhe
+
+
+# Os perfis que a grade do coordenador aceita, na ordem em que a tela os mostra, e a chave de
+# cada um em TARIFAS_HORA. Os NOMES de tela mudam com o tipo (LPT: Eng. Eletricista e
+# Eletrotecnico; MLA: Eng. Generalista e Tecnico - Formulario de OS, aba 'Custos Inspecoes'),
+# mas a tarifa vem sempre de TARIFAS_HORA[tipo][perfil].
+PERFIS_DA_GRADE = {"engenheiro": "ENGENHEIRO", "tecnico": "TECNICO"}
+
+
+def custo_grade(equipes, tipo_contrato):
+    """Precifica a grade de equipes que o coordenador ajusta, equipe por equipe (F21).
+
+    Por que existe: o calculo oficial (custo_amostra) assume N equipes IGUAIS de
+    TAMANHO_EQUIPE pessoas do perfil ativo. O coordenador precisa de outra coisa: abrir o
+    custo linha por linha, como na aba 'Composicao Equipes Inspecao' do Formulario de OS -
+    uma equipe de 8 dias ao lado de outra de 5, uma com tecnico e outra sem. E a MESMA
+    formula de custo_amostra (pessoas x dias faturados x jornada x tarifa, mais o fixo de
+    escritorio), so que aplicada a cada equipe e a cada perfil.
+
+    Regras (decisao do humano, 2026-10-09):
+      - os 'dias' informados sao dias de TRABALHO; a mobilizacao (DIAS_MOBILIZACAO) e somada
+        por equipe, como em custo_amostra;
+      - equipe sem dias ou sem ninguem nao vai a campo: nao fatura nem a mobilizacao;
+      - o escritorio entra UMA vez, mesmo com a grade vazia (e da OS, nao da equipe).
+
+    Garantia, fixada em teste: a grade 'como o automatico' - n_equipes equipes de
+    TAMANHO_EQUIPE engenheiros com os dias_trabalho de custo_amostra - da exatamente o
+    custo_total de custo_amostra.
+
+    Nao valida faixas (dias negativos, 50 pessoas): quem recebe a grade de uma tela e quem
+    valida - o calculo fica puro, como o resto deste modulo.
+
+    Logica: Entrada (lista de equipes {'dias', 'engenheiro', 'tecnico'}, tipo do contrato)
+    -> Fase 1: por equipe, dias faturados = dias + mobilizacao (so se for a campo) ->
+    Fase 2: custo/hora da equipe = soma de pessoas x tarifa de cada perfil -> Fase 3: custo
+    da equipe = custo/hora x dias faturados x jornada -> Fase 4: soma o campo e o fixo de
+    escritorio -> Saida: dict com por_equipe, campo, escritorio e total.
+    """
+    por_equipe = []
+    for equipe in equipes:
+        dias = equipe.get("dias", 0)
+        pessoas = sum(equipe.get(chave, 0) for chave in PERFIS_DA_GRADE)
+        # Fase 1: so vai a campo quem tem dias E gente - so esse fatura a mobilizacao.
+        vai_a_campo = dias > 0 and pessoas > 0
+        dias_faturados = dias + config.DIAS_MOBILIZACAO if vai_a_campo else 0
+        # Fase 2: cada perfil cobra a propria tarifa - nao da para multiplicar o total de
+        # pessoas por uma tarifa so.
+        por_hora = sum(equipe.get(chave, 0) * tarifa_campo(tipo_contrato, perfil)
+                       for chave, perfil in PERFIS_DA_GRADE.items())
+        # Fase 3: cada pessoa cobra a jornada inteira de cada dia faturado.
+        horas = pessoas * dias_faturados * config.HORAS_DIA_CAMPO
+        custo = por_hora * dias_faturados * config.HORAS_DIA_CAMPO
+        por_equipe.append({"dias_trabalho": dias, "dias_faturados": dias_faturados,
+                           "pessoas": pessoas, "horas": horas, "custo": custo})
+    # Fase 4: o campo e a soma das equipes; o escritorio, uma vez por amostra.
+    campo = sum(e["custo"] for e in por_equipe)
+    escritorio = _custo_fixo(tipo_contrato)
+    # Saida.
+    return {"por_equipe": por_equipe, "campo": campo, "escritorio": escritorio,
+            "total": campo + escritorio}
 
 
 def grade_cenarios(df_odis, uf, tipo_contrato):
