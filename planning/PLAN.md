@@ -65,6 +65,12 @@ x F21 — **Grade do coordenador** (`custo.custo_grade`): o custo aberto equipe 
     engenheiro e técnico na mesma equipe, cada perfil na sua tarifa; `tarifa_campo` ganha `perfil`
     opcional. Pedido do sistema web, que copia `src/custo.py` verbatim — aplicado sem alteração a
     partir de `suporte_contexto/handoff_custos_F21/`. Nenhum número existente muda; 136 testes — 2026-10-09
+x F22 — **Três perfis na grade do coordenador**: `PERFIS_DA_GRADE` passa de `engenheiro`/`tecnico`
+    para `eng_eletricista`/`eng_generalista`/`tecnico`, como a aba `Composição Equipes Inspeção` do
+    Formulário de OS. Os dois engenheiros usam a tarifa de `ENGENHEIRO` (separados por especialidade,
+    não por preço); nenhuma função, tarifa ou número de `config.py` muda. Pedido do sistema web —
+    aplicado sem alteração a partir de `suporte_contexto/handoff_custos_F22/` (commit `9a237fa`);
+    139 testes — 2026-10-13
 
 > **Nota de acompanhamento (2026-08-07):** a sessão que executou F2–F6 foi interrompida por
 > reboot do SO antes de marcar o progresso; os `x` de F0–F6 foram preenchidos retroativamente
