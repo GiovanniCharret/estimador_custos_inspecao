@@ -18,14 +18,14 @@ def test_a_grade_como_o_automatico_da_o_custo_oficial(tipo, n_equipes):
     """N equipes de TAMANHO_EQUIPE engenheiros, com os dias de trabalho do calculo oficial."""
     numeros, _roteiro = custo_amostra(_odis_teste(), uf="PA", tipo_contrato=tipo,
                                       n_equipes=n_equipes)
-    grade = [{"dias": numeros["dias_trabalho"], "engenheiro": int(config.TAMANHO_EQUIPE),
+    grade = [{"dias": numeros["dias_trabalho"], "eng_eletricista": int(config.TAMANHO_EQUIPE),
               "tecnico": 0}] * numeros["n_equipes"]
     assert custo_grade(grade, tipo)["total"] == pytest.approx(numeros["custo_total"])
 
 
 def test_cada_perfil_cobra_a_propria_tarifa_e_o_tecnico_muda_com_o_tipo():
     """LPT: eletrotecnico a 593/h; MLA: tecnico a 513,22/h. O engenheiro custa 600 nos dois."""
-    equipe = [{"dias": 1, "engenheiro": 0, "tecnico": 1}]
+    equipe = [{"dias": 1, "eng_eletricista": 0, "tecnico": 1}]
     dias_faturados = 1 + config.DIAS_MOBILIZACAO
     for tipo in ("LPT", "MLA"):
         esperado = tarifa_campo(tipo, "TECNICO") * dias_faturados * config.HORAS_DIA_CAMPO
@@ -36,16 +36,16 @@ def test_cada_perfil_cobra_a_propria_tarifa_e_o_tecnico_muda_com_o_tipo():
 
 def test_a_mobilizacao_entra_uma_vez_por_equipe_que_vai_a_campo():
     """Os dias digitados sao de TRABALHO; o +1 de mobilizacao e somado aqui."""
-    r = custo_grade([{"dias": 8, "engenheiro": 1, "tecnico": 0},
-                     {"dias": 5, "engenheiro": 1, "tecnico": 1}], "LPT")
+    r = custo_grade([{"dias": 8, "eng_eletricista": 1, "tecnico": 0},
+                     {"dias": 5, "eng_eletricista": 1, "tecnico": 1}], "LPT")
     assert [e["dias_faturados"] for e in r["por_equipe"]] == [
         8 + config.DIAS_MOBILIZACAO, 5 + config.DIAS_MOBILIZACAO]
 
 
 def test_equipe_sem_dias_ou_sem_gente_nao_fatura_nem_a_mobilizacao():
     """Quem nao vai a campo nao sai da capital."""
-    r = custo_grade([{"dias": 0, "engenheiro": 2, "tecnico": 0},
-                     {"dias": 6, "engenheiro": 0, "tecnico": 0}], "LPT")
+    r = custo_grade([{"dias": 0, "eng_eletricista": 2, "tecnico": 0},
+                     {"dias": 6, "eng_eletricista": 0, "tecnico": 0}], "LPT")
     assert [e["custo"] for e in r["por_equipe"]] == [0, 0]
     assert [e["dias_faturados"] for e in r["por_equipe"]] == [0, 0]
 
@@ -67,8 +67,8 @@ def test_exemplo_conferivel_a_mao():
     equipe 2: (1 eng x 600 + 1 tec x 593) x (5+1) x 8 = 57.264
     escritorio: 36 h x 360 = 12.960 -> total 113.424
     """
-    r = custo_grade([{"dias": 8, "engenheiro": 1, "tecnico": 0},
-                     {"dias": 5, "engenheiro": 1, "tecnico": 1}], "LPT")
+    r = custo_grade([{"dias": 8, "eng_eletricista": 1, "tecnico": 0},
+                     {"dias": 5, "eng_eletricista": 1, "tecnico": 1}], "LPT")
     assert [e["custo"] for e in r["por_equipe"]] == [43200.0, 57264.0]
     assert (r["campo"], r["escritorio"], r["total"]) == (100464.0, 12960.0, 113424.0)
 
@@ -84,3 +84,25 @@ def test_os_perfis_da_grade_existem_nas_tarifas_dos_dois_tipos():
     for tipo in ("LPT", "MLA"):
         for perfil in PERFIS_DA_GRADE.values():
             assert "campo" in config.TARIFAS_HORA[tipo][perfil]
+
+
+# --- F22: tres perfis na grade (decisao do humano, 2026-10-09) ---------------------------------
+
+def test_a_grade_tem_os_tres_perfis_na_ordem_da_tela():
+    """A ordem do dicionario e a ordem das colunas da tela do coordenador."""
+    assert list(PERFIS_DA_GRADE) == ["eng_eletricista", "eng_generalista", "tecnico"]
+
+
+def test_eletricista_e_generalista_custam_o_mesmo_nos_dois_tipos():
+    """Os dois engenheiros sao o mesmo perfil de tarifa; so a especialidade muda."""
+    for tipo in ("LPT", "MLA"):
+        um = custo_grade([{"dias": 3, "eng_eletricista": 1, "eng_generalista": 0, "tecnico": 0}], tipo)
+        outro = custo_grade([{"dias": 3, "eng_eletricista": 0, "eng_generalista": 1, "tecnico": 0}], tipo)
+        assert um["total"] == outro["total"]
+
+
+def test_equipe_com_os_tres_perfis_conferivel_a_mao():
+    """LPT: (600 + 600 + 593) x (5+1) x 8 = 86.064. MLA: (600 + 600 + 513,22) x 48 = 82.234,56."""
+    equipe = [{"dias": 5, "eng_eletricista": 1, "eng_generalista": 1, "tecnico": 1}]
+    assert custo_grade(equipe, "LPT")["campo"] == pytest.approx(86064.0)
+    assert custo_grade(equipe, "MLA")["campo"] == pytest.approx(82234.56)

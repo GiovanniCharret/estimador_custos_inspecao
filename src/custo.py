@@ -271,10 +271,21 @@ def custo_amostra(df_odis, uf, tipo_contrato, n_equipes=None):
 
 
 # Os perfis que a grade do coordenador aceita, na ordem em que a tela os mostra, e a chave de
-# cada um em TARIFAS_HORA. Os NOMES de tela mudam com o tipo (LPT: Eng. Eletricista e
-# Eletrotecnico; MLA: Eng. Generalista e Tecnico - Formulario de OS, aba 'Custos Inspecoes'),
-# mas a tarifa vem sempre de TARIFAS_HORA[tipo][perfil].
-PERFIS_DA_GRADE = {"engenheiro": "ENGENHEIRO", "tecnico": "TECNICO"}
+# cada um em TARIFAS_HORA (a tarifa vem sempre de TARIFAS_HORA[tipo][perfil]).
+# F22 (2026-10-09, decisao do humano): a grade mostra TRES perfis, como a aba 'Composicao
+# Equipes Inspecao' do Formulario de OS lista - Eng. Eletricista, Eng. Generalista e Tecnico.
+# Os dois engenheiros sao o MESMO perfil de tarifa (ENGENHEIRO, R$ 600/h nos dois tipos):
+# o Formulario os separa por especialidade, nao por preco. O tecnico continua com a tarifa
+# do TIPO do contrato (LPT 593 / MLA 513,22) - regra deste modelo, que o mock do site nao
+# seguia (la ele custava 593 sempre).
+PERFIS_DA_GRADE = {
+    # Engenheiro eletricista: tarifa de ENGENHEIRO.
+    "eng_eletricista": "ENGENHEIRO",
+    # Engenheiro generalista: tambem tarifa de ENGENHEIRO (mesmo preco, outra especialidade).
+    "eng_generalista": "ENGENHEIRO",
+    # Tecnico: tarifa de TECNICO, que muda com o tipo do contrato.
+    "tecnico": "TECNICO",
+}
 
 
 def custo_grade(equipes, tipo_contrato):
